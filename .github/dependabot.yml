@@ -33,8 +33,55 @@ updates:
         patterns: ['@types/*']
         update-types: [minor, patch]
     ignore:
-      # Node major is locked to 22 LTS per §1.2 — Dependabot must not bump.
+      # CLAUDE.md §1.2 locks the stack. Major bumps of these packages would
+      # break documented contracts; they require a playbook update first.
+      # Patch + minor still flow through normally. Tracked by gotcha
+      # "Dependabot opens majors aggressively on first push" (2026-05-16).
+      - dependency-name: 'next'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'react'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'react-dom'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'eslint-config-next'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'zod'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'vitest'
+        update-types: [version-update:semver-major]
+      - dependency-name: '@vitest/*'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'tailwindcss'
+        update-types: [version-update:semver-major]
+      - dependency-name: '@tailwindcss/*'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'tailwind-merge'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'hono'
+        update-types: [version-update:semver-major]
+      - dependency-name: '@hono/*'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'drizzle-orm'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'drizzle-kit'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'eslint'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'typescript'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'lucia'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'arctic'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'framer-motion'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'lucide-react'
+        update-types: [version-update:semver-major]
       - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
+      - dependency-name: '@types/react'
+        update-types: [version-update:semver-major]
+      - dependency-name: '@types/react-dom'
         update-types: [version-update:semver-major]
     # Production deps left UNGROUPED on purpose — every prod-dep upgrade gets
     # its own PR so the changelog is reviewable.
@@ -54,6 +101,11 @@ updates:
       actions:
         patterns: ['*']
         update-types: [minor, patch]
+    ignore:
+      # Action majors usually mean breaking input/output changes; review manually,
+      # not via auto-PR.
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
 
   # ─── Docker (production base images, once they land in /infra) ──────────
   - package-ecosystem: docker

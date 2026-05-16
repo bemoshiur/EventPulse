@@ -20,7 +20,7 @@ export function OAuthButtonGroup() {
       </Link>
       <Link
         href="/api/auth/google/start"
-        className="inline-flex h-12 items-center justify-center gap-3 rounded-md border border-ep-line bg-white px-4 text-sm font-medium text-ep-ink transition hover:-translate-y-0.5 hover:shadow-md"
+        className="border-ep-line text-ep-ink inline-flex h-12 items-center justify-center gap-3 rounded-md border bg-white px-4 text-sm font-medium transition hover:-translate-y-0.5 hover:shadow-md"
       >
         <GoogleLogo className="h-5 w-5" />
         Continue with Google
