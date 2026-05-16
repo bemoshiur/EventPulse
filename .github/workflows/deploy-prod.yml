@@ -3,8 +3,12 @@ name: Deploy to production
 on:
   workflow_dispatch:
     inputs:
-      ref:
-        description: 'Git ref (commit SHA or tag) to deploy'
+      confirm_target:
+        description: 'Type "production" exactly to confirm the target environment.'
+        required: true
+        type: string
+      release_tag:
+        description: 'Release tag to deploy. Must match ^v\d+\.\d+\.\d+$ (e.g. v0.1.0, v1.4.2).'
         required: true
         type: string
 
@@ -17,17 +21,50 @@ permissions:
   contents: read
 
 jobs:
-  approval:
-    name: Awaiting production-approval reviewer
+  validate-inputs:
+    name: Validate typed-input gates
     runs-on: ubuntu-latest
-    environment:
-      name: production-approval
+    timeout-minutes: 2
+    env:
+      CONFIRM_TARGET: ${{ inputs.confirm_target }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
     steps:
-      - run: echo "Approved by reviewer"
+      - name: Confirm target is "production"
+        run: |
+          # Free-plan deploy gate: no environment reviewers available, so the typing
+          # step IS the deliberate gate (decisions.md 2026-05-16 "GitHub free plan").
+          if [[ "$CONFIRM_TARGET" != "production" ]]; then
+            echo "::error::confirm_target must be exactly 'production'."
+            echo "::error::got: '$CONFIRM_TARGET'"
+            exit 1
+          fi
+          echo "OK: confirm_target=$CONFIRM_TARGET"
+
+      - name: Validate release_tag format
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::release_tag must match ^v\d+\.\d+\.\d+\$ (e.g. v0.1.0)."
+            echo "::error::got: '$RELEASE_TAG'"
+            exit 1
+          fi
+          echo "OK: release_tag=$RELEASE_TAG"
+
+      - name: Verify release_tag exists in repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Ensure tag is a real git tag
+        run: |
+          if ! git rev-parse --verify "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::error::release_tag '$RELEASE_TAG' is not a git tag in this repo."
+            echo "::error::Cut the tag first: git tag -a $RELEASE_TAG -m 'release notes'"
+            exit 1
+          fi
+          echo "OK: $RELEASE_TAG is a real tag at $(git rev-parse $RELEASE_TAG)"
 
   deploy:
     name: Deploy → production EC2
-    needs: approval
+    needs: validate-inputs
     if: vars.PROD_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment:
@@ -35,23 +72,13 @@ jobs:
       url: https://eventpulse.com.bd
     timeout-minutes: 20
     env:
-      DEPLOY_REF: ${{ inputs.ref }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
       DEPLOY_ACTOR: ${{ github.actor }}
       PROD_INSTANCE_ID: ${{ secrets.PROD_EC2_INSTANCE_ID }}
     steps:
-      - name: Validate ref
-        run: |
-          # Workflow-dispatch inputs are user-controlled; constrain to git-safe
-          # characters before letting it anywhere near the SSM payload.
-          if [[ ! "$DEPLOY_REF" =~ ^[a-zA-Z0-9._/-]+$ ]]; then
-            echo "::error::Invalid ref: $DEPLOY_REF"
-            exit 1
-          fi
-          echo "Validated ref: $DEPLOY_REF"
-
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.release_tag }}
 
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
@@ -67,8 +94,8 @@ jobs:
           CMD_ID=$(aws ssm send-command \
             --instance-ids "$PROD_INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --comment "deploy-prod $DEPLOY_REF" \
-            --parameters "commands=[\"sudo -u eventpulse /home/eventpulse/app/infra/deploy/deploy.sh $DEPLOY_REF\"]" \
+            --comment "deploy-prod $RELEASE_TAG" \
+            --parameters "commands=[\"sudo -u eventpulse /home/eventpulse/app/infra/deploy/deploy.sh $RELEASE_TAG\"]" \
             --timeout-seconds 900 \
             --query "Command.CommandId" \
             --output text)
@@ -103,4 +130,4 @@ jobs:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           webhook-type: incoming-webhook
           payload: |
-            text: "Production deploy ${{ env.STATUS }} — ${{ env.DEPLOY_REF }} by ${{ env.DEPLOY_ACTOR }}"
+            text: "Production deploy ${{ env.STATUS }} — ${{ env.RELEASE_TAG }} by ${{ env.DEPLOY_ACTOR }}"

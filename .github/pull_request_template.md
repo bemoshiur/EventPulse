@@ -1,3 +1,5 @@
+# Pull request
+
 <!--
 Title must follow Conventional Commits (§23.5):
   type(scope?)!?: subject
@@ -5,6 +7,8 @@ Title must follow Conventional Commits (§23.5):
   fix(payments): handle EPS COMPLETED status alias
   memory: end of session 2026-05-20
 -->
+
+> ⚠ **Solo project — no second reviewer.** Branch protection isn't enforceable on a GitHub Free private repo, so the merge bar is **you, honest with yourself**. Tick every Definition-of-Done box below only after verifying — never as wishful thinking. If something can't be ticked, open an issue capturing what's deferred and link it here rather than skipping the line. See `decisions.md` 2026-05-16 "GitHub free plan — branch protection via local hooks + CI".
 
 ## What changed
 

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Event Pulse — pre-commit
+# Intentionally minimal. CI catches typecheck + lint + tests on every PR.
+# Add lint-staged here if pre-commit feedback ever becomes desirable.
+exit 0
