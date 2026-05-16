@@ -18,7 +18,7 @@ Multi-tenant SaaS ticketing and event registration platform for Bangladesh at **
 Event Pulse is a private repo on **GitHub Free**, which means UI-level branch protection isn't available. We enforce the same outcomes through tooling instead:
 
 | Concern | What we use |
-|---|---|
+| --- | --- |
 | Don't push to `main` / `prod` directly | Local pre-push hook (`.husky/pre-push`) — install via `pnpm install` (husky `prepare` script wires it up) |
 | Don't merge broken code | `ci.yml` runs typecheck/lint/unit/integration/RLS/Playwright on every PR — the merge bar is **never click "Merge anyway"** with a red CI |
 | Don't accidentally deploy to prod | `deploy-prod.yml` is `workflow_dispatch`-only and requires typed-input gates (`confirm_target=production` exact match + `release_tag` matching `^v\d+\.\d+\.\d+$`) |
