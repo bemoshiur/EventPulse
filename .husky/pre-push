@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Event Pulse — pre-push protection
+# Blocks direct pushes to main and prod (CLAUDE.md §18.3 + decisions.md 2026-05-16
+# "GitHub free plan — branch protection via local hooks + CI"). PR-only workflow.
+#
+# Override (rare and deliberate):
+#   git push --no-verify
+# THEN: append an entry to .claude/memory/gotchas.md with the date and the reason.
+# If you skip the log, future-you will not know why the gate was bypassed.
+
+protected="^(main|prod)$"
+current=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+
+if [[ "$current" =~ $protected ]]; then
+  echo ""
+  echo "✋  Direct push to '$current' is blocked."
+  echo ""
+  echo "    Create a feature branch and open a PR instead:"
+  echo "      git checkout -b feat/<scope>-<short>"
+  echo "      git push -u origin feat/<scope>-<short>"
+  echo "      gh pr create"
+  echo ""
+  echo "    Override (rare): git push --no-verify"
+  echo "    Then log to .claude/memory/gotchas.md with date + reason."
+  echo ""
+  exit 1
+fi
