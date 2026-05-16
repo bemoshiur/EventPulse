@@ -1,0 +1,12 @@
+{
+  "extends": "@eventpulse/tsconfig/node.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "noEmit": true,
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "baseUrl": "."
+  },
+  "include": ["src/**/*"]
+}

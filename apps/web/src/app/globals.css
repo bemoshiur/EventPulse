@@ -1,0 +1,180 @@
+@import 'tailwindcss';
+
+/* ---------------------------------------------------------------------------
+   Event Pulse design tokens (§1.5)
+   These are the canonical token names. Tailwind 4 auto-generates utilities
+   from --color-* and --font-* etc., so `bg-ep-violet`, `text-ep-graphite`,
+   and `font-display` all just work.
+   --------------------------------------------------------------------------- */
+@theme {
+  /* Foundation */
+  --color-ep-ink: #0b0b14;
+  --color-ep-graphite: #2a2a36;
+  --color-ep-mist: #f6f5fb;
+  --color-ep-paper: #ffffff;
+  --color-ep-line: #e4e2ee;
+
+  /* Brand spectrum — five accents that compose the gradient mesh */
+  --color-ep-violet: #6c4fe0;
+  --color-ep-indigo: #4a5bff;
+  --color-ep-cerulean: #2da8ff;
+  --color-ep-mint: #19c39a;
+  --color-ep-coral: #ff6f61;
+  --color-ep-amber: #ffb547;
+  --color-ep-rose: #ff4d7e;
+
+  /* Semantic aliases */
+  --color-ep-primary: #6c4fe0;
+  --color-ep-success: #19c39a;
+  --color-ep-warning: #ffb547;
+  --color-ep-error: #ff4d7e;
+  --color-ep-info: #2da8ff;
+
+  /* Typography */
+  --font-display: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-bangla: var(--font-hind-siliguri), var(--font-inter), sans-serif;
+
+  /* Radius — small overrides to land on 4px grid */
+  --radius-md: 0.5rem;     /* 8px */
+  --radius-lg: 0.75rem;    /* 12px */
+  --radius-2xl: 1rem;      /* 16px — primary glass cards */
+  --radius-3xl: 1.5rem;    /* 24px — hero panels and modals */
+
+  /* Easings + durations */
+  --ease-ep: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* Shadow that pairs well with glass */
+  --shadow-glass: 0 12px 40px -8px rgba(20, 18, 60, 0.15);
+  --shadow-glass-strong: 0 20px 60px -10px rgba(20, 18, 60, 0.25);
+}
+
+/* ---------------------------------------------------------------------------
+   Base layer
+   --------------------------------------------------------------------------- */
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    background-color: var(--color-ep-mist);
+    color: var(--color-ep-graphite);
+    font-family: var(--font-sans);
+  }
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--color-ep-ink);
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-ep-cerulean);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Glassmorphism utilities (§1.5)
+   Exposed as plain component classes so any element can opt in:
+     <div class="glass-strong rounded-3xl p-8"> ... </div>
+   --------------------------------------------------------------------------- */
+@layer components {
+  .glass {
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    box-shadow:
+      0 1px 1px rgba(255, 255, 255, 0.8) inset,
+      var(--shadow-glass);
+  }
+  .glass-dark {
+    background: rgba(20, 18, 40, 0.55);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--color-ep-mist);
+  }
+  .glass-strong {
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    box-shadow: var(--shadow-glass-strong);
+  }
+
+  /* Brand gradients used by hero cards, primary CTAs, success badges */
+  .grad-primary {
+    background: linear-gradient(135deg, #6c4fe0 0%, #2da8ff 100%);
+  }
+  .grad-energy {
+    background: linear-gradient(135deg, #ff6f61 0%, #ff4d7e 100%);
+  }
+  .grad-success {
+    background: linear-gradient(135deg, #19c39a 0%, #2da8ff 100%);
+  }
+  .grad-warm {
+    background: linear-gradient(135deg, #ffb547 0%, #ff6f61 100%);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Gradient mesh background (§1.5)
+   A slow-moving multi-radial mesh that lives behind the authenticated portals
+   and the auth screens. Falls back to a static mesh under prefers-reduced-motion.
+   --------------------------------------------------------------------------- */
+@layer components {
+  .gradient-mesh {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-color: var(--color-ep-mist);
+    background-image:
+      radial-gradient(at 0% 0%, rgba(108, 79, 224, 0.35) 0%, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(45, 168, 255, 0.30) 0%, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(255, 111, 97, 0.25) 0%, transparent 50%),
+      radial-gradient(at 0% 100%, rgba(25, 195, 154, 0.25) 0%, transparent 50%);
+    background-size: 200% 200%;
+    animation: ep-mesh-drift 45s ease-in-out infinite alternate;
+  }
+  .gradient-mesh--calm {
+    /* Auth screens — slower drift to feel calm (§19.2) */
+    animation-duration: 90s;
+  }
+  .gradient-mesh--dark {
+    background-color: #0b0b14;
+    background-image:
+      radial-gradient(at 0% 0%, rgba(108, 79, 224, 0.45) 0%, transparent 55%),
+      radial-gradient(at 100% 0%, rgba(74, 91, 255, 0.35) 0%, transparent 55%),
+      radial-gradient(at 100% 100%, rgba(255, 77, 126, 0.30) 0%, transparent 55%),
+      radial-gradient(at 0% 100%, rgba(25, 195, 154, 0.25) 0%, transparent 55%);
+  }
+}
+
+@keyframes ep-mesh-drift {
+  0%   { background-position: 0% 0%; }
+  25%  { background-position: 100% 25%; }
+  50%  { background-position: 100% 100%; }
+  75%  { background-position: 0% 75%; }
+  100% { background-position: 0% 0%; }
+}
+
+/* Motion + accessibility — §19.6 */
+@media (prefers-reduced-motion: reduce) {
+  .gradient-mesh,
+  .gradient-mesh--calm,
+  .gradient-mesh--dark {
+    animation: none !important;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
