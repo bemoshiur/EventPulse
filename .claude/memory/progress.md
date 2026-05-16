@@ -2,8 +2,20 @@
 
 ## In flight
 
-- 2026-05-16 — **Sprint 1 Day 3-4** (EC2 + Route 53 provisioning) — next concrete piece of work; awaiting AWS-profile + domain-registrar answers before starting
-- 2026-05-16 — **Playbook v2.1 bump** — user saving v2.1 to `Playbook/EventPulse_Claude_Code_Playbook_v2.1.md`; on confirmation, copy to CLAUDE.md and commit as `memory+docs: bump CLAUDE.md to playbook v2.1`
+- 2026-05-16 — **Sprint 1 Day 3-4** (EC2 + Route 53 provisioning) — next concrete piece of work; awaiting AWS profile / domain registrar / KMS strategy values from Moshiur (literal `<placeholders>` in his last message, not yet filled in)
+- 2026-05-16 — **Dependabot tightening** + close 15 major-bump PRs on `feat/playbook-v2.1-and-deps` branch
+- 2026-05-16 — **7 slash commands** — blocked, message content was `[paste …]` placeholder; awaiting actual command bodies from Moshiur
+
+**Sprint 1 Day 5-6 schema scope (v2.1 expanded):**
+The identity-table issue (#24) now includes the v2.1 schema additions per CLAUDE.md §9.1 / §9.3 / §9.14 / §9.15:
+
+- `users.handle` (citext UNIQUE) + `users.handle_chosen_at`
+- `tenants.is_personal` + `tenants.owner_user_id`
+- `events.is_listed_publicly`
+- New tables: `reserved_handles`, `handle_history`, `event_reports`
+- Seed data: `apps/api/scripts/seed-reserved-handles.ts` populates the reserved list
+
+This affects the migration size; the cross-tenant RLS test plan (#27) must extend to cover the new tables (`event_reports` is tenant-scoped; `reserved_handles` is global so no RLS needed; `handle_history` is user-scoped).
 
 ## Done
 
