@@ -12,13 +12,13 @@ If you are authorised to contribute, this is how we work.
 
 ## Branch strategy (§18.3)
 
-| Branch | Purpose | Deploys to |
-|---|---|---|
-| `main` | Integration. PRs land here. | Staging (automatic on merge) |
-| `prod` | Production cut. Merge-commit from `main` only. | Production (manual dispatch with reviewer approval) |
-| `feat/<scope>-<short>` | New work | — |
-| `fix/<scope>-<short>` | Bug fixes | — |
-| `hotfix/<short>` | Urgent prod fix; can go directly to `prod` with explicit override | Production |
+| Branch                 | Purpose                                                           | Deploys to                                          |
+| ---------------------- | ----------------------------------------------------------------- | --------------------------------------------------- |
+| `main`                 | Integration. PRs land here.                                       | Staging (automatic on merge)                        |
+| `prod`                 | Production cut. Merge-commit from `main` only.                    | Production (manual dispatch with reviewer approval) |
+| `feat/<scope>-<short>` | New work                                                          | —                                                   |
+| `fix/<scope>-<short>`  | Bug fixes                                                         | —                                                   |
+| `hotfix/<short>`       | Urgent prod fix; can go directly to `prod` with explicit override | Production                                          |
 
 ## Commits — Conventional Commits (§23.5)
 

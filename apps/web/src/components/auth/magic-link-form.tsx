@@ -23,16 +23,16 @@ export function MagicLinkForm() {
 
   if (submitted) {
     return (
-      <div className="rounded-md border border-ep-line bg-white/60 p-4 text-sm">
-        <p className="font-medium text-ep-ink">Check your email.</p>
-        <p className="mt-1 text-ep-graphite">
-          We sent a sign-in link to <span className="font-medium">{email}</span>. The link is
-          good for 15 minutes.
+      <div className="border-ep-line rounded-md border bg-white/60 p-4 text-sm">
+        <p className="text-ep-ink font-medium">Check your email.</p>
+        <p className="text-ep-graphite mt-1">
+          We sent a sign-in link to <span className="font-medium">{email}</span>. The link is good
+          for 15 minutes.
         </p>
         <button
           type="button"
           onClick={() => setSubmitted(false)}
-          className="mt-3 text-xs font-medium text-ep-violet hover:underline"
+          className="text-ep-violet mt-3 text-xs font-medium hover:underline"
         >
           Use a different email
         </button>
@@ -43,7 +43,7 @@ export function MagicLinkForm() {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row">
       <div className="relative flex-1">
-        <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ep-graphite/60" />
+        <Mail className="text-ep-graphite/60 pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
         <input
           type="email"
           required
@@ -51,12 +51,12 @@ export function MagicLinkForm() {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           placeholder="you@company.com"
-          className="h-12 w-full rounded-md border border-ep-line bg-white pl-9 pr-3 text-sm text-ep-ink placeholder:text-ep-graphite/50 focus:border-ep-cerulean focus:outline-none"
+          className="border-ep-line text-ep-ink placeholder:text-ep-graphite/50 focus:border-ep-cerulean h-12 w-full rounded-md border bg-white pl-9 pr-3 text-sm focus:outline-none"
         />
       </div>
       <button
         type="submit"
-        className="inline-flex h-12 items-center justify-center gap-2 rounded-md grad-primary px-5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+        className="grad-primary inline-flex h-12 items-center justify-center gap-2 rounded-md px-5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
       >
         Continue
         <ArrowRight className="h-4 w-4" />
