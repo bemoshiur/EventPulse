@@ -12,12 +12,55 @@ concurrency:
 
 env:
   NODE_VERSION: '22'
-  PNPM_VERSION: '10'
   TURBO_TELEMETRY_DISABLED: '1'
 
+# CI evolves with the codebase (CLAUDE.md §24 → "CI Evolution").
+# At any point in the project's life, every check listed here must pass on
+# green code. The detect-scope job below figures out which suites the current
+# tree can support; suites that don't apply yet are skipped cleanly so CI
+# stays green through early-sprint scaffolding and tightens as features land.
+#
+# IMPORTANT — pnpm version note:
+# `pnpm/action-setup@v4` errors when both `version:` is passed AND
+# `packageManager` is set in package.json. We treat `packageManager` as
+# authoritative (it's the Node.js standard) and OMIT `version:` from every
+# `pnpm/action-setup@v4` invocation below. Do not add it back without
+# also removing the `packageManager` field — see gotchas.md
+# "CI written for the finished platform fails on early-sprint codebases".
+
 jobs:
+  detect-scope:
+    name: Detect testing scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      has_migrations: ${{ steps.check.outputs.has_migrations }}
+      has_e2e: ${{ steps.check.outputs.has_e2e }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        name: Look for schema migrations + Playwright specs
+        run: |
+          set -euo pipefail
+          if compgen -G 'apps/api/src/db/migrations/*.sql' > /dev/null \
+             || compgen -G 'apps/api/src/db/migrations/**/*.sql' > /dev/null; then
+            echo "has_migrations=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Schema migrations found — integration + RLS tests will run"
+          else
+            echo "has_migrations=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No schema migrations yet — integration + RLS tests skipped"
+          fi
+          if compgen -G 'apps/web/e2e/**/*.spec.ts' > /dev/null \
+             || compgen -G 'apps/web/e2e/*.spec.ts' > /dev/null; then
+            echo "has_e2e=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Playwright specs found — e2e smoke will run"
+          else
+            echo "has_e2e=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No Playwright specs yet — e2e smoke skipped"
+          fi
+
   lint-and-typecheck:
-    name: Lint + typecheck
+    name: Lint + typecheck + format
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -25,7 +68,6 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: ${{ env.PNPM_VERSION }}
           run_install: false
 
       - uses: actions/setup-node@v4
@@ -43,6 +85,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+      - run: pnpm format:check
 
   unit-tests:
     name: Unit tests
@@ -53,7 +96,6 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: ${{ env.PNPM_VERSION }}
           run_install: false
 
       - uses: actions/setup-node@v4
@@ -73,6 +115,8 @@ jobs:
 
   integration-tests:
     name: Integration + RLS tests
+    needs: detect-scope
+    if: needs.detect-scope.outputs.has_migrations == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -104,7 +148,6 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: ${{ env.PNPM_VERSION }}
           run_install: false
 
       - uses: actions/setup-node@v4
@@ -114,19 +157,16 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Apply migrations (skipped until Day 5-6)
-        run: |
-          if [ -f apps/api/drizzle.config.ts ]; then
-            pnpm --filter @eventpulse/api db:migrate
-          else
-            echo "::notice::Drizzle config not present yet — skipping migrations"
-          fi
+      - name: Apply migrations
+        run: pnpm --filter @eventpulse/api db:migrate
 
       - name: Integration + RLS tests
-        run: pnpm test
+        run: pnpm --filter @eventpulse/api test
 
   e2e-smoke:
     name: E2E smoke (Playwright)
+    needs: detect-scope
+    if: needs.detect-scope.outputs.has_e2e == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -134,7 +174,6 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: ${{ env.PNPM_VERSION }}
           run_install: false
 
       - uses: actions/setup-node@v4

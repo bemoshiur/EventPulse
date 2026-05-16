@@ -2895,6 +2895,53 @@ afterEach(async () => {
 - One RLS cross-tenant test (for tenant-scoped endpoints)
 - One idempotency test (for money-moving endpoints)
 
+### 24.4 CI Evolution — Required Checks Grow With the Codebase
+
+CI's required-check set is not static. The principle: **at any point in the project's life, every check declared in `.github/workflows/ci.yml` must pass on green code.** A check that fails because the thing it validates doesn't exist yet is a broken check, not a strict one — it trains the team to ignore red CI, which is the worst outcome a CI system can produce.
+
+Concretely, `ci.yml` ships a small `detect-scope` job that inspects the working tree (`apps/api/src/db/migrations/*.sql`, `apps/web/e2e/**/*.spec.ts`, …) and gates conditional jobs with `if: needs.detect-scope.outputs.has_X == 'true'`. Suites that don't apply yet are **skipped cleanly**; the workflow stays green; the day a missing piece lands, the suite starts running automatically because the gate flips.
+
+The escalation ladder — every entry becomes required by the **end** of the sprint it's listed under:
+
+**End of Sprint 1 (MVP foundation — auth, identity schema, EC2):**
+
+- `typecheck` (always on)
+- `lint` (always on)
+- `format:check` via prettier (always on)
+- Unit tests via vitest (always on — vitest's `--passWithNoTests` keeps empty packages green)
+- Integration tests for identity / auth tables (gate flips when `apps/api/src/db/migrations/` lands in Day 5-6)
+- RLS isolation tests for identity tables (same gate)
+- Markdown lint (added once existing corpus is audited and stylistic-rule config landed)
+
+**End of Sprint 2 (form builder, landing pages, disbursement engine, RBAC, KYC tiers 2 + B):**
+
+- All Sprint 1 + all schema tables covered by RLS tests
+- KYC flow tests (Tier 1 individual + Tier A org happy paths)
+- EPS sandbox happy-path test (one full order: create → init → verify → paid)
+
+**End of Sprint 3 (white-label, attendee accounts moved to Phase 2 per v2.1, mobile check-in):**
+
+- All Sprint 2 + Playwright e2e for the buyer journey: landing → ticket select → checkout → confirmation → ticket email
+- Web QR scanner happy-path test
+- Custom-domain DNS + SSL provisioning integration test (against Cloudflare for SaaS sandbox if available)
+
+**End of Sprint 4 (launch readiness):**
+
+- All Sprint 3 + load test budget (k6 or artillery against staging — fail PR if p95 regresses > 20%)
+- Dependency audit (`pnpm audit` blocking on high+critical)
+- Container image security scan (once images land)
+
+### 24.5 The Rule For Adding A New CI Check
+
+When you add a check to `ci.yml`:
+
+1. The check must pass on the **current main branch** as-is, not as it will be in two sprints
+2. If the check needs code that doesn't exist yet, gate it via `detect-scope` until the code lands
+3. The sprint where it becomes unconditionally required goes in §24.4 above
+4. The PR that adds the check explains in its body which sprint's milestone it represents
+
+This is how red CI stays meaningful: every red is a real regression, never "we just haven't built that yet."
+
 ## §25 — Definition of Done
 
 A unit of work is "done" when all of the following are true:

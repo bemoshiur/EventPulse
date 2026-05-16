@@ -18,11 +18,7 @@ export const GlassCard = forwardRef<HTMLDivElement, GlassCardProps>(function Gla
   ref,
 ) {
   return (
-    <div
-      ref={ref}
-      className={cn(variantClass[variant], 'rounded-2xl', className)}
-      {...rest}
-    >
+    <div ref={ref} className={cn(variantClass[variant], 'rounded-2xl', className)} {...rest}>
       {children}
     </div>
   )
