@@ -28,9 +28,7 @@ describe('reserved-handles seed', () => {
 
   it('rejects empty handles or > 64 chars', () => {
     expect(() => validateList([{ handle: '', reason: 'system' }])).toThrow(/range/)
-    expect(() =>
-      validateList([{ handle: 'a'.repeat(65), reason: 'system' }]),
-    ).toThrow(/range/)
+    expect(() => validateList([{ handle: 'a'.repeat(65), reason: 'system' }])).toThrow(/range/)
   })
 
   it('rejects uppercase or trailing-hyphen handles', () => {
