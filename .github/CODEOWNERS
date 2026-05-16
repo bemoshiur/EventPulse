@@ -1,0 +1,26 @@
+# Event Pulse CODEOWNERS
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-security/customizing-your-repository/about-code-owners
+#
+# Rule order matters — last match wins. Default owner first, escalations below.
+# All paths below the load-bearing escalations require Moshiur Rahman's review
+# explicitly because a mistake there is hard to walk back.
+
+# Default — everything is owned by the core team
+*                                       @publicpulseagency/eventpulse-core
+
+# Load-bearing areas — Moshiur reviews explicitly
+/infra/                                 @moshiur-rahman
+/.github/workflows/                     @moshiur-rahman
+/apps/api/src/domain/payments/          @moshiur-rahman
+/apps/api/src/domain/settlement/        @moshiur-rahman
+
+# Project bible + persistent memory — never silently changed
+/CLAUDE.md                              @moshiur-rahman
+/.claude/                               @moshiur-rahman
+/Playbook/                              @moshiur-rahman
+
+# Legal + Trust Center copy — touch with care (§20, §21)
+/SECURITY.md                            @moshiur-rahman
+/LICENSE                                @moshiur-rahman
+/apps/web/src/app/(public)/trust/       @moshiur-rahman
+/apps/web/src/app/(public)/legal/       @moshiur-rahman

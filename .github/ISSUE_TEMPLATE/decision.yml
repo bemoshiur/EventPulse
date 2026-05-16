@@ -1,0 +1,62 @@
+name: Decision needed
+description: Propose an entry for .claude/memory/decisions.md. Use this for any architectural choice, §29 Open Decision, or playbook deviation.
+title: 'decision: '
+labels: [decision-needed, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Decisions stay structured. Once resolved, this issue closes with a link to the decisions.md commit that captured the outcome.
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why is this coming up? What's the trigger? 2-3 lines.
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options
+      description: List 2-3 real options with their tradeoffs. Don't ask "what should we do" — frame the choice.
+      placeholder: |
+        A. Use Lucia's built-in adapter — fast to ship, less flexible
+        B. Custom Postgres adapter — more code, full control
+        C. Skip RBAC for MVP — punt to Phase 2
+    validations:
+      required: true
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Recommendation
+      description: Which option do you favour and why? Future-you wants to read this in 6 months.
+    validations:
+      required: true
+  - type: input
+    id: section
+    attributes:
+      label: CLAUDE.md section this touches
+      placeholder: '§5.3 (Session Adapter)'
+  - type: input
+    id: open_decision
+    attributes:
+      label: §29 Open Decision (if applicable)
+      description: 'Reference the numbered item from §29, e.g. "#7 refund authority"'
+  - type: dropdown
+    id: subsystem
+    attributes:
+      label: Subsystem
+      multiple: false
+      options:
+        - auth
+        - events
+        - payments
+        - settlement
+        - kyc
+        - trust-center
+        - design-system
+        - infra
+        - legal
+        - cross-cutting
+    validations:
+      required: true

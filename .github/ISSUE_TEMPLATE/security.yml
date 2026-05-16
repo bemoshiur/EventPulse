@@ -1,0 +1,22 @@
+name: Security — DO NOT use this template
+description: Public security disclosures are not accepted via GitHub Issues.
+title: 'SECURITY — see contact links above'
+labels: [security, do-not-disclose-here]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        # ⚠ Do not file security vulnerabilities as a public issue.
+
+        Public disclosure of a security vulnerability before a fix is shipped puts every Event Pulse tenant and attendee at risk.
+
+        **Send your report to `security@eventpulse.com.bd`.** We respond within 72 hours per the Vulnerability Disclosure policy at `/trust/security/disclosure` (§20 Trust Center).
+
+        If you proceeded to fill this in anyway, please **close the issue immediately** and email instead.
+  - type: checkboxes
+    id: ack
+    attributes:
+      label: Acknowledgement
+      options:
+        - label: I understand I should email security@eventpulse.com.bd instead, and I'm closing this issue now.
+          required: true

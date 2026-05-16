@@ -1,0 +1,32 @@
+name: Commit lint (PR title)
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+    branches: [main, prod]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  pr-title:
+    name: PR title is Conventional Commits
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Validate PR title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # Per CLAUDE.md §23.5 — Conventional Commits format.
+          # Title pulled from `env:` (never interpolated into the shell body)
+          # so attacker-supplied PR titles cannot inject commands.
+          PATTERN='^(build|chore|ci|docs|feat|fix|memory|perf|refactor|revert|style|test)(\([a-z0-9-]+\))?!?: .{1,100}$'
+          if [[ ! "$TITLE" =~ $PATTERN ]]; then
+            echo "::error::PR title does not match Conventional Commits."
+            echo "::error::Got:    $TITLE"
+            echo "::error::Expect: type(scope?): subject"
+            echo "::error::Types:  build, chore, ci, docs, feat, fix, memory, perf, refactor, revert, style, test"
+            exit 1
+          fi
+          echo "OK: $TITLE"

@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Derive release notes
+        run: |
+          set -euo pipefail
+          # TAG comes from github.ref_name (validated by git tag rules).
+          PREV_TAG=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")
+          {
+            echo "## ${TAG}"
+            echo
+            if [ -n "$PREV_TAG" ]; then
+              echo "**Changes since ${PREV_TAG}:**"
+              echo
+              git log "${PREV_TAG}..${TAG}" --pretty=format:'- %s (%h)' --no-merges
+            else
+              echo "**Initial release.**"
+            fi
+            echo
+            echo
+            # Once changelog_entries table is wired (§22.2) this step will be
+            # replaced with a query against the prod DB rendered by category +
+            # audience. For now we use git log so releases work pre-DB.
+            if [ -f docs/changelog.md ]; then
+              echo "---"
+              echo
+              cat docs/changelog.md
+            fi
+          } > release-notes.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: ${{ env.TAG }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}

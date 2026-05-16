@@ -1,0 +1,69 @@
+name: Bug report
+description: Something is broken or behaves wrong. Not for security issues — those go to security@eventpulse.com.bd.
+title: 'fix: '
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: check `.claude/memory/gotchas.md` — it might already be there.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: One paragraph. What did you do, what did you expect, what did you actually see?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Minimal numbered steps. Include URLs, request bodies (PII-scrubbed), and any tenant/event IDs.
+      placeholder: |
+        1. Log in as tenant X
+        2. POST /api/v1/tenant/events with body {...}
+        3. Observe response: 500 instead of 201
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: 'local / staging / production · git SHA · browser/Node version'
+      placeholder: 'staging · 1b45b16 · Chrome 131'
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Sentry link
+      description: Sentry issue URL, request_id, or a redacted log excerpt. No raw PII (R5).
+  - type: dropdown
+    id: subsystem
+    attributes:
+      label: Subsystem
+      multiple: false
+      options:
+        - auth
+        - events
+        - payments
+        - settlement
+        - kyc
+        - trust-center
+        - design-system
+        - infra
+        - cross-cutting
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      multiple: false
+      options:
+        - sev1 — money lost or data exposed
+        - sev2 — feature broken for users
+        - sev3 — annoying but workaround exists
+        - sev4 — cosmetic
+    validations:
+      required: true

@@ -1,0 +1,69 @@
+version: 2
+
+updates:
+  # ─── npm (pnpm workspace root) ──────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: daily
+      time: '03:00'
+      timezone: 'Asia/Dhaka'
+    open-pull-requests-limit: 10
+    labels: [dependencies, npm]
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      # Group all devDependency patch+minor bumps into one PR per week-ish.
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+      # Group framework patch+minor bumps together so we land Next.js / React
+      # bumps as a single coherent change rather than 8 separate PRs.
+      next-react:
+        patterns: ['next', 'react', 'react-dom', '@types/react*', 'eslint-config-next']
+        update-types: [minor, patch]
+      tailwind:
+        patterns: ['tailwindcss', '@tailwindcss/*', 'tailwind-merge', 'prettier-plugin-tailwindcss']
+        update-types: [minor, patch]
+      hono:
+        patterns: ['hono', '@hono/*']
+        update-types: [minor, patch]
+      types:
+        patterns: ['@types/*']
+        update-types: [minor, patch]
+    ignore:
+      # Node major is locked to 22 LTS per §1.2 — Dependabot must not bump.
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
+    # Production deps left UNGROUPED on purpose — every prod-dep upgrade gets
+    # its own PR so the changelog is reviewable.
+
+  # ─── GitHub Actions ─────────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: daily
+      time: '03:00'
+      timezone: 'Asia/Dhaka'
+    open-pull-requests-limit: 5
+    labels: [dependencies, github-actions]
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  # ─── Docker (production base images, once they land in /infra) ──────────
+  - package-ecosystem: docker
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+      time: '03:00'
+      timezone: 'Asia/Dhaka'
+    open-pull-requests-limit: 3
+    labels: [dependencies, docker]
+    commit-message:
+      prefix: chore

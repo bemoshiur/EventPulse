@@ -1,0 +1,68 @@
+name: Feature request
+description: Propose new functionality. Must reference a sprint slot in CLAUDE.md §26.
+title: 'feat: '
+labels: [feature, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Features land via the sprint plan in CLAUDE.md §26. If this doesn't fit a Phase 1–4 slot, surface it as a decision (use the "Decision" template instead) so it can be scoped into a future phase.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Whose problem is this and how does it manifest today? Cite a real user / tenant scenario.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What does the user see? Sketch the simplest version. Edge cases come later.
+    validations:
+      required: true
+  - type: input
+    id: sprint
+    attributes:
+      label: Target sprint (CLAUDE.md §26)
+      description: 'e.g. Sprint 3 Day 1-2, or Phase 3 — Custom Domains'
+      placeholder: 'Sprint 3 Day 1-2'
+    validations:
+      required: true
+  - type: dropdown
+    id: subsystem
+    attributes:
+      label: Subsystem
+      multiple: false
+      options:
+        - auth
+        - events
+        - payments
+        - settlement
+        - kyc
+        - trust-center
+        - design-system
+        - infra
+        - cross-cutting
+    validations:
+      required: true
+  - type: dropdown
+    id: estimate
+    attributes:
+      label: Estimate
+      options:
+        - S — half a day
+        - M — 1-2 days
+        - L — 3-5 days
+        - XL — needs to be split
+    validations:
+      required: true
+  - type: checkboxes
+    id: playbook
+    attributes:
+      label: Playbook check
+      options:
+        - label: I've checked CLAUDE.md and this isn't already covered
+          required: true
+        - label: I've checked `.claude/memory/decisions.md` and this doesn't contradict a prior decision
+          required: true

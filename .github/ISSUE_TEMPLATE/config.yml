@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security disclosure (private)
+    url: https://eventpulse.com.bd/trust/security/disclosure
+    about: Do NOT file public issues for security vulnerabilities. Email security@eventpulse.com.bd — we respond within 72 hours per the Vulnerability Disclosure policy (§20 Trust Center).
+  - name: General contact
+    url: https://eventpulse.com.bd/contact
+    about: Sales, partnerships, press, legal, support — use the contact form.
