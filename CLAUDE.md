@@ -1479,7 +1479,7 @@ CREATE TABLE contact_submissions (
 CREATE TABLE tenant_fee_config (
   tenant_id uuid PRIMARY KEY REFERENCES tenants(id),
   platform_fee_bps integer NOT NULL DEFAULT 25,    -- basis points: 25 = 0.25%
-  default_fee_mode text NOT NULL DEFAULT 'absorb'
+  default_fee_mode text NOT NULL DEFAULT 'pass_through'
     CHECK (default_fee_mode IN ('absorb','pass_through')),
   allow_per_event_override boolean NOT NULL DEFAULT true,
   custom_arrangement_note text,
