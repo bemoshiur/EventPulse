@@ -40,4 +40,4 @@ Open <http://localhost:3000/sign-in> to see the design system on the four-button
 
 ---
 
-© 2026 Event Pulse. All rights reserved. Built by [Public Pulse Agency](https://publicpulse.com.bd) / TiCON System Limited.
+© 2026 Event Pulse. All rights reserved. Built by [Team Event Pulse](https://eventpulse.com.bd)
