@@ -14,7 +14,7 @@
     "build": "echo 'build: tsc-on-import'"
   },
   "dependencies": {
-    "zod": "^3.23.8"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eventpulse/tsconfig": "workspace:*",
