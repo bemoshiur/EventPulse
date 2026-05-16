@@ -17,12 +17,12 @@ Multi-tenant SaaS ticketing and event registration platform for Bangladesh at **
 
 Event Pulse is a private repo on **GitHub Free**, which means UI-level branch protection isn't available. We enforce the same outcomes through tooling instead:
 
-| Concern | What we use |
-| --- | --- |
-| Don't push to `main` / `prod` directly | Local pre-push hook (`.husky/pre-push`) — install via `pnpm install` (husky `prepare` script wires it up) |
-| Don't merge broken code | `ci.yml` runs typecheck/lint/unit/integration/RLS/Playwright on every PR — the merge bar is **never click "Merge anyway"** with a red CI |
-| Don't accidentally deploy to prod | `deploy-prod.yml` is `workflow_dispatch`-only and requires typed-input gates (`confirm_target=production` exact match + `release_tag` matching `^v\d+\.\d+\.\d+$`) |
-| Self-review honesty | PR template carries a solo-review banner + the full §25 Definition-of-Done checklist |
+| Concern                                | What we use                                                                                                                                                        |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Don't push to `main` / `prod` directly | Local pre-push hook (`.husky/pre-push`) — install via `pnpm install` (husky `prepare` script wires it up)                                                          |
+| Don't merge broken code                | `ci.yml` runs typecheck/lint/unit/integration/RLS/Playwright on every PR — the merge bar is **never click "Merge anyway"** with a red CI                           |
+| Don't accidentally deploy to prod      | `deploy-prod.yml` is `workflow_dispatch`-only and requires typed-input gates (`confirm_target=production` exact match + `release_tag` matching `^v\d+\.\d+\.\d+$`) |
+| Self-review honesty                    | PR template carries a solo-review banner + the full §25 Definition-of-Done checklist                                                                               |
 
 Override the pre-push hook in genuinely exceptional cases with `git push --no-verify`, and immediately log the override (date + reason) to `.claude/memory/gotchas.md`. The day a second developer joins, the move is to upgrade to GitHub Pro (~$48/year) so UI-enforced branch protection comes back. See `.claude/memory/decisions.md` 2026-05-16 "GitHub free plan — branch protection via local hooks + CI" for the full rationale.
 
