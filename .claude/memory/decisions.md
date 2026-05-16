@@ -4,6 +4,29 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-16 · Workflow automation — seven slash commands installed
+
+**Context:** Sessions vary in rhythm. Early ones are slow and careful; late-day or after-incident ones are fast and tired. The risk is that the playbook rituals (memory writes, decision capture, gotcha logging, sprint hygiene) get skipped first when time pressure builds — exactly when they matter most. The solution is to make the rituals one-keystroke invocations rather than something that has to be remembered and re-typed each time.
+
+**Decision:** Install seven project-scoped slash commands at `.claude/commands/`:
+
+- `/start` — session-start protocol + GitHub state + today's likely focus
+- `/work` — focused execution mode (plan → wait for go → execute → ship)
+- `/decide` — three-question intake → `decisions.md` entry + commit
+- `/gotcha` — symptom/why/fix/avoid intake → `gotchas.md` entry + commit
+- `/review` — ruthless PR review against playbook §4 / §14 / §1.3 / §24 / §25
+- `/end` — session-end protocol with diff approval before memory commit
+- `/sprint` — sprint boundary: retro + release tag + handoff + next-sprint kick-off
+
+**Consequences:**
+
+- The project's working rituals (start, work, decide, gotcha, review, end, sprint) happen consistently because they're invoked by typing, not by remembering. Memory and quality gates can't be skipped under time pressure — they're the literal command body.
+- Free maintenance ongoing; commands are edited in-repo as the project evolves. New commands added with the same `chore: install` pattern.
+- Future-Moshiur (and any teammate) gets the same disciplined session whether the founder is fresh or exhausted. Critical when contractors join.
+- These commands are version-controlled with the rest of the project, not user-scoped — so the team gets them on clone, not per-machine.
+
+---
+
 ## 2026-05-16 · GitHub free plan — branch protection via local hooks + CI
 
 **Context:** STOP-ASK 2 of the GitHub-wiring sub-task surfaced that `gh api -X PUT /branches/{branch}/protection` returns 403 on private repos under GitHub Free. The three options were: pay $4/month for Pro, convert to Org + Team, or move enforcement out of the GitHub UI into tooling. For a solo founder pre-revenue, the third option is the right one.
