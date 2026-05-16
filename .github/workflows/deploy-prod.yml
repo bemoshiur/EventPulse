@@ -50,7 +50,7 @@ jobs:
           echo "OK: release_tag=$RELEASE_TAG"
 
       - name: Verify release_tag exists in repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Ensure tag is a real git tag
@@ -76,7 +76,7 @@ jobs:
       DEPLOY_ACTOR: ${{ github.actor }}
       PROD_INSTANCE_ID: ${{ secrets.PROD_EC2_INSTANCE_ID }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.release_tag }}
 

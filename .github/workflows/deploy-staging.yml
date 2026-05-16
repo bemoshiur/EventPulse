@@ -30,7 +30,7 @@ jobs:
       DEPLOY_ACTOR: ${{ github.actor }}
       STAGING_INSTANCE_ID: ${{ secrets.STAGING_EC2_INSTANCE_ID }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
