@@ -3371,6 +3371,7 @@ Claude Code must STOP and ask before proceeding if any of these come up. Items m
 - ✓ Discovery: private by default with `is_listed_publicly` toggle; `/discover` search page in Phase 3 (query-driven, not algorithmic)
 - ✓ Social layer (follows, friends-attending): deferred to Phase 4
 - ✓ Handle convention: 3–30 chars lowercase, picked at first event publish, 30-day redirect on change
+- ✓ GitHub plan: free; branch protection enforced via pre-push hooks + CI gates + `workflow_dispatch` typed inputs (`.claude/memory/decisions.md` 2026-05-16). Upgrade to Pro the day a second developer joins.
 
 **Still open — Claude Code asks before assuming:**
 
