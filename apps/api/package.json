@@ -14,7 +14,7 @@
   "dependencies": {
     "@eventpulse/shared-types": "workspace:*",
     "@eventpulse/shared-utils": "workspace:*",
-    "@hono/node-server": "^1.13.7",
+    "@hono/node-server": "^2.0.2",
     "@hono/zod-validator": "^0.4.1",
     "hono": "^4.6.14",
     "pino": "^9.5.0",
