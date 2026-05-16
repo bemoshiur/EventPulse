@@ -37,10 +37,10 @@
   --font-bangla: var(--font-hind-siliguri), var(--font-inter), sans-serif;
 
   /* Radius — small overrides to land on 4px grid */
-  --radius-md: 0.5rem;     /* 8px */
-  --radius-lg: 0.75rem;    /* 12px */
-  --radius-2xl: 1rem;      /* 16px — primary glass cards */
-  --radius-3xl: 1.5rem;    /* 24px — hero panels and modals */
+  --radius-md: 0.5rem; /* 8px */
+  --radius-lg: 0.75rem; /* 12px */
+  --radius-2xl: 1rem; /* 16px — primary glass cards */
+  --radius-3xl: 1.5rem; /* 24px — hero panels and modals */
 
   /* Easings + durations */
   --ease-ep: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -67,7 +67,12 @@
     color: var(--color-ep-graphite);
     font-family: var(--font-sans);
   }
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     color: var(--color-ep-ink);
     font-family: var(--font-display);
     letter-spacing: -0.01em;
@@ -138,7 +143,7 @@
     background-color: var(--color-ep-mist);
     background-image:
       radial-gradient(at 0% 0%, rgba(108, 79, 224, 0.35) 0%, transparent 50%),
-      radial-gradient(at 100% 0%, rgba(45, 168, 255, 0.30) 0%, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(45, 168, 255, 0.3) 0%, transparent 50%),
       radial-gradient(at 100% 100%, rgba(255, 111, 97, 0.25) 0%, transparent 50%),
       radial-gradient(at 0% 100%, rgba(25, 195, 154, 0.25) 0%, transparent 50%);
     background-size: 200% 200%;
@@ -153,17 +158,27 @@
     background-image:
       radial-gradient(at 0% 0%, rgba(108, 79, 224, 0.45) 0%, transparent 55%),
       radial-gradient(at 100% 0%, rgba(74, 91, 255, 0.35) 0%, transparent 55%),
-      radial-gradient(at 100% 100%, rgba(255, 77, 126, 0.30) 0%, transparent 55%),
+      radial-gradient(at 100% 100%, rgba(255, 77, 126, 0.3) 0%, transparent 55%),
       radial-gradient(at 0% 100%, rgba(25, 195, 154, 0.25) 0%, transparent 55%);
   }
 }
 
 @keyframes ep-mesh-drift {
-  0%   { background-position: 0% 0%; }
-  25%  { background-position: 100% 25%; }
-  50%  { background-position: 100% 100%; }
-  75%  { background-position: 0% 75%; }
-  100% { background-position: 0% 0%; }
+  0% {
+    background-position: 0% 0%;
+  }
+  25% {
+    background-position: 100% 25%;
+  }
+  50% {
+    background-position: 100% 100%;
+  }
+  75% {
+    background-position: 0% 75%;
+  }
+  100% {
+    background-position: 0% 0%;
+  }
 }
 
 /* Motion + accessibility — §19.6 */
@@ -173,7 +188,9 @@
   .gradient-mesh--dark {
     animation: none !important;
   }
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
   }

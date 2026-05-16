@@ -8,13 +8,13 @@ If memory is wrong, the project is wrong.
 
 All under `.claude/memory/` — committed to git so teammates share them.
 
-| File | Purpose | Updated when |
-|---|---|---|
-| MEMORY.md | One-line index of what every other memory file contains | Whenever any other memory file changes |
-| decisions.md | Append-only log of architectural and product decisions | Every time a decision is made or an §29 Open Decision resolves |
-| progress.md | Current sprint, what's done, what's in flight, what's blocked | Every session end + every major task completion |
-| gotchas.md | Things that broke, surprised us, or took >30 min to figure out | The moment a gotcha is discovered |
-| handoff.md | "If a new dev opened the project right now, what would they need to know?" | At session end, always |
+| File         | Purpose                                                                    | Updated when                                                   |
+| ------------ | -------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| MEMORY.md    | One-line index of what every other memory file contains                    | Whenever any other memory file changes                         |
+| decisions.md | Append-only log of architectural and product decisions                     | Every time a decision is made or an §29 Open Decision resolves |
+| progress.md  | Current sprint, what's done, what's in flight, what's blocked              | Every session end + every major task completion                |
+| gotchas.md   | Things that broke, surprised us, or took >30 min to figure out             | The moment a gotcha is discovered                              |
+| handoff.md   | "If a new dev opened the project right now, what would they need to know?" | At session end, always                                         |
 
 ## Format rules for memory files
 
