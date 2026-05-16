@@ -22,7 +22,7 @@ Sprint 1 Day 1-2 fully closed (typecheck green, 8/8 tests, `next build` prerende
 - Day 7-8 (auth: email/password, magic link, Google, Apple, Lucia) — issues #28, #29, #30, #31
 - Day 9-10 (SES + PM2 + deploy + green CI) — issues #32, #33, #34
 
-## Immediate next step (one of):
+## Immediate next step (one of)
 
 1. **Bump CLAUDE.md to playbook v2.1** — user is saving v2.1 to `Playbook/EventPulse_Claude_Code_Playbook_v2.1.md`. On confirmation: copy to CLAUDE.md, log decisions.md entry for v2.0 → v2.1, commit as `memory+docs: bump CLAUDE.md to playbook v2.1`. v2.1 adds attendee accounts to Phase 2, self-service hosting, unified identity model, handle system. Schema (issue #24) will pick up `users.handle`, `users.handle_chosen_at`, `tenants.is_personal`, `tenants.owner_user_id`.
 2. **Day 3-4 — EC2 + Route 53** — once v2.1 is in or the user chooses to defer it.
