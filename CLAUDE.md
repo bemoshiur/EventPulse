@@ -1,12 +1,21 @@
 # Event Pulse — Claude Code Mega Playbook
 
 > **One prompt. Bootstrap to production.**
-> Version 2.0 · 16 May 2026
+> Version 2.1 · 16 May 2026
 > Author: Moshiur Rahman / Public Pulse Agency / TiCON System Limited
 
 ---
 
 ## §-1 — Changelog
+
+**v2.1 — 16 May 2026 (minor)**
+- **Attendee accounts** brought forward from Phase 3 to Phase 2; new portal at `my.eventpulse.com.bd` (§2.1, §2.7, §17.6)
+- **Self-service event hosting** by attendees: free events publishable without KYC; KYC gate triggers when first paid ticket tier is added or first payout is requested (§2.3, §13.4)
+- **Unified identity model**: one `users` row carries attendee + tenant contexts; personal tenants auto-created on first event publish (§2.3, §9.1)
+- **Handles** for public identity: chosen at first event publish, 3–30 chars, reserved-list for impersonation prevention, 30-day redirect window on change (§9.1, §9.14)
+- **Event reports**: report button on every public event page flows to a super-admin triage queue with 24-hour SLA for high/critical categories (§9.15, §10, §21.5)
+- **Listing toggle** on events: private-by-default for self-served users; KYC'd tenants can opt into public discovery (§9.3)
+- **Phase 2 sprint plan reshuffled**: Sprint 8 now ships attendee accounts + self-service hosting + AUP triage (§26.2)
 
 **v2.0 — 16 May 2026 (major)**
 - **Deployment** simplified to single AWS EC2 + Route 53 for MVP; migration path to multi-instance and managed services documented in §17.12
@@ -320,9 +329,12 @@ Sign-up friction kills SaaS adoption. The first run is designed for **under 90 s
 | Type | Auth Context | Surface |
 |---|---|---|
 | Super Admin | `super-admin` JWT | `admin.eventpulse.com.bd` |
-| Tenant Owner / Admin / Editor / Scanner / Finance | `tenant` JWT (scoped to tenant_id) | `app.eventpulse.com.bd` |
-| Attendee (guest checkout, MVP) | none, just session token tied to order | event landing pages |
-| Attendee (account, Phase 3) | `attendee` JWT | event landing pages + `my.eventpulse.com.bd` |
+| Authenticated user · attendee context (default) | `attendee` JWT | `my.eventpulse.com.bd` + public event pages |
+| Authenticated user · tenant context (member) | `tenant` JWT (scoped to tenant_id) | `app.eventpulse.com.bd` |
+| Authenticated user · tenant context (personal) | `tenant` JWT (scoped to personal tenant_id) | `app.eventpulse.com.bd` |
+| Guest buyer | session token tied to order only | public event pages |
+
+The four authenticated rows above are not separate accounts. They are **contexts** the same `users` row can act in. The "Identity Model" section below explains how.
 
 ### 2.2 Tenant Roles (RBAC)
 
@@ -332,24 +344,71 @@ Sign-up friction kills SaaS adoption. The first run is designed for **under 90 s
 - **Scanner** — check-in only, no other access
 - **Finance** — read-only financial reports + disbursement view
 
-Permissions table in §5.4.
+Permissions table in §5.4. The owner of a personal tenant (auto-created by self-service hosting) always has the `owner` role; personal tenants do not have other members by default.
 
-### 2.3 Tenant Onboarding Flow
+### 2.3 Identity Model — One User, Many Contexts
 
+Every authenticated user is one `users` row, one email, one set of OAuth identities, one set of sessions. That user can act in three contexts:
+
+**1. Attendee context (default).** Every signed-in user has this. They can browse, RSVP, purchase tickets, view their `my.eventpulse.com.bd` portal, and host **free** events. No KYC required.
+
+**2. Tenant context — member.** A user can be a `tenant_users` member of one or more existing tenants (e.g. they work at an organisation that already has an Event Pulse account). Their role per tenant governs what they can do.
+
+**3. Tenant context — personal.** When a user publishes their first event from `my.eventpulse.com.bd`, a "personal tenant" row is auto-created with `type='individual'`, `is_personal=true`, `owner_user_id=user.id`. They are the sole owner. From the user's perspective they're "hosting an event"; under the hood the multi-tenancy model is unchanged.
+
+The navbar exposes a **context switcher** when a user has more than one tenant (their personal tenant plus any they're a member of). Switching writes a short-lived cookie that scopes subsequent requests; RLS still enforces per-tenant data isolation regardless.
+
+**KYC gating — the graduation moment:**
+
+- Hosting a **free** event → no KYC. Just sign in and publish.
+- Adding a **paid ticket tier** (any tier with `price_paisa > 0`) → KYC required before the event can be published. The "Add paid tier" UI surfaces the gate inline with "We need to verify you to handle money for you."
+- Requesting a **payout** → bank/MFS account verification required (which the KYC flow captures anyway).
+- KYC revoked after the fact → all currently on-sale paid events auto-unpublish; existing paid tickets are honoured; no new sales until KYC re-cleared.
+
+Detailed flow in §13.4.
+
+**Handle (public identity):**
+
+- Optional at sign-up; defaults to null.
+- Required at first event publish (free or paid).
+- 3–30 characters, lowercase, `^[a-z0-9][a-z0-9-]*[a-z0-9]$`, case-insensitive unique across `users.handle` and `tenants.slug` (one global namespace).
+- Reserved handles list (`admin`, `support`, `help`, `api`, `www`, `security`, `legal`, common brand names) blocked at registration — see `reserved_handles` table.
+- Editable from settings; each change writes to `handle_history` so prior URLs redirect for 30 days then 410-Gone.
+
+**Personal tenant slug:**
+
+- Defaults to the user's chosen handle (same string at creation).
+- Editable later but with the same redirect mechanic.
+- If a user later joins or starts a "real" company tenant and wants to retire their personal one, super admin can archive it without deleting historical orders or attendee records.
+
+### 2.4 Tenant Onboarding — Three Paths
+
+The classic playbook flow assumed a user signed up specifically to be a tenant. With self-service hosting, three onboarding shapes exist:
+
+**Path A — Self-service host (free).**
 ```
-Sign up
-  → Choose type (Organisation / Individual)
-  → Verify email (OTP link)
-  → Verify mobile (OTP)
-  → Select KYC tier (auto-suggested based on type)
-  → Upload documents
-  → Submit
-  → KYC team review
-  → Approved: enable event creation, provision tenant subdomain
-  → Rejected: notify with reason, allow resubmit
+Sign up → Land on my.eventpulse.com.bd → Click "Host an event"
+→ Pick a handle → Fill event details → Publish (free) → Share URL
 ```
+No KYC. Personal tenant auto-created on publish.
 
-See §10 for full KYC engine specification.
+**Path B — Self-service host (paid).**
+```
+Path A up to "Add paid tier" → KYC gate appears
+→ Complete KYC Tier 1 (individual) + bank/MFS details → KYC approved
+→ Add paid tier → Publish → Sales open
+```
+The classic individual-tenant onboarding, just deferred to the money moment.
+
+**Path C — Organisation tenant (existing playbook flow).**
+```
+Sign up → Choose Organisation → Verify email + mobile
+→ Submit KYC Tier A docs → Reviewer approves
+→ Tenant subdomain provisioned → Event creation enabled
+```
+For organisations that know they're an organisation upfront.
+
+All three paths converge on the same `tenants` row and the same RBAC/RLS model.
 
 ### 2.4 Event Lifecycle
 
@@ -371,10 +430,11 @@ Paid → Disputed → Chargeback → Reversed
 
 Each transition writes to `order_events` (event sourcing trail for orders specifically).
 
-### 2.6 Scope by Phase
+### 2.7 Scope by Phase
 
 **Phase 1 (MVP, 8 weeks):**
-- Auth (super admin, tenant), tenant onboarding with Light KYC for individuals and Tier A KYC for orgs
+- Auth (super admin, tenant, attendee — all three contexts wired but only super-admin and tenant surfaces shipped)
+- Tenant onboarding via classic path C (organisation KYC)
 - Event CRUD with **fixed form template per event type** (no builder yet)
 - Single landing page template with brand customisation (logo, colour, banner image, copy fields)
 - Ticket tiers (multiple) with capacity and sales window
@@ -386,6 +446,7 @@ Each transition writes to `order_events` (event sourcing trail for orders specif
 - Super admin KYC review queue
 - Manual disbursement (admin generates payout, no automation)
 - Refunds (admin-triggered only)
+- Guest checkout for buyers (no buyer accounts yet)
 
 **Phase 2 (8 weeks):**
 - Drag-and-drop form builder
@@ -394,27 +455,34 @@ Each transition writes to `order_events` (event sourcing trail for orders specif
 - Conditional form logic, per-tier form variations
 - Automated T+5 disbursement engine
 - Super admin financial reconciliation dashboard
-- Tenant team management, RBAC
+- Tenant team management, RBAC (multi-user tenants)
 - SMS notifications
 - Bulk messaging
 - Per-event refund policies
 - KYC Tier 2 (individual) + Tier B (org)
-- Custom domains (free for KYC-verified tenants, no white-label yet)
+- Custom domains base layer (free for KYC-verified tenants, no white-label yet)
+- **Attendee accounts at `my.eventpulse.com.bd`** — "my tickets" view, claim guest orders by email, profile/handle
+- **Self-service event hosting** (paths A and B from §2.4) — free events instant, paid events graduate through KYC
+- **Personal tenant auto-provisioning** at first event publish
+- **Handle system** + reserved handles list + handle history/redirects
+- **Event report button** on every public event page
+- **Super admin AUP triage queue** with SLA tracking (§21.5)
 
 **Phase 3 (12 weeks):**
 - White-label add-on (footer removal, branded emails, branded PDFs, optional branded SMS sender)
 - Email campaigns
-- Attendee accounts ("find my tickets")
 - Apple/Google Wallet passes
 - Mobile check-in app (React Native)
-- Discovery page, search
+- **`/discover` search page** — query-driven directory of events with `is_listed_publicly = true`
 - Multi-session events (conferences)
 - Recurring events
 - Waitlist
+- Automated AUP detection (pattern matching, spike alerts)
 
 **Phase 4 (12 weeks):**
-- Marketplace discovery + recommendations
+- Marketplace discovery + recommendations (algorithmic feed)
 - Fraud-detection ML
+- Social layer (follows, friends-attending-the-same-event)
 - Alternative payment gateways (bKash, SSLCommerz adapters)
 - White-label enterprise tier (custom contracts)
 - Public API + webhooks for enterprise tenants
@@ -448,7 +516,15 @@ eventpulse/
 │   │   │   │   │   ├── kyc-queue/
 │   │   │   │   │   ├── disbursements/
 │   │   │   │   │   ├── reconciliation/
-│   │   │   │   │   └── reports/
+│   │   │   │   │   ├── reports/      # AUP triage queue
+│   │   │   │   │   └── reports-overview/
+│   │   │   │   ├── (my)/             # Attendee portal — my.eventpulse.com.bd
+│   │   │   │   │   ├── tickets/      # all my registrations across events
+│   │   │   │   │   ├── tickets/[orderId]/
+│   │   │   │   │   ├── hosting/      # events I'm hosting (personal + member tenants)
+│   │   │   │   │   ├── hosting/new/  # quick-create event (auto-provisions personal tenant)
+│   │   │   │   │   ├── following/    # Phase 3 stub
+│   │   │   │   │   └── settings/
 │   │   │   │   ├── (auth)/
 │   │   │   │   │   ├── login/
 │   │   │   │   │   ├── signup/
@@ -926,7 +1002,9 @@ CREATE TABLE tenants (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   type text NOT NULL CHECK (type IN ('organisation','individual')),
   name text NOT NULL,
-  slug citext NOT NULL UNIQUE,
+  slug citext NOT NULL UNIQUE,                -- shares namespace with users.handle
+  is_personal boolean NOT NULL DEFAULT false, -- true for self-service auto-provisioned tenants
+  owner_user_id uuid REFERENCES users(id),    -- set when is_personal = true; null otherwise
   status text NOT NULL DEFAULT 'pending_kyc'
     CHECK (status IN ('pending_kyc','active','suspended','terminated')),
   kyc_tier text NOT NULL DEFAULT 'tier_1'
@@ -943,11 +1021,15 @@ CREATE TABLE tenants (
   deleted_at timestamptz
 );
 
+CREATE INDEX idx_tenants_owner ON tenants(owner_user_id) WHERE is_personal = true;
+
 CREATE TABLE users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   email citext NOT NULL UNIQUE,
   phone text,
   full_name text NOT NULL,
+  handle citext UNIQUE,                  -- public identity, picked at first event publish; nullable until then
+  handle_chosen_at timestamptz,
   password_hash text,                    -- nullable: OAuth-only users may have no password
   mfa_enabled boolean NOT NULL DEFAULT false,
   mfa_secret text,
@@ -1049,6 +1131,7 @@ CREATE TABLE events (
     CHECK (status IN ('draft','published','on_sale','sold_out','live','completed','archived')),
   visibility text NOT NULL DEFAULT 'public'
     CHECK (visibility IN ('public','unlisted','private')),
+  is_listed_publicly boolean NOT NULL DEFAULT false,  -- v2.1: opt-in to /discover (Phase 3); KYC tenants only
   title text NOT NULL,
   title_bn text,
   description text,
@@ -1479,7 +1562,7 @@ CREATE TABLE contact_submissions (
 CREATE TABLE tenant_fee_config (
   tenant_id uuid PRIMARY KEY REFERENCES tenants(id),
   platform_fee_bps integer NOT NULL DEFAULT 25,    -- basis points: 25 = 0.25%
-  default_fee_mode text NOT NULL DEFAULT 'pass_through'
+  default_fee_mode text NOT NULL DEFAULT 'absorb'
     CHECK (default_fee_mode IN ('absorb','pass_through')),
   allow_per_event_override boolean NOT NULL DEFAULT true,
   custom_arrangement_note text,
@@ -1505,7 +1588,92 @@ CREATE TABLE fee_override_log (
 CREATE INDEX idx_fee_log_tenant ON fee_override_log(tenant_id, created_at DESC);
 ```
 
-### 9.13 Apply RLS
+### 9.14 Handle System and Reserved Names
+
+```sql
+-- Global namespace: users.handle and tenants.slug must not collide
+CREATE TABLE reserved_handles (
+  handle citext PRIMARY KEY,
+  reason text NOT NULL,        -- 'system','brand','offensive','impersonation_risk'
+  added_at timestamptz NOT NULL DEFAULT now(),
+  added_by uuid REFERENCES users(id)
+);
+
+-- Seed list (loaded at deploy via scripts/seed-reserved-handles.ts):
+-- admin, support, help, contact, api, www, mail, mx, ftp, ns1, ns2,
+-- security, legal, terms, privacy, trust, cookies, refund, dpa, eula,
+-- about, pricing, features, blog, careers, jobs, press, partners,
+-- app, my, admin, dashboard, settings, billing, account, profile,
+-- login, logout, signup, signin, register, oauth, sso,
+-- root, system, eventpulse, event-pulse, ep, publicpulse, ticonsys,
+-- (plus common BD brand names, government entities, news outlets — maintained list)
+
+-- Handle change history (for redirects)
+CREATE TABLE handle_history (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES users(id),
+  tenant_id uuid REFERENCES tenants(id),
+  old_handle citext NOT NULL,
+  new_handle citext NOT NULL,
+  changed_at timestamptz NOT NULL DEFAULT now(),
+  redirect_expires_at timestamptz NOT NULL DEFAULT (now() + interval '30 days'),
+  CHECK ((user_id IS NOT NULL) <> (tenant_id IS NOT NULL))  -- exactly one of user/tenant
+);
+
+CREATE INDEX idx_handle_history_old ON handle_history(old_handle, redirect_expires_at);
+```
+
+**Resolution rule (Phase 2 middleware):**
+1. Request to `{handle}.eventpulse.com.bd/{event-slug}` or `eventpulse.com.bd/{handle}/{event-slug}` arrives
+2. Look up `handle` in `tenants.slug` → if found, route to tenant + event
+3. Else look up `handle` in `handle_history` where `redirect_expires_at > now()` → 301 to new handle
+4. Else look up `handle` in `users.handle` → if found, redirect to their personal tenant
+5. Else 404
+
+The middleware caches step 2–4 in Redis for 60 seconds with cache invalidation on handle change.
+
+### 9.15 AUP Event Reports
+
+```sql
+CREATE TABLE event_reports (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id uuid NOT NULL REFERENCES events(id),
+  tenant_id uuid NOT NULL REFERENCES tenants(id),  -- denormalised for fast queue queries
+  reporter_user_id uuid REFERENCES users(id),       -- nullable: anonymous reports allowed
+  reporter_email citext,
+  reporter_ip inet,
+  category text NOT NULL CHECK (category IN (
+    'spam','fraud','impersonation','illegal_goods','hate','harassment',
+    'self_harm','child_safety','copyright','trademark','privacy','other'
+  )),
+  severity text NOT NULL CHECK (severity IN ('low','medium','high','critical')),
+  description text,
+  evidence_urls text[],
+  status text NOT NULL DEFAULT 'new'
+    CHECK (status IN ('new','triaged','under_review','action_taken','dismissed','escalated')),
+  assigned_to uuid REFERENCES users(id),
+  action_taken text CHECK (action_taken IN (
+    'no_action','warned','unpublished','removed','tenant_suspended','tenant_terminated','referred_to_authorities'
+  )),
+  resolution_notes text,
+  resolved_at timestamptz,
+  sla_due_at timestamptz NOT NULL,  -- 24h for high/critical, 72h for medium, 7d for low
+  acknowledgement_token text NOT NULL UNIQUE,  -- given to reporter for status check (without disclosing internal decisions)
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_event_reports_status ON event_reports(status, sla_due_at);
+CREATE INDEX idx_event_reports_event ON event_reports(event_id, created_at DESC);
+CREATE INDEX idx_event_reports_tenant ON event_reports(tenant_id, created_at DESC);
+
+-- Severity defaults by category (enforced in application, not DB):
+-- critical: child_safety
+-- high: fraud, illegal_goods, hate, harassment, self_harm, impersonation
+-- medium: spam, copyright, trademark, privacy
+-- low: other
+```
+
+### 9.16 Apply RLS
 
 Every domain table (everything with `tenant_id`) gets the policy template from §4.3. The seed migration must include these. `tenants` itself gets a slightly different policy: tenant users can read their own row (`id = current_setting('app.current_tenant_id')::uuid`).
 
@@ -1526,6 +1694,11 @@ POST /public/orders                          # idempotent, creates order + initi
 GET  /public/orders/:id/status               # poll status post-redirect
 POST /public/attendees/find                  # email + phone + OTP → reveal tickets
 POST /public/attendees/checkin               # not directly public, called from scanner with scanner JWT
+
+# v2.1 additions
+GET  /public/handles/check                   # ?handle=foo → { available, reason? }; rate-limited
+POST /public/events/:slug/report             # report button; rate-limited 3/hour/IP, captcha after 2
+GET  /public/reports/:acknowledgement_token  # reporter status check (no internal details exposed)
 ```
 
 ### 10.2 Tenant Auth
@@ -1630,7 +1803,32 @@ POST   /tenant/events/:id/bulk-message    # email + SMS to attendees
 GET    /tenant/notification-log
 ```
 
-### 10.3 Super Admin Auth
+### 10.3 Attendee Auth (`my.eventpulse.com.bd`) — v2.1
+
+```
+# Profile & identity
+GET    /my/profile
+PATCH  /my/profile
+PATCH  /my/handle                         # cooldown enforced; writes handle_history
+GET    /my/handle/availability            # check before submitting change
+
+# Tickets
+GET    /my/tickets                        # all my registrations across all tenants
+GET    /my/tickets/:orderId               # detail + QR resend
+POST   /my/tickets/find                   # email + magic-link path to claim legacy guest orders into account
+
+# Hosting (graduates to tenant context)
+GET    /my/hosting                        # events I'm hosting (personal + member tenants)
+POST   /my/hosting/events                 # quick-create event; auto-provisions personal tenant on first call
+GET    /my/hosting/kyc-prompt             # returns gate state when user tries to add paid tier
+POST   /my/hosting/kyc-prompt/start       # kicks off KYC graduation; returns redirect to KYC wizard
+
+# Context switching
+GET    /my/contexts                       # all tenants I belong to, with my role + indicator of "personal"
+POST   /my/contexts/switch                # write context cookie; subsequent /tenant/* calls scoped to chosen tenant
+```
+
+### 10.4 Super Admin Auth
 
 ```
 # Tenants
@@ -1658,10 +1856,22 @@ GET    /admin/eps/settlements
 POST   /admin/eps/settlements/import
 GET    /admin/eps/reconciliation/:date
 
-# Reports
+# Reports (financial)
 GET    /admin/reports/gmv
 GET    /admin/reports/revenue
 GET    /admin/reports/cohorts
+
+# AUP (v2.1)
+GET    /admin/aup-reports                 # triage queue, sorted by sla_due_at
+GET    /admin/aup-reports/:id
+POST   /admin/aup-reports/:id/triage      # assign + set severity if reassessed
+POST   /admin/aup-reports/:id/action      # body: { action_taken, resolution_notes }
+GET    /admin/aup-reports/sla-breached    # ops dashboard
+
+# Handles (v2.1)
+GET    /admin/reserved-handles
+POST   /admin/reserved-handles            # add
+DELETE /admin/reserved-handles/:handle
 
 # Audit
 GET    /admin/audit-logs
@@ -1671,7 +1881,7 @@ GET    /admin/config/fees
 PATCH  /admin/config/fees
 ```
 
-### 10.4 Webhooks
+### 10.5 Webhooks
 
 ```
 POST   /webhooks/eps/callback           # EPS server-to-server payment status
@@ -1859,6 +2069,39 @@ org_c    → unlimited (still BFIU-reportable)
 ```
 
 If a new order would exceed the limit, return `error.code = 'KYC_LIMIT_EXCEEDED'`.
+
+### 13.4 Graduation Flow — Attendee to Paid Host (v2.1)
+
+The classic flow (§13.1) assumes a user signed up specifically to be a tenant. The self-service hosting flow (§2.4 Path B) defers KYC until money is involved:
+
+1. User signs in via any of the four methods (§5.2)
+2. User creates a free event from `my.eventpulse.com.bd/hosting/new`
+3. On first publish, server auto-provisions a personal tenant: `tenants(type='individual', is_personal=true, owner_user_id=user.id, slug=user.handle)`
+4. User picks a handle at this moment if they haven't already
+5. Free events run indefinitely — no KYC, no platform fee (0.25% × 0 = 0), no settlement engine involvement
+6. User opens the event editor, clicks "Add paid tier" → modal:
+   - "To sell tickets, we need to verify you. This takes about 5 minutes."
+   - Single CTA: "Start verification"
+   - "Why?" inline explainer linking to `/trust/bangladesh-compliance`
+7. User completes Tier 1 KYC (auto-suggested individual tier) + bank/MFS account
+8. KYC approved → the "Add paid tier" form unblocks; tenant status flips to `active`
+9. KYC rejected → paid tier creation blocked, free events still allowed, user can resubmit
+10. KYC revoked later → all currently-on-sale paid events auto-unpublish (status → `published` but `on_sale=false`), existing paid tickets honoured, no new sales until KYC re-cleared
+
+This is the same engine specified in §13.1–§13.3; only the **trigger moment** changes — KYC is invoked by intent-to-receive-money, not by intent-to-have-an-account.
+
+### 13.5 Free Event Behaviour
+
+Events where every ticket tier has `price_paisa = 0`:
+
+- No payment integration (no EPS call, no order in `awaiting_payment` state)
+- Order goes `pending → paid` immediately on form submission (paid for 0 paisa = paid)
+- No platform fee, no EPS fee, no withholding, no settlement batch
+- Attendee gets a QR ticket via email exactly like paid events
+- Check-in works exactly like paid events
+- Disbursement engine ignores these orders (already excluded by `WHERE total_paisa > 0` in §14.5 cron)
+
+The fee calculator (§14.3) returns all zeros for free events and is called regardless — never branch on "is this free?" elsewhere in the code. The calculator is the single source of money truth, free or paid.
 
 ## §14 — Settlement and Disbursement Engine
 
@@ -2168,6 +2411,12 @@ Any violation halts new batch creation and pages the on-call.
 | `subprocessor.added` | email | all tenants | `subprocessor_notice` |
 | `contact.acknowledgement` | email | submitter | `contact_ack` |
 | `changelog.monthly_digest` | email (opt-in) | subscribers | `changelog_digest` |
+| `attendee.welcome` | email | new attendee | `attendee_welcome` |
+| `handle.changed` | email | handle owner | `handle_changed` |
+| `event.report_acknowledged` | email | reporter | `aup_report_ack` |
+| `event.report_action_taken` | email | reported tenant | `aup_action_notice` |
+| `event.kyc_gate_triggered` | email | self-service host | `kyc_gate_prompt` |
+| `event.auto_unpublished_kyc_revoked` | email + sms | tenant | `auto_unpublish_kyc` |
 
 ---
 
@@ -2308,6 +2557,14 @@ server {
   location / { proxy_pass http://127.0.0.1:3000; }
 }
 
+# /etc/nginx/sites-enabled/eventpulse-my.conf  → attendee portal (v2.1)
+server {
+  listen 443 ssl http2;
+  server_name my.eventpulse.com.bd;
+  # ... same TLS + headers
+  location / { proxy_pass http://127.0.0.1:3000; }
+}
+
 # /etc/nginx/sites-enabled/eventpulse-admin.conf  → super admin
 server {
   listen 443 ssl http2;
@@ -2384,6 +2641,7 @@ A      www                           <EC2 Elastic IP>            300
 A      app                           <EC2 Elastic IP>            300
 A      admin                         <EC2 Elastic IP>            300
 A      api                           <EC2 Elastic IP>            300
+A      my                            <EC2 Elastic IP>            300   (attendee portal — v2.1)
 A      *.eventpulse.com.bd           <EC2 Elastic IP>            300   (wildcard for tenant subdomains)
 A      customers                     <EC2 Elastic IP>            300   (Cloudflare for SaaS fallback origin)
 MX     eventpulse.com.bd             SES MX                      3600
@@ -2767,6 +3025,55 @@ We do not hide behind the doctrine where it would be wrong to:
 
 The Acceptable Use Policy enumerates prohibited categories explicitly.
 
+### 21.5 AUP Enforcement at Scale (v2.1)
+
+The hosting-space doctrine in §21.1–§21.4 is the legal frame. AUP enforcement is the operational expression of that frame. With attendee-hosted events landing in Phase 2, the volume of events the platform hosts grows by an order of magnitude — most low-stakes, a small minority requiring action.
+
+**Report-button mechanics (`POST /public/events/:slug/report`):**
+
+- Every public event page has a "Report this event" link in the footer
+- Reporter (signed in or guest) selects a category and severity, optionally attaches evidence URLs
+- Form writes to `event_reports` with auto-calculated `sla_due_at`:
+  - 24 hours for `critical` (child safety) and `high` (fraud, illegal goods, hate, harassment, self-harm, impersonation)
+  - 72 hours for `medium` (spam, copyright, trademark, privacy)
+  - 7 days for `low` (other)
+- Reporter receives an acknowledgement email with the `acknowledgement_token`; status can be checked at `/public/reports/<token>` but only exposes high-level state ("under review", "resolved") — never internal decisions or evidence
+- Rate-limited 3 reports/hour/IP; captcha after 2 in the same hour
+
+**Triage workflow (`/admin/aup-reports`):**
+
+- Queue ordered by SLA proximity (most urgent first)
+- Triager reviews the event, the tenant, the report, and any prior reports against the same tenant
+- Available actions: `no_action`, `warned`, `unpublished`, `removed`, `tenant_suspended`, `tenant_terminated`, `referred_to_authorities`
+- Every action writes to `audit_logs` and is visible in the tenant's history
+- Tenant whose event is unpublished receives an email with the reason and an appeal link
+- SLA breaches page on-call ops via Slack
+
+**Two-strike rule:**
+
+- Same tenant unpublished twice in 90 days → mandatory super-admin review of the tenant's account
+- Three strikes → tenant suspended pending appeal
+
+**Tenant appeal path:**
+
+- Appeals land back in the same queue with a distinct priority colour and a 72-hour SLA
+- Original triager is excluded from the appeal review (different reviewer required)
+- Outcome documented in `event_reports.resolution_notes` and emailed to the tenant
+
+**Automated detection (Phase 3+):**
+
+- Pattern matching on event titles for known impersonation phrases ("official ___", well-known brand names without authorisation)
+- Spike detection: > N reports against a single tenant in a window triggers auto-escalation
+- Repeated takedowns auto-flag a tenant for enhanced KYC re-review
+- All automation can warn or queue, never auto-act on `critical` categories — humans always decide
+
+**Transparency:**
+
+- The annual Transparency Report (`/trust/transparency`) publishes report counts by category, action rates, and average SLA performance
+- Government requests are reported separately
+
+This enforcement layer is what makes the hosting-space doctrine credible. Without it, the platform looks like a free-for-all; with it, the platform looks like a responsible intermediary — which is exactly what the §21 framing requires.
+
 ---
 
 ## §22 — Contact, Public Pages & Changelog
@@ -2956,10 +3263,35 @@ A unit of work is "done" when all of the following are true:
 
 ### 26.2 Phase 2 — 8 weeks (4 sprints)
 
-Sprint 5: Drag-and-drop form builder
-Sprint 6: Landing page builder + templates
-Sprint 7: Automated disbursement engine + super admin financial dashboard + EPS reconciliation
-Sprint 8: Tenant team and RBAC + SMS notifications + custom domains base layer (Cloudflare for SaaS integration)
+**Sprint 5 — Form builder**
+- Drag-and-drop form builder using dnd-kit
+- Field palette (text, email, phone, NID, file, select, checkbox, radio, date, country, custom)
+- Conditional logic + per-tier form variations
+- Form versioning with publish workflow
+
+**Sprint 6 — Landing page builder + tenant team**
+- Landing page builder with 5 templates
+- Section library (Hero, About, Schedule, Speakers, Tickets, Venue, FAQ, Sponsors, Countdown, Footer)
+- Theme picker leveraging §1.5 multi-colour palette
+- Tenant team management UI + RBAC enforcement per §5.4
+
+**Sprint 7 — Automated settlement + payouts + comms + custom domains**
+- Automated T+5 disbursement cron (§14.5) replacing manual flow
+- Super admin Revenue Dashboard (§14.7) full build-out
+- EPS settlement reconciliation importer
+- bKash B2C, Nagad, Rocket disbursement adapters
+- SMS notifications via SSL Wireless (§16.2)
+- Custom domains base layer with Cloudflare for SaaS (§12)
+- Coupon codes, group discounts, per-event refund policies
+
+**Sprint 8 — Attendee portal + self-service hosting + AUP (v2.1)**
+- Attendee portal at `my.eventpulse.com.bd` — "my tickets" view, claim guest orders by email + magic link, profile/handle settings
+- Self-service event hosting flow (paths A and B from §2.4); personal tenant auto-provisioning
+- Handle system: reserved handles seed, availability check, handle history + redirects
+- KYC graduation flow (§13.4) — free-event → paid-tier KYC gate
+- Event report button on every public event page (§9.15, §10.1)
+- Super admin AUP triage queue at `/admin/aup-reports` with SLA tracking (§21.5)
+- KYC Tier 2 (individual) + Tier B (org) expansion
 
 ### 26.3 Phase 3 & 4
 
@@ -3019,7 +3351,7 @@ Once this playbook is loaded (as CLAUDE.md, pasted, or split into docs/), the fi
 
 ## §29 — Open Decisions to Surface
 
-Claude Code must STOP and ask before proceeding if any of these come up. Items marked ✓ are resolved by v2.0; items still open are listed below.
+Claude Code must STOP and ask before proceeding if any of these come up. Items marked ✓ are resolved; items still open are listed below.
 
 **Resolved in v2.0:**
 - ✓ Fee mode default: per-event `platform_fee_handling` + `eps_fee_handling`, both default to `pass_through` for new tenants (§14)
@@ -3030,16 +3362,26 @@ Claude Code must STOP and ask before proceeding if any of these come up. Items m
 - ✓ White-label add-on pricing: BDT 2,500/month, removes "Powered by Event Pulse" footer + branded emails/PDFs
 - ✓ Auth methods at MVP: email/password, magic link, Google OAuth, Apple OAuth — all four
 
+**Resolved in v2.1:**
+- ✓ Attendee accounts: yes, brought forward from Phase 3 to Phase 2 with portal at `my.eventpulse.com.bd`
+- ✓ Self-service hosting: free events instant, paid events graduate through KYC at "Add paid tier" moment
+- ✓ Identity model: unified — one `users` row with attendee + tenant contexts
+- ✓ Personal tenant: auto-created on first event publish, `is_personal=true`, `owner_user_id` set
+- ✓ Free RSVP events allowed: yes, no KYC required, no platform fee (calculator returns zero)
+- ✓ Discovery: private by default with `is_listed_publicly` toggle; `/discover` search page in Phase 3 (query-driven, not algorithmic)
+- ✓ Social layer (follows, friends-attending): deferred to Phase 4
+- ✓ Handle convention: 3–30 chars lowercase, picked at first event publish, 30-day redirect on change
+
 **Still open — Claude Code asks before assuming:**
 
-1. **Free RSVP-only events allowed at MVP?** Current default: yes (no payment flow, no platform fee, but still uses KYC if the tenant wants ticket QR + check-in).
-2. **Attendee accounts at MVP?** Current default: no — guest checkout with magic-link "find my tickets" only. Full attendee accounts in Phase 3.
-3. **KYC strictness for MVP.** Current default: Tier 1 individual + Tier A org accepted; higher tiers in Phase 2.
-4. **Bilingual UI scope at MVP.** Current default: English-only tenant + super admin portals, bilingual public event pages and Trust Center.
-5. **PSP/PSO licence path.** Current default: operate Year 1 as sub-merchant aggregator under EPS's licence; apply for own PSO in Year 2.
-6. **EPS settlement reconciliation cadence.** Current default: daily import, batch-level reconciliation. May need to upgrade if EPS reporting is delayed.
-7. **Refund authority for MVP.** Current default: tenant initiates from portal; super admin approves; actual refund executed manually via EPS dashboard. No tenant-initiated direct refund until EPS public refund API exists.
-8. **Sub-processor change notice period.** Current default: 30 days bulk email to all tenants. Increase if a customer DPA requires longer.
+1. **KYC strictness for MVP.** Current default: Tier 1 individual + Tier A org accepted; higher tiers in Phase 2.
+2. **Bilingual UI scope at MVP.** Current default: English-only tenant + super admin + attendee portals, bilingual public event pages and Trust Center.
+3. **PSP/PSO licence path.** Current default: operate Year 1 as sub-merchant aggregator under EPS's licence; apply for own PSO in Year 2.
+4. **EPS settlement reconciliation cadence.** Current default: daily import, batch-level reconciliation. May need to upgrade if EPS reporting is delayed.
+5. **Refund authority for MVP.** Current default: tenant initiates from portal; super admin approves; actual refund executed manually via EPS dashboard. No tenant-initiated direct refund until EPS public refund API exists.
+6. **Sub-processor change notice period.** Current default: 30 days bulk email to all tenants. Increase if a customer DPA requires longer.
+7. **Handle change cooldown.** Current default: no cooldown but each change writes a `handle_history` row for 30-day redirect. Should we cap handle changes at 1/30 days to prevent abuse?
+8. **AUP automated takedown threshold.** Current default: no auto-takedown; everything goes through human triage. Should `critical` category reports auto-unpublish pending review? Bias: keep human in the loop until Phase 3 automation matures.
 9. **Withholding tax (AIT) classification.** **MUST get legal opinion before MVP launch.** Is Event Pulse a "withholding agent" under the Income Tax Ordinance for payouts to tenants?
 10. **VAT (Mushak) registration model.** **MUST resolve with NBR before MVP launch.** Whether the 0.25% platform fee VAT is paid by Event Pulse on its gross fee receipt, or whether tenants are the VAT-bearing party for the service fee component.
 
@@ -3098,4 +3440,4 @@ Claude Code will pull these in on demand. Total session context stays lean; full
 
 ---
 
-*End of playbook v2.0. Treat as a living document. Update with every architectural decision, every resolved Open item, every learned-the-hard-way gotcha. Bump version on each material change.*
+*End of playbook v2.1. Treat as a living document. Update with every architectural decision, every resolved Open item, every learned-the-hard-way gotcha. Bump version on each material change.*
