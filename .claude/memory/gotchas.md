@@ -30,6 +30,25 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## AWS credentials accidentally pasted in chat during Day 3-4 bootstrap
+
+**Status:** RESOLVED 2026-05-16 — both exposed keys deleted, CloudTrail audit clean (zero events on either key in ap-southeast-1 or us-east-1), replacement key never pasted.
+
+**Symptom:** Two `eventpulse-cli` access keys (`AKIA2YICANXVR4KILEOZ`, `AKIA2YICANXVWVKCAE7Q`) exposed in chat via terminal output paste during initial AWS setup on 2026-05-16.
+
+**Why it happens:** Shell command blocks with embedded `#` comments and multi-line structure caused zsh parse errors that scrambled terminal state; credential JSON output (which contains `AccessKeyId` + `SecretAccessKey`) got bundled into subsequent terminal log shares without being noticed in the moment.
+
+**Fix:** Both compromised keys deleted from IAM. Third access key created for `eventpulse-cli`, never pasted anywhere. Root access key deleted entirely (programmatic root access is now impossible). `default` profile removed from `~/.aws/credentials` and `~/.aws/config`. CloudTrail audit performed across both regions for both key IDs — zero events on either key, no unauthorised use, no unfamiliar source IPs.
+
+**How to avoid:**
+
+1. **Never paste credential output** — AWS access keys, EPS hash keys, JWT signing keys, OAuth client secrets, KMS key material, anything sensitive — into any chat, screenshot, email, document, or log file. The only places credentials belong are `~/.aws/credentials` (or equivalent secrets file with `chmod 600`) and a password manager.
+2. **Shell commands shared in prompts should be one command per line** with no `#` comments inside copy-paste blocks. zsh parses comments differently than bash and can leak surrounding text into the next visible line.
+3. **When verifying setup, share only the minimum** — for `aws sts get-caller-identity` that's the `Arn` line via `--query 'Arn' --output text`, not the full JSON. For `aws iam create-access-key`, output goes straight to `aws configure --profile <name>` via piping or manual paste into the secrets file, never to stdout that gets captured.
+4. **Treat any pasted credential as compromised even if the chat is private.** Rotate immediately. Run a CloudTrail audit for unauthorised use. Document the incident here.
+
+---
+
 ## Dependabot opens majors aggressively on first push
 
 **Status:** RESOLVED 2026-05-16 — `.github/dependabot.yml` now has explicit `ignore` entries for `version-update:semver-major` on every §1.2 locked package + every GitHub Action.
@@ -75,3 +94,23 @@ Repeat for every locked dependency. For GitHub Actions, `dependency-name: '*'` i
 > Every check declared in `ci.yml` must pass on the **current main branch** as-is, not as it will be in two sprints. If a check needs code that doesn't exist yet, gate it via `detect-scope` until the code lands. The PR that adds a check explains which sprint's milestone it represents.
 
 A check that fails because the thing it validates doesn't exist is a broken check, not a strict check — it trains the team to ignore red CI, which is the worst outcome a CI system can produce. Red CI should always mean a real regression.
+
+---
+
+## GitHub PR event delivery stuck — stale mergeability cache after base branch advances
+
+**Status:** RESOLVED 2026-05-16 — observed empirically on PR #36; cleared by merging current `origin/main` into the branch (creates a new merge commit that explicitly references the advanced base).
+
+**Symptom:** After `main` moved past PR #36's `base_sha` via PR #38 merge, GitHub stopped firing `workflow_run` events on new pushes to PR #36 specifically. `mergeable_state: dirty` despite a clean merge tree confirmed via `git merge-tree origin/main origin/feat/...`. Other PRs in the same time window (Dependabot #16, #6) received normal CI triggers. PR #36 specifically had `mergeable: false` cached.
+
+**Why it happens:** GitHub's mergeability calculation is asynchronous and can get wedged when the base branch advances rapidly while a PR is open. Workflow event dispatch appears to wait on the mergeability state being clean; if the cache stays in `dirty` indefinitely, events never fire on subsequent pushes. Not documented behaviour; observed empirically.
+
+**Fix:** Try in order — when one works, stop:
+
+1. `gh pr edit <n> --base main` — no-op base edit to force mergeability recompute. (Did not work for #36.)
+2. `gh pr close <n> && gh pr reopen <n>` — full event regeneration via PR open/close. (Did not work for #36.)
+3. **`git merge origin/main` into the branch + push** — creates a new merge commit that explicitly references current `main` HEAD; clears both the stale mergeability state AND unsticks event delivery. ✓ This worked. The new merge commit fired CI within seconds.
+4. Force-push a rebase — new SHAs bypass stuck state. (Not tried; #3 worked.)
+5. Admin-merge with local-CI audit trail — absolute last resort, only when 1-4 all fail.
+
+**How to avoid:** When a long-lived PR has `main` move past its base, proactively `git merge origin/main` into the branch (or rebase + force-push) within the same session to reset the PR's view of the base. Don't let multiple in-flight PRs accumulate with mutually advancing bases — merge in topological order, fastest first. Before opening a new PR, check if any open PRs have `base_sha` older than current `main` HEAD; rebase those first or merge them.
