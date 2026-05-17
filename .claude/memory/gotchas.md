@@ -6,29 +6,32 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ## Pre-push hook blocks tag pushes from `main` as if they were branch pushes
 
-**Status:** WORKAROUND 2026-05-17 — `v0.1.0-sprint-1` tag pushed via documented `--no-verify` override per `.husky/pre-push` instruction. Hook improvement deferred to Sprint 2 Day 11 housekeeping.
+**Status:** RESOLVED 2026-05-17 — `.husky/pre-push` rewritten to inspect git's per-ref stdin and gate solely on branch refs (`refs/heads/main` and `refs/heads/prod`). Tag pushes (`refs/tags/*`) and feature-branch pushes (`refs/heads/feat/*`, etc) pass cleanly even when HEAD is on main. Verified against an 8-case test matrix covering tag-only, branch-only, mixed, empty-stdin, and dual-protected scenarios before merge. Sprint 2 Day 11 Item 2; durable fix landed in the same sprint the issue surfaced.
 
 **Symptom:** `git push origin v0.1.0-sprint-1` (with no branch ref) fails with `✋  Direct push to 'main' is blocked.` from the pre-push hook even though only a tag is being pushed.
 
-**Why it happens:** `.husky/pre-push` checks `git symbolic-ref --short HEAD` to determine the current branch and matches against `^(main|prod)$`. When pushing only a tag, HEAD is still on `main` (because that's where the local checkout sits), so the hook fires identically to a branch push. The hook does not inspect git's pre-push stdin (which provides per-ref `<local ref> <local sha> <remote ref> <remote sha>` lines that would distinguish tag refs from branch refs).
+**Why it happens:** The original `.husky/pre-push` checked `git symbolic-ref --short HEAD` to determine the current branch and matched against `^(main|prod)$`. When pushing only a tag, HEAD is still on `main` (because that's where the local checkout sits), so the hook fired identically to a branch push. The hook did not inspect git's pre-push stdin (which provides per-ref `<local ref> <local sha> <remote ref> <remote sha>` lines that would distinguish tag refs from branch refs).
 
-**Fix (immediate):** `git push --no-verify origin <tag>` per the hook's own documented override. Tag pushes are release operations, not direct branch pushes; the override is correct, not a violation.
-
-**Fix (durable, Sprint 2 housekeeping):** Update `.husky/pre-push` to read stdin and only block when at least one pushed ref starts with `refs/heads/main` or `refs/heads/prod`. Skeleton:
+**Fix (durable, landed):** `.husky/pre-push` now reads stdin line-by-line:
 
 ```bash
-while read local_ref local_sha remote_ref remote_sha; do
+while read -r local_ref local_sha remote_ref remote_sha; do
   case "$remote_ref" in
     refs/heads/main|refs/heads/prod)
-      # block as before
+      blocked_refs+=("${remote_ref#refs/heads/}")
       ;;
-    *)
+    refs/heads/*|refs/tags/*)
+      # Feature branches and tags: allowed.
       ;;
   esac
 done
 ```
 
-**How to avoid:** For tag pushes from a protected branch checkout, use `--no-verify` and document the reason here. Don't bypass the hook for any other reason without filing a gotcha first.
+Block fires only when at least one ref being pushed is `refs/heads/main` or `refs/heads/prod`. Empty stdin (nothing being pushed) is a no-op. Multi-ref pushes are evaluated independently. Message includes the explicit "tag pushes are NOT blocked" line so future-me doesn't reach for `--no-verify` reflexively.
+
+**Fix (historical, immediate workaround that was used during Sprint 1 closeout):** `git push --no-verify origin <tag>` per the hook's documented override. One-time use on 2026-05-17 for `v0.1.0-sprint-1` before this resolution landed.
+
+**How to avoid:** Tag pushes from a protected branch checkout now work without intervention. The `--no-verify` override is reserved for the rare deliberate-direct-push-to-main case, which still requires a gotchas.md entry.
 
 ---
 
