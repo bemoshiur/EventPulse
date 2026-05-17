@@ -11,6 +11,11 @@ Subsequent deploys use `infra/deploy/deploy.sh` triggered via SSM. This runbook 
 - Redis 7 listening on `127.0.0.1:6379`
 - Nginx installed; ACME / TLS certs valid for the 5 staging SANs
 - `/home/eventpulse/.pgpass` exists with the `eventpulse` role password
+- **IAM role `eventpulse-staging-ec2`** has Secrets Manager write perms scoped to `eventpulse/staging/*`:
+  - `secretsmanager:GetSecretValue` + `DescribeSecret` on `eventpulse/staging/*`
+  - `secretsmanager:CreateSecret` + `TagResource` with condition `secretsmanager:Name = eventpulse/staging/*`
+  - `secretsmanager:PutSecretValue` + `UpdateSecret` on `eventpulse/staging/*`
+  - (Already added by `aws iam put-role-policy` during Item 5 prep; verify with `aws iam get-role-policy --role-name eventpulse-staging-ec2 --policy-name eventpulse-staging-app`.)
 
 ## Step 1 — Add a GitHub deploy key (one-time)
 
@@ -98,11 +103,24 @@ aws ssm send-command --instance-ids i-02e4fddeb923c14f9 \
 The bootstrap script:
 
 1. Re-verifies the git checkout (no-op if step above already did it).
-2. Writes `/home/eventpulse/.env.staging` (generates `JWT_ACCESS_SECRET` + `JWT_REFRESH_SECRET` if not supplied; uses the supplied `PG_PASSWORD`).
+2. **Fetches JWT secrets from AWS Secrets Manager** (`eventpulse/staging/jwt-access-secret`, `eventpulse/staging/jwt-refresh-secret`). If they don't exist there yet, generates them, writes them to Secrets Manager IMMEDIATELY, then materialises them to `/home/eventpulse/.env.staging`. **Values never appear in stdout, deploy logs, or SSM command output** — Secrets Manager is the source of truth.
 3. Symlinks `infra/nginx/eventpulse-staging.conf` into `/etc/nginx/sites-enabled/`, runs `nginx -t`, reloads.
 4. Installs the pm2 systemd unit so the app survives reboot.
 
-The generated JWT secrets appear in the SSM command output. **Save them to AWS Secrets Manager** (`eventpulse/staging/jwt-access-secret`, `eventpulse/staging/jwt-refresh-secret`) immediately; if the EC2 root volume is ever lost without those values backed up, all existing sessions are unrecoverable.
+After bootstrap, verify the secrets are present in Secrets Manager (presence-only check, never reads the value):
+
+```bash
+aws secretsmanager describe-secret \
+  --secret-id eventpulse/staging/jwt-access-secret \
+  --profile eventpulse --query 'Name'
+aws secretsmanager describe-secret \
+  --secret-id eventpulse/staging/jwt-refresh-secret \
+  --profile eventpulse --query 'Name'
+```
+
+Both should print the secret name. If either is missing, the bootstrap step failed — re-run with `-` and check the SSM command output (only "created" / "fetched" markers should appear, never values).
+
+Re-running the bootstrap on a fresh EC2 (or after `.env.staging` deletion) re-uses the existing secrets from Secrets Manager — sessions stay valid across rebuilds as long as the Secrets Manager entries are retained.
 
 ## Step 3 — First deploy
 
@@ -141,7 +159,6 @@ curl -sS -o /dev/null -w "%{http_code} %{redirect_url}\n" https://staging.eventp
 
 ## After-launch tasks
 
-- Add OAuth credentials to `.env.staging` (or move all secrets to AWS Secrets Manager + bootstrap script reads from there) — Sprint 2 Day 20 closeout for manual OAuth happy-path testing.
-- Back up generated JWT secrets to Secrets Manager.
+- Add OAuth credentials to Secrets Manager (`eventpulse/staging/oauth-google`, `eventpulse/staging/oauth-apple`) and extend `bootstrap-staging.sh` to materialise them into `.env.staging` — Sprint 2 Day 20 closeout for manual OAuth happy-path testing.
 - Verify `pm2 save` was called so the process list persists across reboot.
 - Document the deploy key fingerprint in this runbook for audit (`gh api /repos/publicpulseagency/EventPulse/keys` lists current keys).

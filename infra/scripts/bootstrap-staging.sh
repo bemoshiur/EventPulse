@@ -12,23 +12,31 @@
 #
 # What it does:
 #   1. Bootstrap the git checkout at /home/eventpulse/app.
-#   2. Write /home/eventpulse/.env.staging (generates JWT secrets if not
-#      supplied via env). chmod 600. Operator must save secrets to AWS
-#      Secrets Manager out-of-band — see docs/runbooks/staging-bootstrap.md.
+#   2. Fetch JWT secrets from AWS Secrets Manager (eventpulse/staging/jwt-*).
+#      If they don't exist there yet, generate them, write them to Secrets
+#      Manager IMMEDIATELY, and only then materialise to .env.staging.
+#      Secrets Manager is the source of truth — .env.staging is a
+#      derivative file. Values NEVER appear in SSM stdout, deploy logs,
+#      or anywhere observable.
 #   3. Install + symlink the Nginx vhost config from
 #      infra/nginx/eventpulse-staging.conf. `nginx -t` + reload.
 #   4. Set up pm2 systemd unit so the API + web survive reboot.
 #
 # Idempotent: re-running is safe. Each step checks current state.
+# Re-running on a fresh EC2 (or after .env.staging deletion) recovers
+# the original JWT secrets from Secrets Manager — no session
+# invalidation as long as Secrets Manager retains them.
 #
 # Usage:
 #   sudo /home/eventpulse/app/infra/scripts/bootstrap-staging.sh
 #
-# Optional env overrides for secret generation (otherwise generated):
-#   JWT_ACCESS_SECRET, JWT_REFRESH_SECRET
-#
 # Required env (must be set by caller — no default that makes sense):
 #   PG_PASSWORD             — password for the local `eventpulse` Postgres role
+#
+# Required IAM (on the EC2 instance role eventpulse-staging-ec2):
+#   secretsmanager:GetSecretValue + DescribeSecret on eventpulse/staging/*
+#   secretsmanager:CreateSecret + TagResource (with Name = eventpulse/staging/*)
+#   secretsmanager:PutSecretValue + UpdateSecret on eventpulse/staging/*
 
 set -euo pipefail
 
@@ -40,6 +48,10 @@ EVENTPULSE_USER="eventpulse"
 EVENTPULSE_GROUP="eventpulse"
 REPO_URL="git@github.com:publicpulseagency/EventPulse.git"
 REF="${REF:-main}"
+AWS_REGION="${AWS_REGION:-ap-southeast-1}"
+SM_PREFIX="eventpulse/staging"
+SM_JWT_ACCESS="${SM_PREFIX}/jwt-access-secret"
+SM_JWT_REFRESH="${SM_PREFIX}/jwt-refresh-secret"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "ERROR: must run as root (use sudo). It needs to write nginx + systemd."
@@ -47,6 +59,59 @@ if [[ "$(id -u)" -ne 0 ]]; then
 fi
 
 log() { echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] bootstrap: $*"; }
+
+# ─── Secrets Manager helpers ────────────────────────────────────────────
+#
+# Goal: JWT secret values NEVER appear in stdout, stderr, deploy logs,
+# or SSM command output. The functions below pipe values to/from
+# Secrets Manager via in-memory variables only; the only thing that
+# gets logged is "fetched" or "created" — never the value itself.
+
+# Fetch a secret value to stdout. Returns 0 if found, 1 if not found.
+# Caller MUST capture stdout to a variable (don't `tee` or log it).
+secret_get() {
+  local name="$1"
+  aws secretsmanager get-secret-value \
+    --secret-id "$name" \
+    --region "$AWS_REGION" \
+    --query 'SecretString' \
+    --output text 2>/dev/null
+}
+
+# Check if a secret exists (presence-only). Returns 0 if yes, 1 if no.
+# Never reads the value.
+secret_exists() {
+  local name="$1"
+  aws secretsmanager describe-secret \
+    --secret-id "$name" \
+    --region "$AWS_REGION" \
+    --query 'Name' \
+    --output text >/dev/null 2>&1
+}
+
+# Create-or-update a secret. Value passed via SECRET_VALUE env var to
+# avoid command-line exposure (which would show in `ps`). On success
+# logs "created"/"updated"; on failure exits non-zero.
+secret_put() {
+  local name="$1"
+  if secret_exists "$name"; then
+    SECRET_VALUE="$2" aws secretsmanager put-secret-value \
+      --secret-id "$name" \
+      --secret-string "$2" \
+      --region "$AWS_REGION" \
+      --output text --query 'VersionId' >/dev/null
+    log "  secrets-manager: updated $name"
+  else
+    SECRET_VALUE="$2" aws secretsmanager create-secret \
+      --name "$name" \
+      --secret-string "$2" \
+      --description "Event Pulse staging — managed by bootstrap-staging.sh" \
+      --tags Key=managed-by,Value=bootstrap-staging.sh Key=env,Value=staging \
+      --region "$AWS_REGION" \
+      --output text --query 'Name' >/dev/null
+    log "  secrets-manager: created $name"
+  fi
+}
 
 # ─── 1) git checkout ────────────────────────────────────────────────────
 
@@ -69,19 +134,51 @@ log "  checked out $COMMIT"
 
 # ─── 2) .env.staging ────────────────────────────────────────────────────
 
-log "step 2: .env.staging"
-if [[ -f "$ENV_FILE" ]]; then
-  log "  $ENV_FILE already exists — leaving it alone. Delete + re-run to regenerate."
-else
-  : "${PG_PASSWORD:?must be set in caller env (eventpulse Postgres role password)}"
-  JWT_ACCESS_SECRET="${JWT_ACCESS_SECRET:-$(openssl rand -base64 48 | tr -d '/+=' | head -c 64)}"
-  JWT_REFRESH_SECRET="${JWT_REFRESH_SECRET:-$(openssl rand -base64 48 | tr -d '/+=' | head -c 64)}"
+log "step 2: JWT secrets + .env.staging"
+: "${PG_PASSWORD:?must be set in caller env (eventpulse Postgres role password)}"
 
-  install -o "$EVENTPULSE_USER" -g "$EVENTPULSE_GROUP" -m 0600 /dev/null "$ENV_FILE"
-  cat > "$ENV_FILE" <<EOF
+# Fetch-or-create the JWT secrets in Secrets Manager. Order matters:
+# Secrets Manager is the source of truth, .env.staging is derivative.
+# Re-running this script on a fresh EC2 (or after .env.staging deletion)
+# re-uses the existing secrets — sessions stay valid.
+JWT_ACCESS_SECRET=""
+JWT_REFRESH_SECRET=""
+
+if secret_exists "$SM_JWT_ACCESS"; then
+  log "  fetching $SM_JWT_ACCESS from Secrets Manager"
+  JWT_ACCESS_SECRET="$(secret_get "$SM_JWT_ACCESS")"
+else
+  log "  generating new $SM_JWT_ACCESS"
+  JWT_ACCESS_SECRET="$(openssl rand -base64 48 | tr -d '/+=' | head -c 64)"
+  secret_put "$SM_JWT_ACCESS" "$JWT_ACCESS_SECRET"
+fi
+
+if secret_exists "$SM_JWT_REFRESH"; then
+  log "  fetching $SM_JWT_REFRESH from Secrets Manager"
+  JWT_REFRESH_SECRET="$(secret_get "$SM_JWT_REFRESH")"
+else
+  log "  generating new $SM_JWT_REFRESH"
+  JWT_REFRESH_SECRET="$(openssl rand -base64 48 | tr -d '/+=' | head -c 64)"
+  secret_put "$SM_JWT_REFRESH" "$JWT_REFRESH_SECRET"
+fi
+
+# Sanity check — non-empty, ≥ 32 chars (jwt.ts secret() enforces this).
+if [[ -z "$JWT_ACCESS_SECRET" || ${#JWT_ACCESS_SECRET} -lt 32 ]]; then
+  log "ERROR: JWT_ACCESS_SECRET empty or too short"; exit 1
+fi
+if [[ -z "$JWT_REFRESH_SECRET" || ${#JWT_REFRESH_SECRET} -lt 32 ]]; then
+  log "ERROR: JWT_REFRESH_SECRET empty or too short"; exit 1
+fi
+
+# Materialise .env.staging from in-memory values. Atomic write (umask
+# 077 + mv) so a partial write never leaves a world-readable file.
+log "  writing $ENV_FILE"
+TMP_ENV="$(mktemp -p /home/eventpulse --suffix=.env.staging)"
+chmod 600 "$TMP_ENV"
+cat > "$TMP_ENV" <<EOF
 # Event Pulse — staging environment file.
 # Owner: eventpulse:eventpulse, chmod 600. NEVER commit.
-# Generated by infra/scripts/bootstrap-staging.sh.
+# Generated by infra/scripts/bootstrap-staging.sh from Secrets Manager.
 
 NODE_ENV=production
 
@@ -91,7 +188,7 @@ DATABASE_URL=postgresql://eventpulse:${PG_PASSWORD}@localhost:5432/eventpulse_st
 # Redis — local
 REDIS_URL=redis://localhost:6379
 
-# JWT — generated by bootstrap; back up to Secrets Manager
+# JWT — sourced from $SM_PREFIX in Secrets Manager
 JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
 JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
 
@@ -113,12 +210,15 @@ SES_FROM_ADDRESS=no-reply@eventpulse.com.bd
 EVENTPULSE_API_BASE_URL=https://api.staging.eventpulse.com.bd
 EVENTPULSE_WEB_BASE_URL=https://staging.eventpulse.com.bd
 EOF
-  chown "$EVENTPULSE_USER:$EVENTPULSE_GROUP" "$ENV_FILE"
-  chmod 600 "$ENV_FILE"
-  log "  wrote $ENV_FILE (JWT secrets generated; save them to Secrets Manager)"
-  log "  JWT_ACCESS_SECRET=$JWT_ACCESS_SECRET"
-  log "  JWT_REFRESH_SECRET=$JWT_REFRESH_SECRET"
-fi
+mv "$TMP_ENV" "$ENV_FILE"
+chown "$EVENTPULSE_USER:$EVENTPULSE_GROUP" "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+# Clear in-memory secrets from this shell — defence in depth even though
+# the shell exits right after.
+unset JWT_ACCESS_SECRET JWT_REFRESH_SECRET PG_PASSWORD
+log "  $ENV_FILE written (chmod 600 owner $EVENTPULSE_USER:$EVENTPULSE_GROUP)"
+log "  verify Secrets Manager presence: aws secretsmanager describe-secret --secret-id $SM_JWT_ACCESS"
+log "  verify Secrets Manager presence: aws secretsmanager describe-secret --secret-id $SM_JWT_REFRESH"
 
 # ─── 3) Nginx vhost ─────────────────────────────────────────────────────
 

@@ -58,9 +58,16 @@ echo "checked out $COMMIT"
 # 2) Install
 $PNPM install --frozen-lockfile
 
-# 3) Build
+# 3) Build. NODE_OPTIONS caps the V8 heap below the t3.small (2 GB) RAM
+# ceiling — next build on the default heap (~1.7 GB) can OOM on a
+# t3.small with PM2 + Postgres + Redis already resident. 1536 MB is the
+# largest cap that leaves comfortable headroom for the rest of the
+# system. Upsize the cap proportionally if the instance type ever
+# changes (the production-target t3.large in §17.2 doesn't need this).
+export NODE_OPTIONS="--max-old-space-size=1536"
 $PNPM --filter @eventpulse/web build
 $PNPM --filter @eventpulse/api build
+unset NODE_OPTIONS
 
 # 4) Migrate
 $PNPM --filter @eventpulse/api db:migrate
