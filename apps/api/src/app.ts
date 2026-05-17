@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 
 import { authRoutes } from './routes/auth.js'
+import { oauthRoutes } from './routes/oauth-routes.js'
 
 /**
  * Hono application factory. Kept side-effect-free so tests can request routes
@@ -20,6 +21,7 @@ export function createApp() {
   )
 
   app.route('/api/v1/auth', authRoutes)
+  app.route('/api/v1/auth/oauth', oauthRoutes)
 
   return app
 }
