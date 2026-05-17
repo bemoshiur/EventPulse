@@ -35,10 +35,13 @@ git reset --hard "$REF"
 echo "rolled back to $TARGET"
 
 # Reinstall (last-deployed lockfile) + rebuild. Knobs match deploy.sh —
-# rationale documented there. Heap cap matches deploy.sh — same
-# OOM-on-t3.small concern.
-HUSKY=0 NPM_CONFIG_PRODUCTION=false \
+# rationale documented there (NODE_ENV=development for the install only;
+# back to production for everything after; HUSKY=0; auto-confirm purge).
+# Heap cap matches deploy.sh — same OOM-on-t3.small concern.
+HUSKY=0 NODE_ENV=development \
   /usr/bin/pnpm install --frozen-lockfile --config.confirm-modules-purge=false
+NODE_ENV=production
+export NODE_ENV
 export NODE_OPTIONS="--max-old-space-size=1536"
 /usr/bin/pnpm --filter @eventpulse/web build
 /usr/bin/pnpm --filter @eventpulse/api build
