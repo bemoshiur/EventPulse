@@ -2,8 +2,9 @@
 
 ## In flight
 
-- 2026-05-16 — **Sprint 1 Day 3-4** (EC2 + Route 53 provisioning) — next concrete piece of work; awaiting AWS profile / domain registrar / KMS strategy values from Moshiur (literal `<placeholders>` in his last message, not yet filled in)
-- 2026-05-16 — **Dependabot tightening** + close 15 major-bump PRs on `feat/playbook-v2.1-and-deps` branch
+- 2026-05-17 — **12-hour autonomy mandate (Moshiur AFK)** — full authority granted to push Sprint 1 Day 3-4 → Day 10 work, with the hard guardrail of a single AWS EC2 instance and no monthly bill creep beyond ~$22 for staging. Decision logged ("12-hour autonomy mandate + AWS cost ceiling"). STOP-ASK gates 2 + 3 + 4 auto-approved under the mandate; gate 4's mailbox-reachable check resolved by using `moshiur@publicpulse.com.bd` for LE registration (the `security@eventpulse.com.bd` mailbox doesn't exist yet).
+- 2026-05-17 — **Sprint 1 Day 3-4 (active)** — branch `feat/day-3-4-ec2-route53`. **Phase 1 done** (KMS CMK + alias `alias/eventpulse-staging`; IAM role `eventpulse-staging-ec2` + SSM-core + scoped inline + ACME route53 policies; instance profile; S3 bucket `eventpulse-staging-ssm-logs` KMS-encrypted + 90d lifecycle; CW Logs group `/eventpulse/staging/ssm-sessions` KMS-encrypted + 90d retention; SSM-SessionManagerRunShell document with logging targets). **Phase 2 done** (SG `sg-0f4fd53e848eda1f9` 80/443 v4+v6 only, no port 22; EIP `eipalloc-0641d86f38bbf5ef0` = `18.141.7.246`). **Phase 3 done** (EC2 `i-02e4fddeb923c14f9` t3.small in `ap-southeast-1b`, 30GB gp3 KMS-encrypted; IMDSv2 required; EIP attached; SSM Online). **Phase 4 done** (5 staging A records at TTL 300 in zone `Z003493917KJX7VCR8ZMR`; INSYNC; DNS resolves correctly). **Phase 5a in flight** — SSM install command `651ab3e2-7831-4293-b455-c901f58965f4` running (Node 22 + PG 16 + Redis 7 + Nginx + certbot + pm2 + CWA + fail2ban). **Phase 5b + 6 pending.**
+- 2026-05-16 — **Dependabot tightening** — pino major bump landed on main via direct merge; need to add `pino` + `pino-pretty` to dependabot ignore so 10→11 doesn't auto-PR.
 - 2026-05-16 — **7 slash commands** — blocked, message content was `[paste …]` placeholder; awaiting actual command bodies from Moshiur
 
 **Sprint 1 Day 5-6 schema scope (v2.1 expanded):**
