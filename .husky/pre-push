@@ -3,25 +3,64 @@
 # Blocks direct pushes to main and prod (CLAUDE.md §18.3 + decisions.md 2026-05-16
 # "GitHub free plan — branch protection via local hooks + CI"). PR-only workflow.
 #
-# Override (rare and deliberate):
+# Tag pushes are NOT blocked, even when HEAD is on main — release tags are not
+# direct branch pushes and have no PR equivalent. The previous heuristic (check
+# current branch only) blocked all tag pushes from main; the durable fix is to
+# inspect git's per-ref stdin (one line per ref being pushed) and gate solely
+# on branch refs. See .claude/memory/gotchas.md "Pre-push hook blocks tag pushes
+# from main as if they were branch pushes" (2026-05-17).
+#
+# Override (rare and deliberate, branches only):
 #   git push --no-verify
 # THEN: append an entry to .claude/memory/gotchas.md with the date and the reason.
 # If you skip the log, future-you will not know why the gate was bypassed.
 
-protected="^(main|prod)$"
-current=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+set -u
 
-if [[ "$current" =~ $protected ]]; then
+# Git's pre-push hook receives one line per ref on stdin:
+#   <local_ref> <local_sha> <remote_ref> <remote_sha>
+# When no refs are being pushed (e.g. `git push --dry-run` with nothing to send),
+# stdin is empty and the loop is a no-op — correct behaviour, nothing to gate.
+
+blocked_refs=()
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # Empty line (paranoia) or non-update entry — skip.
+  [[ -z "${remote_ref:-}" ]] && continue
+
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/prod)
+      blocked_refs+=("${remote_ref#refs/heads/}")
+      ;;
+    refs/heads/*|refs/tags/*)
+      # Feature branches and any tag (annotated or lightweight): allowed.
+      ;;
+    *)
+      # Notes, replace, etc. — allowed; not in the protected scope.
+      ;;
+  esac
+done
+
+if [[ ${#blocked_refs[@]} -gt 0 ]]; then
+  # Deduplicate (a single push session shouldn't include the same ref twice,
+  # but be defensive).
+  unique_blocked=$(printf '%s\n' "${blocked_refs[@]}" | sort -u | paste -sd ',' -)
   echo ""
-  echo "✋  Direct push to '$current' is blocked."
+  echo "✋  Direct push to '${unique_blocked}' is blocked."
   echo ""
   echo "    Create a feature branch and open a PR instead:"
   echo "      git checkout -b feat/<scope>-<short>"
   echo "      git push -u origin feat/<scope>-<short>"
   echo "      gh pr create"
   echo ""
+  echo "    Tag pushes are NOT blocked (release tags have no PR equivalent)."
+  echo "    If you intended to push a tag, run e.g.:"
+  echo "      git push origin v0.X.Y-<name>"
+  echo ""
   echo "    Override (rare): git push --no-verify"
   echo "    Then log to .claude/memory/gotchas.md with date + reason."
   echo ""
   exit 1
 fi
+
+exit 0
