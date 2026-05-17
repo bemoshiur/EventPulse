@@ -2,22 +2,23 @@
 
 ## In flight
 
-**Sprint 2 (Days 11-20) — KYC pipeline + Trust Center scaffolding** (planned; awaiting Moshiur approval before Day 11 starts)
+**Sprint 2 (Days 13-20) — KYC pipeline + Trust Center scaffolding** (Day 12 closed; remaining items on the compressed day plan)
 
-- 2026-05-17 — **Day 11-12: Foundation re-baseline** — CLAUDE.md v2.2 PR (auth-library swap, SSM-only / 30GB-EBS / explicit-staging-DNS clarifications to §17, BYPASSRLS gotcha codified into §4 role-hierarchy guidance). RLS migration 0003 (`app.current_user_id` + `withUser()` helper) for user-scoped tables. OAuth callback routes (Google + Apple) — start + callback + state cookie + auto-link by verified email. Real staging deploy via `deploy.sh` against a built artefact for the first time.
-- 2026-05-17 — **Day 13-15: KYC pipeline** — `eventpulse-kyc-staging` S3 + KMS bucket (CHECKPOINT #2 before creation). `kyc_submissions` table + RLS. Signed-URL upload API + zod schema. Submission state machine + audit-log + notification firing. eTIN regex. BFIU sanctions list seeded at `infra/compliance/sanctions.json` (CHECKPOINT #5 before any matching code).
-- 2026-05-17 — **Day 16-18: KYC UI (tenant + admin)** — post-login Account-Type modal, KYC wizard (individual + org variants), super admin review queue with manual NID fields + approve/reject (CHECKPOINT #4 default: super admin only).
-- 2026-05-17 — **Day 19: Trust Center scaffolding** — `legal_documents` + `legal_document_versions` tables. v0.1 PLACEHOLDER content for all 18 pages with "DRAFT — not yet legally reviewed" banner (CHECKPOINT #3 before any v1.0 content). Super admin Legal & Trust editor with version control.
-- 2026-05-17 — **Day 20: Porichoy adapter scaffold + sprint closeout** — interface + env vars + Secrets Manager entry + TODO + gotchas entry (CHECKPOINT #1 immediately before: procurement status check). Tenant subdomain provisioning logic. `kyc_approved` + `kyc_rejected` bilingual SES templates. Sprint 2 retro + `v0.2.0-sprint-2` tag.
+- 2026-05-17 — **Day 13: Items 7+8 bundled** — `kyc_submissions` schema (Drizzle + migration 0004 with RLS) + signed-URL upload API (`POST /tenant/kyc/upload-url` returning pre-signed PUT URL gated on the dedicated CMK header + tenants/ prefix). One PR, one `/review` pass.
+- 2026-05-17 — **Day 14: Items 9 + 10** — submission state machine + audit + notification firing. eTIN regex. BFIU sanctions list matcher (CHECKPOINT #5 gates Item 10: `infra/compliance/sanctions.json` MUST be pre-staged by Moshiur from the BFIU public notice before matching code runs; if absent, STOP and surface).
+- 2026-05-17 — **Day 15: Item 11** — post-login Account-Type modal in tenant portal.
+- 2026-05-17 — **Day 16-17: Item 12** — KYC wizard (individual + org variants), two-day item.
+- 2026-05-17 — **Day 18: Item 13** — super admin review queue with manual NID fields + approve/reject (CHECKPOINT #4 confirmed: super-admin-only for MVP).
+- 2026-05-17 — **Day 19: Items 14+15 bundled** — Trust Center scaffolding (`legal_documents` + `legal_document_versions` tables, 18 placeholder pages with DRAFT banner) + super admin Legal & Trust editor (CHECKPOINT #3 confirmed: skeleton-only placeholders, no AI-drafted legal text). One PR.
+- 2026-05-17 — **Day 20: Item 16 + closeout** — Porichoy adapter scaffold + env vars + Secrets Manager entry + TODO + gotchas entry (CHECKPOINT #1 confirmed: scaffold-only, no live calls). Tenant subdomain provisioning logic. `kyc_approved` + `kyc_rejected` bilingual SES templates. `/sprint` retro + `v0.2.0-sprint-2` tag + release notes + Sprint 3 kick-off issue.
 
-**Carry-over from Sprint 1 (folded into Day 11-12 work):**
+**Day 12 carries (queued, not started — not blocking Day 13):**
 
-- OAuth callback route handlers (lazy `arctic` clients exist; routes need wiring)
-- SES `tenant_welcome`, `verify_email`, `auth_password_reset` templates (pair with onboarding UI)
-- RLS migration 0003 unblocking `users` / `sessions` / `magic_links` / `oauth_identities` / `handle_history` via `app.current_user_id` + `withUser()` helper
-- CLAUDE.md bump to v2.2 (auth-library swap, SSM-only/30GB EBS/explicit-staging-DNS, BYPASSRLS gotcha → §4 amendment)
-- Real staging app deploy via `deploy.sh` (script exists, never run against a built artefact)
-- Pre-push hook fix to allow tag pushes from `main` (gotchas.md)
+- Codify Postgres role/grant/ownership setup into `bootstrap-staging.sh` (operational fixes from Item 5 still live only as runtime state on the EC2)
+- Add `pnpm --filter @eventpulse/api build` to CI matrix (would have caught the declarationMap issue pre-deploy)
+- Enable `STAGING_DEPLOY_ENABLED=true` repo variable (after 1-2 more manual deploy cycles validate the loop)
+- Reviewer S4: dedicated KMS key-admin role for the KYC CMK (currently uses default `EnableIAMUserPermissions` root-delegation pattern)
+- Reviewer S6: revisit noncurrent-version transitions to GLACIER_IR (currently stays in STANDARD 90d for forensic-restore speed — trade-off documented)
 
 **Open procurement items (per Sprint 2 kick-off decision):**
 
@@ -29,6 +30,11 @@
 - bKash B2C disbursement API access (Sprint 3+)
 
 ## Done
+
+### Sprint 2 — KYC pipeline + Trust Center
+
+- 2026-05-17 — **Day 12 / Item 6: KYC bucket + dedicated CMK** — Provisioned `eventpulse-kyc-staging` S3 bucket in `ap-southeast-1` + dedicated `alias/eventpulse-kyc-staging` CMK (rotation on) per §17.9 per-purpose pattern. 6 security controls live (BlockPublicAccess all-on, versioning, BucketOwnerEnforced, SSE-KMS default w/ BucketKey, lifecycle Glacier_IR-at-30d on `tenants/`, bucket policy denying non-TLS + non-KMS PUT + non-explicit-key-id PUT + wrong-key PUT + destructive actions by EC2 role). EC2 role inline policy extended with 3 scoped statements (`Get/PutObject` on `tenants/*` only — NO `DeleteObject` per BFIU §15.1; KMS `Encrypt/Decrypt` on dedicated CMK only). `eventpulse/staging/kyc` Secrets Manager entry materialises into `KYC_BUCKET_NAME` + `KYC_KMS_KEY_*` in `.env.staging` via extended bootstrap-staging.sh. Codified in `infra/scripts/setup-kyc-bucket.sh` + 5 envsubst templates for reproducibility (one-command prod cutover). iac-reviewer found 1 hard blocker (M1: `StringNotEqualsIfExists` silently permits PUT without explicit key-id when relying on default encryption) + 5 should-flags — all fixed in the same PR. Live-verified 6 negative tests pre + post fixes. **PR #64 merged (commit `a422847`).**
+- 2026-05-17 — **Sprint 2 Day 11 closeout (carried from previous session)** — Item 1 CLAUDE.md v2.2 bump (PR #54). Item 2 pre-push hook fix (PR #55). Item 3 RLS migration 0003 + withUser() (PR #56). Item 4 OAuth callback routes (PR #57). Item 5 first real staging deploy through 8 attempts + 5 fix PRs (PRs #58, #59, #60, #61, #62) plus operational SSM fixes (Postgres roles, grants, ownership, migration backfill, IAM). All 5 staging vhosts now serve real app. 7 new gotchas + Item 5 closeout decision logged (memory PR #63 merged at `9d83172`).
 
 ### Sprint 1 — MVP Foundation (released as `v0.1.0-sprint-1`, commit `53ae000`)
 

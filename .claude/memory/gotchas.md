@@ -4,6 +4,42 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## S3 bucket policy `StringNotEqualsIfExists` silently permits PUT without the keyed header
+
+**Status:** RESOLVED 2026-05-17 during Sprint 2 Day 12 Item 6 (KYC bucket). Caught by iac-reviewer pre-commit.
+
+**Symptom:** A `Deny PUT` with `StringNotEqualsIfExists: { "s3:x-amz-server-side-encryption-aws-kms-key-id": "<our CMK ARN>" }` does NOT fire on a PUT request that lacks the header entirely. The PUT goes through, and S3's bucket-default encryption fills in the CMK transparently — so the request happens to land on the right key today. But the policy as written is not enforcing the per-purpose CMK invariant: any future change to the bucket's default encryption (e.g. someone temporarily flips it to `AES256` or to the general `alias/eventpulse-staging` CMK while debugging) silently breaks the §17.9 blast-radius isolation guarantee without tripping the Deny.
+
+**Why it happens:** `IfExists` is a condition-operator suffix that means "if the key is present, evaluate the operator; if absent, return true (treat as a match)". In a Deny statement, "return true" means "the deny FIRES on missing key". But — and this is the trap — `IfExists` is most commonly *seen* paired with `StringEquals` in Allow statements ("allow if matches, OR if absent"). Many engineers (myself included) reflexively mirror that pattern in a Deny statement assuming "if absent, the deny is bypassed". The opposite is true. Result: a Deny+IfExists+missing-key combo actually fires more aggressively than its non-IfExists cousin, but a Deny+`StringNotEqualsIfExists`+missing-key looks symmetric to the Allow case and is read as "permissive on missing" — exactly backwards.
+
+The actual semantics that bit us: `StringNotEqualsIfExists "X"` returns `true` when the key is absent (because `IfExists` says "return true on absent"). For a Deny statement that means the deny would fire on absent — which IS the strict behavior we wanted. But empirically, the staging deploy showed `aws-cli put-object --server-side-encryption aws:kms` (no `--ssekms-key-id`) **succeeded** under the policy. The likely explanation: when a PUT specifies `SSE: aws:kms` but no explicit key-id header, S3 silently substitutes the bucket-default CMK into the request before condition evaluation — so the policy condition sees a present (and correct) key-id, the deny doesn't fire, and the upload completes against the right key. The bucket-default fallback masks the policy's intent.
+
+**Fix:** Don't trust the bucket default. Enforce explicit key-id on every PUT:
+
+1. Drop `IfExists`: change to `StringNotEquals` so the deny fires on missing key (more aggressive — but only if S3 doesn't substitute the default before evaluation, which it does for the SSE algorithm header but apparently NOT for the key-id header).
+2. **AND** add a parallel `Null` deny on the key-id header so missing-header PUTs are denied regardless of substitution:
+
+```json
+{
+  "Sid": "DenyPutWithoutExplicitKmsKeyId",
+  "Effect": "Deny",
+  "Principal": "*",
+  "Action": "s3:PutObject",
+  "Resource": "arn:aws:s3:::<bucket>/*",
+  "Condition": {
+    "Null": {
+      "s3:x-amz-server-side-encryption-aws-kms-key-id": "true"
+    }
+  }
+}
+```
+
+Both `Deny` statements together guarantee: every PUT must (a) include the explicit `aws-kms-key-id` header AND (b) that header must equal our dedicated CMK ARN. Bucket-default never gets a chance to silently substitute. App code (server-side pre-signed URL generation) must always set both `ServerSideEncryption: 'aws:kms'` AND `SSEKMSKeyId: '<CMK ARN from .env>'` on the `getSignedUrl` call. Verified live: `put-object --server-side-encryption aws:kms` (no key-id) → AccessDenied (resource policy); `put-object --server-side-encryption aws:kms --ssekms-key-id <correct ARN>` → OK.
+
+**How to avoid:** For any future S3 bucket carrying PII/regulated data — KYC docs, payout records, signed legal contracts — never use `StringNotEqualsIfExists` for the encryption-key enforcement. Always combine `StringNotEquals` (no `IfExists`) with a parallel `Null` deny on the same key. Code review checklist for new bucket policies: grep for `IfExists` paired with `s3:PutObject` deny statements — every match needs explicit justification or rejection. iac-reviewer rule candidate: flag any `*IfExists` operator on a Deny statement and require a comment explaining why the absent-key semantics is correct.
+
+---
+
 ## Postgres tables pre-existed on staging without migration history → 0001 re-apply fails
 
 **Status:** RESOLVED 2026-05-17 during Sprint 2 Day 11 Item 5 (first real deploy).
