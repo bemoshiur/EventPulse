@@ -14,7 +14,7 @@ export default function HomePage() {
 
         <h1 className="font-display text-ep-ink text-5xl font-semibold tracking-tight sm:text-6xl">
           Run your events.{' '}
-          <span className="bg-linear-to-r from-ep-violet via-ep-indigo to-ep-cerulean bg-clip-text text-transparent">
+          <span className="from-ep-violet via-ep-indigo to-ep-cerulean bg-linear-to-r bg-clip-text text-transparent">
             Get paid in 5 days.
           </span>
         </h1>
