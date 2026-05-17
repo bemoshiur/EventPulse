@@ -4,6 +4,64 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## `ON CONFLICT DO NOTHING` under FORCE ROW LEVEL SECURITY silently hides cross-tenant ownership
+
+**Status:** RESOLVED 2026-05-17 by route-handler design in `apps/api/src/routes/tenant/kyc.ts` (Sprint 2 Day 14 Item 9, PR #70 `d9d765f`).
+
+**Symptom:** A natural idempotency pattern for `POST /api/v1/tenant/kyc/submissions` — `INSERT … ON CONFLICT (id) DO NOTHING RETURNING *` followed by `SELECT * WHERE id=$1` if RETURNING is empty — looks like it should always return the row to the second-submit caller. Under multi-tenant RLS that's not true. When tenant B tries to use a submission_id that tenant A has already claimed:
+
+1. The INSERT fires; the PK exists; ON CONFLICT DO NOTHING returns zero rows.
+2. The follow-up SELECT runs under tenant B's `withTenant` context. RLS filters the existing row out (tenant_id mismatch). Result: zero rows.
+3. The naive code-path returns 404 ("submission not found") to tenant B — but the submission IS in the DB, just owned by tenant A.
+
+This is data leakage by inversion: a 404 confirms "this submissionId doesn't belong to you" but a missing-row branch that proceeds to overwrite via UPSERT or to create a new row with a different PK would silently corrupt state.
+
+**Why it happens:** RLS evaluates AFTER the constraint check. `ON CONFLICT DO NOTHING` is a constraint resolution mechanism (the PK-uniqueness constraint exists at the table level, not the row level). The follow-up SELECT runs under the same RLS policies as any other read — so it returns zero rows for tenant B even though the row exists. The two checks see the world differently: PK enforcement is global, SELECT visibility is policy-scoped.
+
+**Fix:** any idempotent insert pattern under RLS MUST handle the "ON CONFLICT fired AND SELECT returns zero" case as cross-tenant ownership, not as "row missing". In `apps/api/src/routes/tenant/kyc.ts` we throw a typed `SubmissionIdInUseError` in that branch, which the outer catch maps to HTTP 409 CONFLICT with message "submissionId already in use; generate a new UUID and retry".
+
+```ts
+const inserted = await tx
+  .insert(kycSubmissions).values({ id: input.submissionId, tenantId, ... })
+  .onConflictDoNothing({ target: kycSubmissions.id })
+  .returning()
+
+if (inserted.length === 0) {
+  const existing = await tx.select().from(kycSubmissions)
+    .where(and(eq(kycSubmissions.id, input.submissionId), eq(kycSubmissions.tenantId, tenantId)))
+    .limit(1)
+  if (existing.length === 0) throw new SubmissionIdInUseError(input.submissionId)
+  return { row: existing[0]!, created: false }  // legitimate same-tenant re-submit
+}
+```
+
+**How to avoid:** any new RLS-scoped table with PK-based idempotency in the route layer must follow this pattern. Code-reviewer should flag any `ON CONFLICT DO NOTHING + RETURNING + naive zero-rows branch` as a cross-tenant data-confusion vector. The pattern only applies under tenant-scoped RLS — `withUser` and `withSuperAdmin` have different ownership models and need their own analysis. Reference: `apps/api/src/routes/tenant/kyc.ts:254-290`.
+
+---
+
+## `ALTER DEFAULT PRIVILEGES` over-grants UPDATE/DELETE on new append-only tables — REVOKE explicitly
+
+**Status:** RESOLVED 2026-05-17 by `audit_logs` migration design (Sprint 2 Day 14 Item 9, PR #70 `d9d765f`).
+
+**Symptom:** Migration 0001 sets `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES, TRIGGER ON TABLES TO eventpulse_app, eventpulse_admin`. That's the right default for ordinary CRUD tables. But for append-only tables like `audit_logs` (§9.10, §1.3 R8), the default silently grants UPDATE and DELETE to `eventpulse_app` — even though we deliberately omit UPDATE and DELETE RLS policies under FORCED RLS.
+
+The RLS-policy-absence does block UPDATE/DELETE at runtime (the planner sees no matching policy → denies). So nothing breaks today. The trap is single-layer defence: a future migration that adds an UPDATE policy "for some legitimate edge case" instantly opens the over-grant — and the next code reviewer reading just the new migration won't see the original grant context unless they go back to 0001.
+
+**Why it happens:** PostgreSQL evaluates authorization in two layers: GRANT (column / table privileges) and RLS (row-level policies). The standard `§4.2.1` template grants both layers' UPDATE/DELETE generously. For append-only tables we want the GRANT layer to be the floor of immutability — not just rely on the RLS layer.
+
+**Fix:** any append-only table migration must:
+
+1. `GRANT SELECT, INSERT ON <table> TO eventpulse_app` (only the operations the application actually needs).
+2. `GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES, TRIGGER ON <table> TO eventpulse_admin` (retention sweeps via withSuperAdmin still need to mutate).
+3. `REVOKE UPDATE, DELETE, TRUNCATE ON <table> FROM eventpulse_app` (defence-in-depth against the ALTER DEFAULT PRIVILEGES over-grant from migration 0001).
+4. Omit UPDATE and DELETE RLS policies entirely so a future "add an UPDATE policy" PR has to also remove the REVOKE to actually open the operation — two changes to bypass immutability, not one.
+
+Reference: `apps/api/src/db/migrations/0005_audit_logs_and_kyc_status_widening.sql:124-130`.
+
+**How to avoid:** any new immutable / append-only table needs this three-layer pattern (limited GRANT + explicit REVOKE + no RLS policy for the forbidden operations). Code-reviewer should reject append-only table migrations that omit the REVOKE block, even if RLS policies are absent — the absence is correct but insufficient. The §4.2.1 grant template in CLAUDE.md applies to ordinary CRUD tables; document this exception when the v2.3 closeout playbook bump lands.
+
+---
+
 ## Deploy scripts handling git refs must accept both branch names and commit SHAs
 
 **Status:** RESOLVED 2026-05-17 during Sprint 2 Day 13 closeout (PR #67, commit `977df1b`).
