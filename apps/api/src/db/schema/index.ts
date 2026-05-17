@@ -370,7 +370,9 @@ export const kycSubmissions = pgTable(
     check('kyc_submissions_type_chk', sql`${t.submissionType} IN ('individual','organisation')`),
     check(
       'kyc_submissions_status_chk',
-      sql`${t.status} IN ('submitted','under_review','approved','rejected')`,
+      // 'draft' added in migration 0005 for the rejected → draft resubmit
+      // lane (Item 9 state machine). First-write still inserts in 'submitted'.
+      sql`${t.status} IN ('draft','submitted','under_review','approved','rejected')`,
     ),
     check(
       'kyc_submissions_tier_chk',
@@ -406,5 +408,52 @@ export const handleHistory = pgTable(
       sql`(${t.userId} IS NOT NULL) <> (${t.tenantId} IS NOT NULL)`,
     ),
     index('idx_handle_history_old').on(t.oldHandle, t.redirectExpiresAt),
+  ],
+)
+
+// ─────────────────────────────────────────────────────────────────────────
+// AUDIT_LOGS — append-only audit trail per §9.10 + §1.3 R8.
+//
+// First consumer is Sprint 2 Day 14 Item 9 (KYC state machine transitions).
+// Future writers: Item 13 reviewer queue, fee-config changes (§14.4),
+// payout state transitions (§14.8), legal document material-change
+// consent re-prompts (§20.4).
+//
+// RLS invariant (load-bearing — see migration 0005 header):
+//   System-action rows (tenant_id IS NULL) require withSuperAdmin context
+//   to write or read. Tenant-context writes always populate tenant_id from
+//   app.current_tenant_id; tenant-context reads filter on the same.
+//   Tenants cannot cross the tenant_id IS NULL boundary in either direction.
+//
+// Immutability: no UPDATE policy, no DELETE policy, REVOKE UPDATE/DELETE
+// from eventpulse_app. Only eventpulse_admin (BYPASSRLS) can mutate, and
+// only via maintenance PRs (retention sweeps for BFIU §15.1).
+// ─────────────────────────────────────────────────────────────────────────
+
+export const auditLogs = pgTable(
+  'audit_logs',
+  {
+    id: uuid()
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+    actorType: text('actor_type').notNull(),
+    actorId: uuid('actor_id'),
+    action: text().notNull(),
+    entityType: text('entity_type').notNull(),
+    entityId: uuid('entity_id'),
+    diff: jsonb(),
+    metadata: jsonb(),
+    ip: inet(),
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'audit_logs_actor_type_chk',
+      sql`${t.actorType} IN ('user','tenant_user','super_admin','system','webhook')`,
+    ),
+    index('idx_audit_tenant').on(t.tenantId, t.createdAt),
+    index('idx_audit_entity').on(t.entityType, t.entityId, t.createdAt),
   ],
 )

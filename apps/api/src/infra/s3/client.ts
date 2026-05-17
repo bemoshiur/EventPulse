@@ -145,9 +145,35 @@ export interface KycUploadUrlResult {
  * BD broadband) but short enough that a leaked URL can't be replayed
  * indefinitely.
  */
-export async function getKycUploadUrl(input: KycUploadUrlInput): Promise<KycUploadUrlResult> {
+/**
+ * Single source of truth for KYC S3 object keys. Used by both the
+ * presigned-URL generator and the submit endpoint so client-supplied
+ * key fragments can never drift from the server-side construction.
+ *
+ * Format (per Checkpoint #2, decisions.md 2026-05-17):
+ *   tenants/{tenantId}/kyc/{submissionId}/{documentType}.{ext}
+ *
+ * The tenantId always comes from the JWT (the route layer's
+ * responsibility) so a tenant cannot construct a key in another
+ * tenant's prefix even if they craft the request body manually.
+ */
+export function buildKycObjectKey(input: {
+  tenantId: string
+  submissionId: string
+  documentType: KycDocumentType
+  contentType: AllowedContentType
+}): string {
   const ext = ALLOWED_CONTENT_TYPES[input.contentType]
-  const key = `tenants/${input.tenantId}/kyc/${input.submissionId}/${input.documentType}.${ext}`
+  return `tenants/${input.tenantId}/kyc/${input.submissionId}/${input.documentType}.${ext}`
+}
+
+/** Helper for callers that want the full `s3://bucket/key` URI to store. */
+export function buildKycObjectUri(input: Parameters<typeof buildKycObjectKey>[0]): string {
+  return `s3://${requireBucket()}/${buildKycObjectKey(input)}`
+}
+
+export async function getKycUploadUrl(input: KycUploadUrlInput): Promise<KycUploadUrlResult> {
+  const key = buildKycObjectKey(input)
   const kmsKeyArn = requireKmsKeyArn()
   const bucket = requireBucket()
   const expiresIn = 300

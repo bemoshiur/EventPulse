@@ -4,6 +4,7 @@ import pg from 'pg'
 
 import { resetPool, withSuperAdmin, withTenant } from '../client.js'
 import {
+  auditLogs,
   feeOverrideLog,
   handleHistory,
   kycSubmissions,
@@ -308,6 +309,174 @@ describeIfDb('RLS cross-tenant isolation', () => {
     )
     const tenantIds = new Set(rows.map((r) => r.tenantId))
     // Tenant A's own insert from the first test above must be visible to super-admin.
+    expect(tenantIds.has(fixtures.tenantA!)).toBe(true)
+  })
+
+  // ─── audit_logs (Sprint 2 Day 14 Item 9) ─────────────────────────────
+
+  it('tenant A can INSERT + SELECT its own audit_logs row', async () => {
+    const inserted = await withTenant(fixtures.tenantA!, async (db) =>
+      db
+        .insert(auditLogs)
+        .values({
+          tenantId: fixtures.tenantA!,
+          actorType: 'tenant_user',
+          actorId: fixtures.ownerA!,
+          action: 'audit_logs.rls_test',
+          entityType: 'kyc_submission',
+          entityId: '00000000-0000-4000-8000-aaaaaaaa0001',
+          diff: { from: null, to: 'submitted' },
+          metadata: { actor_role: 'tenant_user' },
+        })
+        .returning({ id: auditLogs.id }),
+    )
+    expect(inserted.length).toBe(1)
+
+    const visible = await withTenant(fixtures.tenantA!, async (db) =>
+      db.select().from(auditLogs).where(eq(auditLogs.id, inserted[0]!.id)),
+    )
+    expect(visible.length).toBe(1)
+    expect(visible[0]!.tenantId).toBe(fixtures.tenantA!)
+  })
+
+  it('tenant B cannot SELECT tenant A audit_logs rows', async () => {
+    const visibleToB = await withTenant(fixtures.tenantB!, async (db) =>
+      db.select().from(auditLogs).where(eq(auditLogs.tenantId, fixtures.tenantA!)),
+    )
+    expect(visibleToB.length).toBe(0)
+  })
+
+  it('tenant A cannot INSERT an audit_logs row stamped for tenant B (WITH CHECK)', async () => {
+    await expect(
+      withTenant(fixtures.tenantA!, async (db) =>
+        db.insert(auditLogs).values({
+          tenantId: fixtures.tenantB!,
+          actorType: 'tenant_user',
+          actorId: fixtures.ownerA!,
+          action: 'audit_logs.cross_tenant_attempt',
+          entityType: 'kyc_submission',
+        }),
+      ),
+    ).rejects.toThrow()
+  })
+
+  it('tenant A cannot INSERT a system-action audit_logs row (tenant_id IS NULL blocked under tenant context)', async () => {
+    // The RLS WITH CHECK policy requires tenant_id IS NOT NULL AND tenant_id = setting.
+    // System-action writes require withSuperAdmin (BYPASSRLS).
+    await expect(
+      withTenant(fixtures.tenantA!, async (db) =>
+        db.insert(auditLogs).values({
+          tenantId: null,
+          actorType: 'system',
+          actorId: null,
+          action: 'audit_logs.system_action_attempt',
+          entityType: 'kyc_submission',
+        }),
+      ),
+    ).rejects.toThrow()
+  })
+
+  it('tenants cannot UPDATE audit_logs (no UPDATE policy + REVOKE UPDATE)', async () => {
+    // Use a freshly-written tenant-A audit row so we control the target.
+    const written = await withTenant(fixtures.tenantA!, async (db) =>
+      db
+        .insert(auditLogs)
+        .values({
+          tenantId: fixtures.tenantA!,
+          actorType: 'tenant_user',
+          actorId: fixtures.ownerA!,
+          action: 'audit_logs.update_target',
+          entityType: 'kyc_submission',
+        })
+        .returning({ id: auditLogs.id }),
+    )
+    const target = written[0]!.id
+
+    // The UPDATE must either error (REVOKE denies the grant) or affect zero
+    // rows (no UPDATE policy under FORCED RLS) — both are acceptable
+    // "immutability honoured" outcomes from the test's perspective.
+    let updateError: unknown = null
+    let updated: { id: string }[] = []
+    try {
+      updated = await withTenant(fixtures.tenantA!, async (db) =>
+        db
+          .update(auditLogs)
+          .set({ action: 'audit_logs.update_target.HIJACKED' })
+          .where(eq(auditLogs.id, target))
+          .returning({ id: auditLogs.id }),
+      )
+    } catch (err) {
+      updateError = err
+    }
+    expect(updateError !== null || updated.length === 0).toBe(true)
+
+    // Read-back via super-admin to verify the row's action string is unchanged.
+    const after = await withSuperAdmin(async (db) =>
+      db.select().from(auditLogs).where(eq(auditLogs.id, target)),
+    )
+    expect(after[0]!.action).toBe('audit_logs.update_target')
+  })
+
+  it('tenants cannot DELETE audit_logs (no DELETE policy + REVOKE DELETE)', async () => {
+    const written = await withTenant(fixtures.tenantA!, async (db) =>
+      db
+        .insert(auditLogs)
+        .values({
+          tenantId: fixtures.tenantA!,
+          actorType: 'tenant_user',
+          actorId: fixtures.ownerA!,
+          action: 'audit_logs.delete_target',
+          entityType: 'kyc_submission',
+        })
+        .returning({ id: auditLogs.id }),
+    )
+    const target = written[0]!.id
+
+    let deleteError: unknown = null
+    let deleted: { id: string }[] = []
+    try {
+      deleted = await withTenant(fixtures.tenantA!, async (db) =>
+        db.delete(auditLogs).where(eq(auditLogs.id, target)).returning({ id: auditLogs.id }),
+      )
+    } catch (err) {
+      deleteError = err
+    }
+    expect(deleteError !== null || deleted.length === 0).toBe(true)
+
+    // Row still exists per super-admin view.
+    const after = await withSuperAdmin(async (db) =>
+      db.select({ id: auditLogs.id }).from(auditLogs).where(eq(auditLogs.id, target)),
+    )
+    expect(after.length).toBe(1)
+  })
+
+  it('super-admin can INSERT a system-action audit row (tenant_id IS NULL) and tenants cannot see it', async () => {
+    const written = await withSuperAdmin(async (db) =>
+      db
+        .insert(auditLogs)
+        .values({
+          tenantId: null,
+          actorType: 'system',
+          actorId: null,
+          action: 'audit_logs.system_action_write',
+          entityType: 'platform',
+        })
+        .returning({ id: auditLogs.id }),
+    )
+    expect(written.length).toBe(1)
+    const systemRowId = written[0]!.id
+
+    const visibleToA = await withTenant(fixtures.tenantA!, async (db) =>
+      db.select().from(auditLogs).where(eq(auditLogs.id, systemRowId)),
+    )
+    expect(visibleToA.length).toBe(0)
+  })
+
+  it('super-admin can SELECT all audit_logs across tenants (BYPASSRLS)', async () => {
+    const rows = await withSuperAdmin(async (db) =>
+      db.select({ id: auditLogs.id, tenantId: auditLogs.tenantId }).from(auditLogs),
+    )
+    const tenantIds = new Set(rows.map((r) => r.tenantId))
     expect(tenantIds.has(fixtures.tenantA!)).toBe(true)
   })
 
