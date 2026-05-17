@@ -4,6 +4,73 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-17 · Workflow automation: seven slash commands installed
+
+**Context:** Sessions vary in rhythm. Early ones are slow and careful; late-day or after-incident ones are fast and tired. The risk is that the playbook rituals (memory writes, decision capture, gotcha logging, sprint hygiene) get skipped first when time pressure builds — exactly when they matter most.
+
+**Decision:** Encodes the project's working rituals (start, work, decide, gotcha, review, end, sprint) as repeatable prompts so memory and quality gates can't be skipped under time pressure. Free maintenance ongoing; commands edited in-repo as the project evolves.
+
+Seven slash-command files installed at `.claude/commands/` (overwriting the placeholder versions from the early-session draft):
+
+- `/start` — session-start protocol + GitHub state + today's likely focus, no action until confirmed
+- `/work` — focused execution: confirm + cite §X.Y + TodoWrite + wait-for-go + run-tests-as-you-go + ship-it gate
+- `/decide` — three-question intake (Context / Decision / Consequences) → drafted entry → approve gate → append + commit
+- `/gotcha` — symptom / why / fix / avoid intake → drafted entry → approve gate → append + commit
+- `/review` — ruthless senior-engineer review checklist (Correctness / Multi-tenancy §4 / Money §14 / Security §1.3 / Testability §24 / DoD §25) → green/yellow/red output, no auto-fix
+- `/end` — session-end protocol with diff approval before memory commit
+- `/sprint` — sprint boundary: retro + release tag + handoff + next-sprint kick-off
+
+**Consequences:**
+
+- The project's working rituals happen consistently because they're invoked by typing, not by remembering. Memory and quality gates can't be skipped under time pressure — they're the literal command body.
+- Future-Moshiur (and any teammate) gets the same disciplined session whether the founder is fresh or exhausted. Critical when contractors join.
+- These commands are version-controlled with the rest of the project, not user-scoped — teammates get them on clone, not per-machine.
+- Editing rule: when a ritual evolves (a new check added, a step refined), edit the relevant `.claude/commands/*.md` file in the same PR as the underlying change so the command body always reflects current practice.
+
+---
+
+## 2026-05-17 · Sprint 1 closeout — SES out-of-sandbox request submitted
+
+**Context:** SES sandbox limits (200 emails/day, send only to verified addresses, 1 email/sec) are fine for development but prevent shipping to the first paying tenant. The out-of-sandbox request is a 1-2 business day AWS Support review.
+
+**Decision:** Submitted SES production-access request via `aws sesv2 put-account-details` with:
+
+- `--mail-type TRANSACTIONAL`
+- `--website-url https://eventpulse.com.bd`
+- `--contact-language EN`
+- `--production-access-enabled`
+- `--additional-contact-email-addresses moshiur@publicpulse.com.bd`
+- Use-case description: transactional only — ticket confirmations with attached PDFs, attendee event reminders, KYC verification status updates, password reset and magic-link sign-in tokens, platform notifications for tenants. No marketing email. DKIM + SPF + DMARC (`p=quarantine`) all live. Bounce/complaint webhooks will update `notification_log` table and suppress further sends. Initial daily volume <200/day month 1, ramping to <5,000/day over six months. Requested initial limit: 50,000 emails/day, max send rate 14 emails/second (deliberately conservative).
+
+Account state post-submission:
+
+```text
+ProductionAccessEnabled: false
+MailType:                TRANSACTIONAL
+ReviewStatus:            PENDING
+CaseId:                  (not exposed by SES API at submission; AWS Support emails it separately)
+Website:                 https://eventpulse.com.bd
+```
+
+**AWS Support case ID** will be appended to this entry when AWS emails it (usually within minutes). Update path:
+
+```text
+aws sesv2 get-account --profile eventpulse --region ap-southeast-1 \
+  --query 'Details.ReviewDetails.CaseId' --output text
+```
+
+**Consequences:**
+
+- AWS review window: typically 1-2 business days. Outcome (approve / deny / request-more-info) will be appended to this entry with date.
+- Until approved, staging continues to send only to verified addresses. Verify `moshiur@publicpulse.com.bd` + a test address before exercising any auth/magic-link flow that needs to deliver.
+- If denied / partially approved: re-submit with adjusted use-case description and stricter bounce/complaint commitments. The 50k/day cap is intentionally low; we'll request an increase as we grow.
+- The SES setup decision from 2026-05-17 (domain identity + DKIM) was the prerequisite. This decision closes the SES path for Sprint 1.
+- Once approved, set the `AWS_SES_FROM` env var on the staging EC2 to the verified sender (e.g. `Event Pulse <hello@eventpulse.com.bd>`) and remove `MAIL_DRY_RUN` from production env.
+
+**AWS response (to be filled in on receipt):** _pending_
+
+---
+
 ## 2026-05-17 · Auth foundation library choice: roll our own (not Lucia)
 
 **Context:** Sprint 1 Day 7-8 calls for "Lucia Auth + JWT" per CLAUDE.md §1.2. Lucia v3 was current when the playbook was written; it has since been deprecated as a framework (the author recommends rolling your own with their patterns). Lucia v4 doesn't exist. Alternatives: Better-Auth (newer, opinionated), @auth/core, managed services (Clerk, Auth0).
