@@ -4,6 +4,114 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## Deploy scripts handling git refs must accept both branch names and commit SHAs
+
+**Status:** RESOLVED 2026-05-17 during Sprint 2 Day 13 closeout (PR #67, commit `977df1b`).
+
+**Symptom:** First end-to-end CI auto-deploy failed at the `Wait for SSM command` step with the EC2-side stdout showing `fatal: ambiguous argument 'origin/<40-char-SHA>': unknown revision or path not in the working tree`. The SSM command itself sent successfully; the failure happened inside `deploy.sh` running on the EC2.
+
+**Why it happens:** `infra/deploy/deploy.sh` ran `git reset --hard "origin/$REF"` with `$REF` taken as the first positional argument. Manual Item 5 invocations always passed `main` (a branch name), so `origin/main` resolved correctly. The CI workflow (`.github/workflows/deploy-staging.yml`) passes `${{ github.sha }}` which is a 40-char commit SHA. `git reset --hard origin/<SHA>` is invalid — the `origin/` prefix only resolves against remote-tracking branch names, not bare commit SHAs (a SHA after `git fetch` IS reachable via the remote-tracking refspec but you have to drop the `origin/` prefix).
+
+**Fix (per PR #67):** resolve `$REF` in precedence order — try `origin/$REF` first (branch-name path) then fall back to `$REF` directly (SHA path that was already fetched). Fail loud if neither resolves:
+
+```bash
+git fetch --all --prune
+if TARGET="$(git rev-parse --verify "origin/$REF" 2>/dev/null)"; then
+  :
+elif TARGET="$(git rev-parse --verify "$REF" 2>/dev/null)"; then
+  :
+else
+  echo "ERROR: ref '$REF' does not resolve" && exit 1
+fi
+git reset --hard "$TARGET"
+```
+
+**How to avoid:** Any deploy / restore / rollback script that takes a "ref-like" argument MUST accept both branch names and SHAs. Test path: invoke once with `main`, invoke once with `$(git rev-parse main)` — both must succeed against the same starting state. Add this to the runbook checklist for every script of this shape.
+
+---
+
+## GitHub secrets holding AWS resource identifiers should be validated against the live resource
+
+**Status:** RESOLVED 2026-05-17 during Sprint 2 Day 13 closeout (re-set via `gh secret set STAGING_EC2_INSTANCE_ID`).
+
+**Symptom:** SSM SendCommand returned `AccessDeniedException ... is not authorized to perform: ssm:SendCommand on resource: arn:aws:ssm:ap-southeast-1:739275468267:managed-instance/***` (instance ID masked by GitHub Actions log redaction). The IAM policy was simulated-allowed for the expected instance ID; AWS-CLI direct calls from admin worked. Yet the role couldn't `SendCommand` to the resource that the masked instance ID resolved to.
+
+**Why it happens:** The `STAGING_EC2_INSTANCE_ID` GitHub secret value did not match the canonical live EC2 instance ID (`i-02e4fddeb923c14f9`). Sprint 1 Day 9-10 set the secret as a placeholder — possibly correct at the time, possibly with whitespace or a typo. The log-redaction `***` made the mismatch invisible during debugging until verified via `aws iam simulate-principal-policy` against the explicit canonical ARN (which DID return `allowed`) — proving the policy was right and the secret value was the variable.
+
+**Fix:** re-set the secret to the exact canonical value pulled from `aws ssm describe-instance-information`:
+
+```bash
+echo -n "i-02e4fddeb923c14f9" | gh secret set STAGING_EC2_INSTANCE_ID
+```
+
+**How to avoid:** When provisioning any GitHub secret whose value is an AWS resource identifier (instance ID, role ARN, KMS key ID, bucket name, etc.), the same provisioning step that sets the secret should also: (a) validate the secret value against the live AWS resource via a describe / head call, (b) write a marker (file content, decisions.md note, deploy comment) that the secret has been validated. A workflow can validate at job-start time too — e.g. `aws ssm describe-instance-information --instance-information-filter-list key=InstanceIds,valueSet=$STAGING_INSTANCE_ID --query 'length(InstanceInformationList)' --output text` returns `1` only if the secret matches a live managed instance — but that test only runs after IAM allows the describe call, which is a chicken-and-egg for OIDC-first roles. The provisioning-time validation is the dependable layer.
+
+---
+
+## SSM agent-routed instances require both `ec2:instance` and `ssm:managed-instance` ARN forms in `SendCommand` resource policy
+
+**Status:** RESOLVED 2026-05-17 during Sprint 2 Day 13 closeout (inline policy updated on `eventpulse-deploy-staging` role).
+
+**Symptom:** Trying to call `ssm:SendCommand --instance-ids i-XXX --document-name AWS-RunShellScript` from a role whose inline policy listed only the EC2 ARN form (`arn:aws:ec2:REGION:ACCOUNT:instance/i-XXX`) returns `AccessDeniedException ... not authorized to perform: ssm:SendCommand on resource: arn:aws:ssm:REGION:ACCOUNT:managed-instance/i-XXX because no identity-based policy allows the ssm:SendCommand action`. Note: the resource being evaluated is the **`ssm:managed-instance`** ARN form, NOT the `ec2:instance` form the role's policy listed.
+
+**Why it happens:** AWS exposes EC2 instances through two ARN forms depending on how the operation reaches the instance:
+
+- `arn:aws:ec2:REGION:ACCOUNT:instance/i-XXX` — when the operation targets the EC2 control plane directly (start, stop, terminate, describe).
+- `arn:aws:ssm:REGION:ACCOUNT:managed-instance/i-XXX` — when the operation reaches the instance through the SSM agent (SendCommand, Run Command, Session Manager, State Manager, Inventory).
+
+For `ssm:SendCommand` targeting an EC2 instance with the SSM agent installed, IAM evaluates against the **managed-instance** ARN form. Listing only the `ec2:instance` form in the policy looks plausible — and the AWS docs page for `ssm:SendCommand` mentions both ARN types — but only the SSM form is evaluated for agent-routed calls. The EC2 form is needed only for actions where SSM routes through the EC2 control plane (rare in practice).
+
+**Fix:** include **both** ARN forms in the `Resource` list for `ssm:SendCommand`:
+
+```json
+{
+  "Sid": "SsmSendCommandToEC2OnlyViaRunShellScript",
+  "Effect": "Allow",
+  "Action": "ssm:SendCommand",
+  "Resource": [
+    "arn:aws:ec2:ap-southeast-1:739275468267:instance/i-02e4fddeb923c14f9",
+    "arn:aws:ssm:ap-southeast-1:739275468267:managed-instance/i-02e4fddeb923c14f9",
+    "arn:aws:ssm:ap-southeast-1::document/AWS-RunShellScript"
+  ]
+}
+```
+
+**How to avoid:** Every new SSM-based deploy / restore / break-glass role MUST include both ARN forms for `ssm:SendCommand`. The canonical pattern is baked into `infra/scripts/setup-github-oidc.sh` (and any future analogue script) — adding instances goes through the script, not hand-edited policy. Code review for new deploy roles asks: "does the SendCommand resource list include the managed-instance form?"
+
+---
+
+## GitHub Environments override the OIDC `sub` claim from `ref:refs/heads/X` to `environment:Y`
+
+**Status:** RESOLVED 2026-05-17 during Sprint 2 Day 13 closeout (trust policy rewritten on `eventpulse-deploy-staging` role).
+
+**Symptom:** AWS IAM role with a trust policy gating on `token.actions.githubusercontent.com:sub = repo:OWNER/REPO:ref:refs/heads/main` rejects every assume-role attempt with `Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity` — even when the workflow is genuinely running on the main branch of the right repo, even with `id-token: write` permission granted, even when manually triggered via `workflow_dispatch --ref main`. The `aud` and `Principal.Federated` are correct. The `sub` claim in the actually-issued OIDC token does NOT match the policy's expected value.
+
+**Why it happens:** When a workflow job declares `environment: NAME`, GitHub **overrides** the default `sub` claim format from `repo:OWNER/REPO:ref:refs/heads/BRANCH` to `repo:OWNER/REPO:environment:NAME`. The environment-format claim takes precedence over the ref-format. Documented: <https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect#example-subject-claims>. Trust policies written against the ref-format will never match when the consuming workflow declares an environment, no matter what branch the workflow actually runs on.
+
+**Fix:** identify the workflow's environment usage BEFORE writing the trust policy. Then either:
+
+- **(preferred)** Use the environment-format in the trust policy: `sub = repo:OWNER/REPO:environment:NAME`, and add a `job_workflow_ref` claim as a workflow-file pin to recover the branch-scope intent:
+
+  ```json
+  "Condition": {
+    "StringEquals": {
+      "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+      "token.actions.githubusercontent.com:sub": "repo:OWNER/REPO:environment:NAME",
+      "token.actions.githubusercontent.com:job_workflow_ref": "OWNER/REPO/.github/workflows/WORKFLOW.yml@refs/heads/BRANCH"
+    }
+  }
+  ```
+
+  The `job_workflow_ref` claim is set on every workflow run regardless of event type and is not overridden by environment usage; it carries the workflow-file path AND the ref the workflow file was loaded from.
+
+- **(alternative)** Remove `environment:` from the workflow so the `sub` defaults to ref-format and matches the trust policy literally. Loses the GitHub deployment-history annotation.
+
+- **(invasive)** Customize the GitHub OIDC subject claim template repo-wide via `gh api .../actions/oidc/customization/sub` to force ref-format even when environments are used. Affects every workflow in the repo; not recommended.
+
+**How to avoid:** when designing any OIDC trust policy, identify the consuming workflow's environment usage first. With `environment:` → `sub = environment:NAME` + `job_workflow_ref` for workflow-file pinning. Without `environment:` → `sub = ref:refs/heads/BRANCH`. This is now the project's canonical OIDC trust shape — see `.claude/memory/decisions.md` "Canonical GitHub Actions → AWS OIDC trust pattern (project standard)" 2026-05-17.
+
+---
+
 ## S3 bucket policy `StringNotEqualsIfExists` silently permits PUT without the keyed header
 
 **Status:** RESOLVED 2026-05-17 during Sprint 2 Day 12 Item 6 (KYC bucket). Caught by iac-reviewer pre-commit.

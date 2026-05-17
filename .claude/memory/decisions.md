@@ -4,6 +4,39 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-17 · Canonical GitHub Actions → AWS OIDC trust pattern (project standard)
+
+**Context:** Sprint 2 Day 13's first auto-deploy surfaced two gaps in the original Sprint 1 Day 9-10 OIDC plumbing: (a) the AWS-side OIDC provider + assumable role were never actually created — `AWS_OIDC_ROLE_STAGING` was a placeholder secret; (b) the trust shape needed three independent checks to enforce "only `deploy-staging.yml` running from `main` with the staging environment can assume the role." This entry establishes the trust-pattern as the project standard so future deploy roles (prod, future per-env workers, future per-team roles) all conform — and so a single canonical reference exists when a §17 playbook bump captures it.
+
+**Decision:**
+
+All GitHub Actions → AWS role-assumption trust policies in this project follow the **three-claim shape**:
+
+1. `token.actions.githubusercontent.com:aud = sts.amazonaws.com`
+2. `token.actions.githubusercontent.com:sub = repo:OWNER/REPO:environment:ENV_NAME`
+3. `token.actions.githubusercontent.com:job_workflow_ref = OWNER/REPO/.github/workflows/WORKFLOW_FILE@refs/heads/BRANCH`
+
+All three use `StringEquals` (never `StringLike`, never `StringEqualsIfExists`, never wildcards). Each claim narrows a different dimension:
+
+- `aud` defends against accidental cross-audience token reuse.
+- `sub = environment:NAME` pins to a specific GitHub deployment environment in this repo. Environment-format is **mandatory** when the workflow uses `environment:` — GitHub overrides the ref-format `sub` to the environment-format when an environment is declared. See `gotchas.md` "GitHub Environments override the OIDC sub claim".
+- `job_workflow_ref` pins to the specific workflow file + branch combination. A malicious PR that copies the workflow file under a different name, or a new workflow declaring the same environment, fails this check cleanly. This is the compensating guardrail that recovers the "only main can deploy" intent when the environment-format `sub` doesn't directly carry branch information.
+
+**Inline policy convention for SSM-based deploys:** the resource list for `ssm:SendCommand` includes BOTH `arn:aws:ec2:REGION:ACCOUNT:instance/i-X` AND `arn:aws:ssm:REGION:ACCOUNT:managed-instance/i-X` ARN forms for the same instance, because AWS evaluates SSM agent-routed instances against the managed-instance ARN form (the EC2 ARN form alone fails the IAM check). See `gotchas.md` "SSM agent-routed instances require both ARN forms".
+
+**Consequences:**
+
+- First application: `eventpulse-deploy-staging` (Sprint 2 Day 13, role ARN `arn:aws:iam::739275468267:role/eventpulse-deploy/eventpulse-deploy-staging`). Verified end-to-end via workflow_dispatch run [25988575225](https://github.com/publicpulseagency/EventPulse/actions/runs/25988575225) — all 10 steps green, EC2-side `deploy.sh` returned exit 0.
+- Next application: `eventpulse-deploy-prod` (Sprint 4) follows this exact pattern with `environment:production` and `deploy-prod.yml@refs/heads/prod`. No code review needed beyond confirming the three-claim shape; that's the whole point of the pattern.
+- All future per-environment / per-service deploy roles (Phase 3+ — e.g. payouts worker, KYC reviewer assist agent) inherit the same shape. PRs that introduce a new GitHub-OIDC trust policy diverging from this shape (e.g. using `StringLike`, wildcards, ref-format `sub` while the workflow declares an environment, single-ARN-form SSM resource lists) are rejected during `/review`.
+- **Codification carry — Sprint 2 closeout (v2.3 CLAUDE.md bump):** add this canonical pattern to §17 of the playbook so it's authoritative beyond the memory file. Annotation logged in `progress.md` Sprint 2 closeout candidates.
+- **Cross-reference to GitHub Pro upgrade carry:** once the account upgrades to Pro, configure GitHub Environments → `staging` → deployment branch policy = `main` only. That tightens the protection at the GitHub layer, making `job_workflow_ref` belt-and-braces rather than the primary "only main can deploy" enforcement. Same applies to `prod` env at Sprint 4 with the `prod` branch policy.
+- The four debugging lessons that earned this pattern are individually documented in `gotchas.md` (StringNotEquals-IfExists trap is separate, from Day 12 KYC bucket). Future engineers debugging an OIDC trust failure grep one symptom and land directly on the relevant entry; they don't need to read all four sequentially.
+
+**Supersedes / replaces:** what would have been a "Sprint 2 Day 13 carry — GitHub OIDC provider + deploy role created" entry. The carry is rolled into this canonical-pattern statement; the closeout cross-references are preserved above.
+
+---
+
 ## 2026-05-17 · Checkpoint #2 confirmed — KYC bucket KMS strategy: dedicated CMK for blast-radius isolation
 
 **Context:** Sprint 2 Day 12 Item 6 creates the staging S3 bucket holding KYC documents (NID images, eTIN certs, bank/MFS evidence). Per the Sprint 2 plan, Checkpoint #2 requires explicit confirmation before any AWS write. Moshiur pre-staged the answer at Day 12 kick-off. This entry locks the answer so the Item 6 PR doesn't re-litigate it.

@@ -2,9 +2,8 @@
 
 ## In flight
 
-**Sprint 2 (Days 13-20) — KYC pipeline + Trust Center scaffolding** (Day 12 closed; remaining items on the compressed day plan)
+**Sprint 2 (Days 14-20) — KYC pipeline + Trust Center scaffolding** (Days 11-13 closed; remaining items on the compressed day plan)
 
-- 2026-05-17 — **Day 13: Items 7+8 bundled** — `kyc_submissions` schema (Drizzle + migration 0004 with RLS) + signed-URL upload API (`POST /tenant/kyc/upload-url` returning pre-signed PUT URL gated on the dedicated CMK header + tenants/ prefix). One PR, one `/review` pass.
 - 2026-05-17 — **Day 14: Items 9 + 10** — submission state machine + audit + notification firing. eTIN regex. BFIU sanctions list matcher (CHECKPOINT #5 gates Item 10: `infra/compliance/sanctions.json` MUST be pre-staged by Moshiur from the BFIU public notice before matching code runs; if absent, STOP and surface).
 - 2026-05-17 — **Day 15: Item 11** — post-login Account-Type modal in tenant portal.
 - 2026-05-17 — **Day 16-17: Item 12** — KYC wizard (individual + org variants), two-day item.
@@ -12,13 +11,18 @@
 - 2026-05-17 — **Day 19: Items 14+15 bundled** — Trust Center scaffolding (`legal_documents` + `legal_document_versions` tables, 18 placeholder pages with DRAFT banner) + super admin Legal & Trust editor (CHECKPOINT #3 confirmed: skeleton-only placeholders, no AI-drafted legal text). One PR.
 - 2026-05-17 — **Day 20: Item 16 + closeout** — Porichoy adapter scaffold + env vars + Secrets Manager entry + TODO + gotchas entry (CHECKPOINT #1 confirmed: scaffold-only, no live calls). Tenant subdomain provisioning logic. `kyc_approved` + `kyc_rejected` bilingual SES templates. `/sprint` retro + `v0.2.0-sprint-2` tag + release notes + Sprint 3 kick-off issue.
 
-**Day 12 carries (queued, not started — not blocking Day 13):**
+**Sprint 2 closeout candidates (v0.2.0-sprint-2 + v2.3 CLAUDE.md bump bundle):**
 
-- Codify Postgres role/grant/ownership setup into `bootstrap-staging.sh` (operational fixes from Item 5 still live only as runtime state on the EC2)
-- Add `pnpm --filter @eventpulse/api build` to CI matrix (would have caught the declarationMap issue pre-deploy)
-- Enable `STAGING_DEPLOY_ENABLED=true` repo variable (after 1-2 more manual deploy cycles validate the loop)
-- Reviewer S4: dedicated KMS key-admin role for the KYC CMK (currently uses default `EnableIAMUserPermissions` root-delegation pattern)
-- Reviewer S6: revisit noncurrent-version transitions to GLACIER_IR (currently stays in STANDARD 90d for forensic-restore speed — trade-off documented)
+- **CLAUDE.md §17 amendment** — add the canonical GitHub Actions → AWS OIDC trust pattern (three-claim shape: aud + sub=environment + job_workflow_ref) per `.claude/memory/decisions.md` "Canonical GitHub Actions → AWS OIDC trust pattern (project standard)" 2026-05-17. Make it authoritative beyond the memory file so Sprint 4's `eventpulse-deploy-prod` work can cite §17 directly.
+- Reviewer S4 (Day 12) — dedicated KMS key-admin role for the KYC CMK.
+- Reviewer S6 (Day 12) — revisit noncurrent-version transitions to GLACIER_IR vs STANDARD 90d (trade-off currently documented).
+- Session revocation gap in `apps/api/src/auth/middleware.ts` (`extractAndVerify` skips the `sessions` table cross-check) — existing Sprint 1 Day 9-10 follow-up. Code-reviewer flagged during Day 13 /review as material for KYC route once production reviewers go live; surface before the wizard ships Day 16-17.
+- KYC `documents` / `fields` jsonb columns are loosely typed today; per-tier zod schema tightening lands with the Day 16-17 wizard work.
+
+**Cross-sprint carries (not closeout):**
+
+- GitHub Pro upgrade → GitHub Environments deployment branch policy (limit `staging` env to `main` only; same for `prod` at Sprint 4). Makes `job_workflow_ref` belt-and-braces rather than primary control. Already a Sprint 1 carry; cross-references the canonical OIDC pattern decision.
+- Sprint 4 — create `eventpulse-deploy-prod` role using the canonical three-claim pattern with `environment:production` and `deploy-prod.yml@refs/heads/prod`. No code review needed beyond confirming shape conformance.
 
 **Open procurement items (per Sprint 2 kick-off decision):**
 
@@ -33,6 +37,7 @@
 
 ### Sprint 2 — KYC pipeline + Trust Center
 
+- 2026-05-17 — **Day 13 / Items 7+8 + 3 Day 12 carries absorbed + Day 13 closeout (OIDC infra)** — Items 7+8: `kyc_submissions` Drizzle schema + migration 0004 (DDL, indexes, RLS forced, per-table grants per §4.2.1, status enum follows §9.2 with no draft state; NO DeleteObject grant per BFIU §15.1). 5 RLS cross-tenant tests (SELECT isolation, INSERT WITH CHECK, UPDATE zero-rows, super-admin BYPASSRLS visibility). S3 client (`apps/api/src/infra/s3/client.ts`) + `getKycUploadUrl()` with `KYC_S3_DRY_RUN=1` test mode; presigned PUT carries SSE-KMS + key-id headers signed-into-URL so the M1 bucket-policy deny doesn't trip. `POST /api/v1/tenant/kyc/upload-url` route; tenant_id sourced from JWT only. 8 integration tests covering auth/audience/validation/happy path/key prefix derivation/JWT-vs-body precedence. Carries: bootstrap-staging.sh step 0 (Postgres superuser prep — roles + ADMIN OPTION + ownership), `api-build` CI job (matches `deploy.sh` build command), `STAGING_DEPLOY_ENABLED=true`. /review (code-reviewer): clean; non-null assertion nit applied. **PR #66 merged (commit `7c30539`).** Closeout: when the gate flipped, first auto-deploy surfaced two pre-existing gaps — (a) AWS-side OIDC provider + assumable role never created (Sprint 1 Day 9-10 placeholder secret), (b) `deploy.sh` ref resolution failed when called with a SHA. Closeout PR shipped `infra/scripts/setup-github-oidc.sh` (developer-side, idempotent, parameterised for prod cutover, canonical 3-claim trust shape: aud + sub=environment + job_workflow_ref) and `deploy.sh` SHA-handling fix. **PR #67 merged (commit `977df1b`).** End-to-end verified via workflow_dispatch run [25988575225](https://github.com/publicpulseagency/EventPulse/actions/runs/25988575225) — all 10 steps green, EC2-side `deploy.sh` returned exit 0, smoke tests passed.
 - 2026-05-17 — **Day 12 / Item 6: KYC bucket + dedicated CMK** — Provisioned `eventpulse-kyc-staging` S3 bucket in `ap-southeast-1` + dedicated `alias/eventpulse-kyc-staging` CMK (rotation on) per §17.9 per-purpose pattern. 6 security controls live (BlockPublicAccess all-on, versioning, BucketOwnerEnforced, SSE-KMS default w/ BucketKey, lifecycle Glacier_IR-at-30d on `tenants/`, bucket policy denying non-TLS + non-KMS PUT + non-explicit-key-id PUT + wrong-key PUT + destructive actions by EC2 role). EC2 role inline policy extended with 3 scoped statements (`Get/PutObject` on `tenants/*` only — NO `DeleteObject` per BFIU §15.1; KMS `Encrypt/Decrypt` on dedicated CMK only). `eventpulse/staging/kyc` Secrets Manager entry materialises into `KYC_BUCKET_NAME` + `KYC_KMS_KEY_*` in `.env.staging` via extended bootstrap-staging.sh. Codified in `infra/scripts/setup-kyc-bucket.sh` + 5 envsubst templates for reproducibility (one-command prod cutover). iac-reviewer found 1 hard blocker (M1: `StringNotEqualsIfExists` silently permits PUT without explicit key-id when relying on default encryption) + 5 should-flags — all fixed in the same PR. Live-verified 6 negative tests pre + post fixes. **PR #64 merged (commit `a422847`).**
 - 2026-05-17 — **Sprint 2 Day 11 closeout (carried from previous session)** — Item 1 CLAUDE.md v2.2 bump (PR #54). Item 2 pre-push hook fix (PR #55). Item 3 RLS migration 0003 + withUser() (PR #56). Item 4 OAuth callback routes (PR #57). Item 5 first real staging deploy through 8 attempts + 5 fix PRs (PRs #58, #59, #60, #61, #62) plus operational SSM fixes (Postgres roles, grants, ownership, migration backfill, IAM). All 5 staging vhosts now serve real app. 7 new gotchas + Item 5 closeout decision logged (memory PR #63 merged at `9d83172`).
 
