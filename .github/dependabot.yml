@@ -83,6 +83,12 @@ updates:
         update-types: [version-update:semver-major]
       - dependency-name: '@types/react-dom'
         update-types: [version-update:semver-major]
+      # pino + pino-pretty: locked by playbook §1.2 (Logging row). Major bumps
+      # change the structured-log envelope; not a no-thinking upgrade.
+      - dependency-name: 'pino'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'pino-pretty'
+        update-types: [version-update:semver-major]
     # Production deps left UNGROUPED on purpose — every prod-dep upgrade gets
     # its own PR so the changelog is reviewable.
 
