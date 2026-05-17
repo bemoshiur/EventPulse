@@ -34,10 +34,11 @@ TARGET=$(git rev-parse --short "$REF")
 git reset --hard "$REF"
 echo "rolled back to $TARGET"
 
-# Reinstall (last-deployed lockfile) + rebuild. HUSKY + --prod=false
-# flags match deploy.sh — same rationale documented there.
-# Heap cap matches deploy.sh — same OOM-on-t3.small concern.
-HUSKY=0 /usr/bin/pnpm install --frozen-lockfile --prod=false
+# Reinstall (last-deployed lockfile) + rebuild. Knobs match deploy.sh —
+# rationale documented there. Heap cap matches deploy.sh — same
+# OOM-on-t3.small concern.
+HUSKY=0 NPM_CONFIG_PRODUCTION=false \
+  /usr/bin/pnpm install --frozen-lockfile --config.confirm-modules-purge=false
 export NODE_OPTIONS="--max-old-space-size=1536"
 /usr/bin/pnpm --filter @eventpulse/web build
 /usr/bin/pnpm --filter @eventpulse/api build
