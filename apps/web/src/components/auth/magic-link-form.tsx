@@ -43,7 +43,7 @@ export function MagicLinkForm() {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row">
       <div className="relative flex-1">
-        <Mail className="text-ep-graphite/60 pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
+        <Mail className="text-ep-graphite/60 pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
         <input
           type="email"
           required
@@ -51,7 +51,7 @@ export function MagicLinkForm() {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           placeholder="you@company.com"
-          className="border-ep-line text-ep-ink placeholder:text-ep-graphite/50 focus:border-ep-cerulean h-12 w-full rounded-md border bg-white pl-9 pr-3 text-sm focus:outline-none"
+          className="border-ep-line text-ep-ink placeholder:text-ep-graphite/50 focus:border-ep-cerulean h-12 w-full rounded-md border bg-white pr-3 pl-9 text-sm focus:outline-none"
         />
       </div>
       <button
