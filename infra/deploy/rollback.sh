@@ -34,10 +34,13 @@ TARGET=$(git rev-parse --short "$REF")
 git reset --hard "$REF"
 echo "rolled back to $TARGET"
 
-# Reinstall (last-deployed lockfile) + rebuild
+# Reinstall (last-deployed lockfile) + rebuild. Heap cap matches
+# deploy.sh — same OOM-on-t3.small concern (see comment there).
 /usr/bin/pnpm install --frozen-lockfile
+export NODE_OPTIONS="--max-old-space-size=1536"
 /usr/bin/pnpm --filter @eventpulse/web build
 /usr/bin/pnpm --filter @eventpulse/api build
+unset NODE_OPTIONS
 
 $PM2 reload "$APP_DIR/pm2/ecosystem.config.cjs" --update-env
 

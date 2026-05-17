@@ -31,10 +31,22 @@ PM2="/usr/bin/pm2"
 PNPM="/usr/bin/pnpm"
 LOG_DIR="/home/eventpulse/logs"
 DEPLOY_LOG="$LOG_DIR/deploy.log"
+ENV_FILE="/home/eventpulse/.env.staging"
 
 mkdir -p "$LOG_DIR"
 exec > >(tee -a "$DEPLOY_LOG") 2>&1
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] deploy start ref=$REF"
+
+# 0) Source env file. Required for DATABASE_URL, JWT_*, REDIS_URL etc.
+# Bootstrap (one-time) writes this file via infra/scripts/bootstrap-staging.sh.
+# If it's missing, fail loudly BEFORE running pnpm — much clearer than a
+# midway db:migrate "DATABASE_URL not set" error.
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "ERROR: $ENV_FILE not found. Run infra/scripts/bootstrap-staging.sh first."
+  exit 1
+fi
+# shellcheck disable=SC1090
+set -a; source "$ENV_FILE"; set +a
 
 # 1) Fetch
 cd "$APP_DIR"
@@ -46,9 +58,16 @@ echo "checked out $COMMIT"
 # 2) Install
 $PNPM install --frozen-lockfile
 
-# 3) Build
+# 3) Build. NODE_OPTIONS caps the V8 heap below the t3.small (2 GB) RAM
+# ceiling — next build on the default heap (~1.7 GB) can OOM on a
+# t3.small with PM2 + Postgres + Redis already resident. 1536 MB is the
+# largest cap that leaves comfortable headroom for the rest of the
+# system. Upsize the cap proportionally if the instance type ever
+# changes (the production-target t3.large in §17.2 doesn't need this).
+export NODE_OPTIONS="--max-old-space-size=1536"
 $PNPM --filter @eventpulse/web build
 $PNPM --filter @eventpulse/api build
+unset NODE_OPTIONS
 
 # 4) Migrate
 $PNPM --filter @eventpulse/api db:migrate
