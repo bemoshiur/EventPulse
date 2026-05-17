@@ -55,8 +55,21 @@ git reset --hard "origin/$REF"
 COMMIT=$(git rev-parse --short HEAD)
 echo "checked out $COMMIT"
 
-# 2) Install
-$PNPM install --frozen-lockfile
+# 2) Install. Two flags worth their own comment:
+#
+#   --prod=false: NODE_ENV=production (set by .env.staging above) makes
+#   pnpm skip devDependencies by default. We need devDeps installed for
+#   the build step — `next build` and `tsc` are both devDeps. The
+#   runtime doesn't need them, but we don't currently prune (next build
+#   on a fresh devDep install is faster than pruning + re-installing
+#   on the next deploy). `--prod=false` overrides the NODE_ENV default.
+#
+#   HUSKY=0: the root package.json `prepare` script invokes husky to
+#   wire git hooks. On a server with no developer commits there's
+#   nothing for husky to wire, but `husky` is a devDep and isn't
+#   guaranteed to be on PATH before the install completes. HUSKY=0 is
+#   husky's documented "skip me" env var per its README.
+HUSKY=0 $PNPM install --frozen-lockfile --prod=false
 
 # 3) Build. NODE_OPTIONS caps the V8 heap below the t3.small (2 GB) RAM
 # ceiling — next build on the default heap (~1.7 GB) can OOM on a
