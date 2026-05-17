@@ -57,12 +57,14 @@ echo "checked out $COMMIT"
 
 # 2) Install. Three knobs worth their own comment:
 #
-#   NPM_CONFIG_PRODUCTION=false: NODE_ENV=production (set by
-#   .env.staging above) makes pnpm skip devDependencies by default.
-#   We need devDeps for `next build` and `tsc`. The env-var form is
-#   used instead of the CLI flag because pnpm's `--prod=false` parsing
-#   has version-to-version drift; NPM_CONFIG_PRODUCTION is the
-#   compatibility-stable knob across pnpm 8/9/10.
+#   NODE_ENV=development: .env.staging sets NODE_ENV=production (correct
+#   for runtime). pnpm v9 reads NODE_ENV directly and skips devDeps
+#   when it's "production" — NEITHER `--prod=false` (deploy attempt 2)
+#   NOR `NPM_CONFIG_PRODUCTION=false` (deploy attempt 3) overrides it
+#   in pnpm v9.x; the only reliable knob is NODE_ENV itself. We override
+#   for the install command only — every step after this sources
+#   .env.staging again (well, kept in the parent shell) so NODE_ENV
+#   stays = production at pm2 reload time.
 #
 #   HUSKY=0: the root package.json `prepare` script invokes husky to
 #   wire git hooks. On a server with no developer commits there's
@@ -72,11 +74,16 @@ echo "checked out $COMMIT"
 #
 #   --config.confirm-modules-purge=false: when the previous install
 #   left node_modules in a partial state (e.g. a prior --prod install
-#   then a later --prod=false), pnpm prompts "modules directories
-#   will be removed and reinstalled from scratch (Y/n)". SSM commands
-#   have no TTY → the prompt hangs forever. This flag auto-confirms.
-HUSKY=0 NPM_CONFIG_PRODUCTION=false \
+#   then a later one that needs devDeps), pnpm prompts "modules
+#   directories will be removed and reinstalled from scratch (Y/n)".
+#   SSM commands have no TTY → the prompt hangs forever. This flag
+#   auto-confirms.
+HUSKY=0 NODE_ENV=development \
   $PNPM install --frozen-lockfile --config.confirm-modules-purge=false
+# Restore NODE_ENV from env file for the rest of the deploy (build +
+# migrate + pm2 reload all see production again).
+NODE_ENV=production
+export NODE_ENV
 
 # 3) Build. NODE_OPTIONS caps the V8 heap below the t3.small (2 GB) RAM
 # ceiling — next build on the default heap (~1.7 GB) can OOM on a
