@@ -132,11 +132,12 @@ describeIfDb('auth routes (integration)', () => {
     const email = `single-use-${stamp}@test.local`
     cleanup.push(email)
     // create user first
-    await app.request('/api/v1/auth/password/signup', {
+    const signup = await app.request('/api/v1/auth/password/signup', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password: 'correcthorse123', fullName: 'X' }),
+      body: JSON.stringify({ email, password: 'correcthorse123', fullName: 'Single Use' }),
     })
+    expect(signup.status).toBe(201)
     const reqRes = await app.request('/api/v1/auth/magic-link/request', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
