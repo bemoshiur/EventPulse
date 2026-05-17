@@ -40,9 +40,17 @@ a422847 feat(infra): Sprint 2 Item 6 — KYC bucket + dedicated CMK (#64)
 
 ## Next concrete step
 
-**Day 14 — Items 9 + 10.** Item 9: KYC submission state machine (`submitted → under_review → approved | rejected`) + audit-log writes on every transition + notification firing (bilingual `kyc_approved` / `kyc_rejected` SES templates land Day 20, but the firing scaffolding is wired now). Item 10: eTIN format regex + BFIU sanctions list matcher. **CHECKPOINT #5 gates Item 10**: `infra/compliance/sanctions.json` MUST be pre-staged by Moshiur from the BFIU public notice before any matching code runs; if absent at Day 14 `/start`, STOP and surface — do NOT invent a sanctions list from web search.
+**Day 14 — Item 9 only.** Item 10 (eTIN regex + BFIU sanctions matcher) **deferred to Phase 2** per the Sprint 2 plan amendment landed today (decisions.md 2026-05-17 "Sprint 2 Item 10 scope amendment — third-party verification deferred to manual review"). Same operational pattern as the Porichoy deferral two days earlier: sub-50-submissions/week at MVP, reviewer is already looking at every submission, false-confidence risk of half-built automation. Checkpoint #5 dissolved — `infra/compliance/sanctions.json` no longer in Sprint 2 scope; do NOT pre-stage it.
 
-`POST /tenant/kyc/submissions` lands Day 14 too (atomically creates the row in `submitted` status with documents/fields from the request body). That's the row-creation endpoint that consumes the upload-url URLs from Day 13.
+**Item 9 scope:**
+
+- KYC submission state machine per §13.3 — `draft → submitted → under_review → approved | rejected`, with `rejected → draft` for resubmit. No other transitions legal.
+- `POST /tenant/kyc/submissions` — finalises a submission after the Day 13 upload-url step. Idempotent on `(tenant_id, submission_id)` (double-click returns same row). Server regenerates S3 object keys from `submission_id`; never trusts client-supplied keys. Body validates against the per-type zod schema (individual vs org per Item 8), including eTIN and NID number as **plain captured data fields** (no automated format validation — Item 10 deferred).
+- Audit every transition (not just terminal): `audit_logs` row per §9.10 with `from_state`, `to_state`, `actor_user_id`, `actor_role`, `reason` (nullable; required on rejection), `at_timestamp`, `tenant_id`, `submission_id`.
+- Notification firing scaffolded (templates land Item 16 / Day 20): on `→ under_review` fire `kyc_submitted`, on `→ approved` fire `kyc_approved`, on `→ rejected` fire `kyc_rejected` with reason. Stub functions in `apps/api/src/services/notifications/kyc.ts` wired to the state machine; SES templates land at Item 16.
+- RLS: submit endpoint runs under `withTenant(tenant_id)`, never `withSuperAdmin`. Cross-tenant negative test required as defence in depth (signed URL from Day 13 already enforces at S3 layer).
+- Tests required: cross-tenant negative (RLS), idempotency (double-submit returns same row), state machine transitions (all legal pass, all illegal throw clear errors), audit log write per transition, notification stub firing per terminal transition. **No eTIN regex tests, no sanctions matcher tests.**
+- **Item 10 residual** — surface eTIN + NID number captured in `fields` jsonb clearly in the reviewer queue UI — absorbs into Item 13 (Day 18) rather than standing as its own item.
 
 ## Sprint 2 standard execution mode (still in force for Days 14-20)
 
@@ -54,6 +62,7 @@ a422847 feat(infra): Sprint 2 Item 6 — KYC bucket + dedicated CMK (#64)
 ## Sprint 2 closeout candidates (queued for v0.2.0-sprint-2 + v2.3 CLAUDE.md bump)
 
 - **CLAUDE.md §17 amendment** — codify the canonical OIDC trust pattern (three-claim shape) as project standard in the playbook.
+- **CLAUDE.md §13.0 amendment** — drop "eTIN format check: local regex" and "BFIU sanctions screening: manual list-check against `infra/compliance/sanctions.json`" from the §13.0 MVP-scope language. Replace with "Both deferred to manual reviewer responsibility for MVP" alongside the existing Porichoy deferral paragraph. Path back to automation in Phase 2 per decisions.md "Sprint 2 Item 10 scope amendment" 2026-05-17.
 - Reviewer S4 (Day 12) — dedicated KMS key-admin role for the KYC CMK.
 - Reviewer S6 (Day 12) — noncurrent-version transitions to GLACIER_IR vs STANDARD-90d trade-off.
 - Session revocation gap in `apps/api/src/auth/middleware.ts` — fix before Day 16-17 wizard ships.
@@ -66,7 +75,6 @@ a422847 feat(infra): Sprint 2 Item 6 — KYC bucket + dedicated CMK (#64)
 
 ## Open questions for Moshiur
 
-- **`infra/compliance/sanctions.json`** (BFIU public-notice seed) — to be pre-staged before Day 14 (Item 10). If absent at Day 14 `/start`, Claude Code STOPS and surfaces; will not invent from web search.
 - **§29 #9 (AIT withholding) + #10 (VAT/Mushak)** — legal consult email queued as Moshiur's parallel-track responsibility per Sprint 2 kick-off. Needed by end of Sprint 2 for Sprint 3 fee calculator.
 - **EPS sandbox credentials** in `eventpulse/staging/eps` — Sprint 3 dependency. If not obtained by end of Sprint 2, email `integration@eps.com.bd` via the template in prior memory.
 - **EPS library question** (`eps-gateway-nodejs` npm vs EPS-PG/EPS_Nodejs GitHub) — queued for the last session of Sprint 2.

@@ -4,6 +4,40 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-17 · Sprint 2 Item 10 scope amendment — third-party verification deferred to manual review
+
+**Context:** Sprint 2's original Item 10 (Day 14, alongside Item 9) shipped two automated local validators inside the submit endpoint: an eTIN format regex and a BFIU sanctions-list matcher (against `infra/compliance/sanctions.json` seeded from BFIU's public notice — Checkpoint #5 in the Sprint 2 kick-off). At Day 14 kick-off, after Day 13's KYC pipeline foundations landed and verified end-to-end (PRs #66, #67, #68), Moshiur reduced Item 10's scope materially — the same operational pattern as the Porichoy deferral two days earlier. Two automated validators that occasionally reject valid eTINs or miss real sanctions are worse than no validator at all (false confidence). MVP submission volume is sub-50/week through Phase 1, the reviewer is already looking at every submission anyway, and binding the system to a specific regex / sanctions-source algorithm at this stage commits us to maintenance cost without a corresponding fraud-prevention payoff.
+
+**Decision:** Item 10's automated validation work is **deferred to Phase 2**. For MVP, eTIN and NID number are captured as plain data fields on the submission (already supported by the loose `kyc_submissions.fields jsonb` column from Items 7+8), surfaced clearly in the reviewer queue UI (Item 13, Day 18), and validated manually by the reviewer against whatever sources they hold operationally.
+
+- **eTIN format check: deferred.** No regex enforcement in the submit endpoint. No `apps/api/src/domain/kyc/validators/etin.ts`. No automated rejection at submit-time. Reviewer compares submitted eTIN against the uploaded eTIN certificate by eye.
+- **BFIU sanctions matching: deferred.** No `infra/compliance/sanctions.json` pre-staging required. No matcher code. No automated flag-on-hit at submit-time. Reviewer screens against whatever BFIU sources they hold operationally (BFIU public notice PDFs, EPS-provided lists, ad-hoc news searches).
+- **No `kyc_submissions.flags jsonb` column in Sprint 2.** The flag artefacts only make sense alongside automated validators that emit them; until validators land, no flag column ships. When Phase 2 introduces both, one migration adds the column at the same time.
+- **Day 14 scope reduces to Item 9 only** — submission state machine + `POST /tenant/kyc/submissions` + audit trail + notification firing scaffolding. Cleaner deliverable, smaller blast radius.
+- **Item 10 residual absorbs into Item 13 (Day 18)** — surface eTIN + NID number already captured in `fields` jsonb clearly in the reviewer queue UI, alongside the manual NID image review affordance from the Porichoy deferral. Item 13's day-budget unchanged; the work is presentational not algorithmic.
+- **CLAUDE.md §13.0 status block update** queued for the Sprint 2 closeout v2.3 playbook bump bundle — current §13.0 still mentions "eTIN format check: local regex (no external call)" and "BFIU sanctions screening: manual list-check against `infra/compliance/sanctions.json` (seeded from BFIU's public sanctions notice, manual monthly refresh)". Update to align with the manual-review-for-MVP reality alongside the existing Porichoy deferral language. Not blocking Day 14.
+
+**Supersedes / replaces:**
+
+- Sprint 2 Day 14 Item 10 scope from the kick-off plan (eTIN regex + BFIU sanctions matcher in the submit endpoint).
+- **Checkpoint #5 from Sprint 2 kick-off** ("`infra/compliance/sanctions.json` MUST be pre-staged by Moshiur from the BFIU public notice before Item 10 begins; if absent at Day 14 `/start`, STOP and surface; do NOT invent a sanctions list from web search"). This checkpoint is **dissolved** — sanctions.json is no longer in Sprint 2 scope at all, so the pre-staging requirement has nothing to gate. Future revival of automated sanctions matching reopens the checkpoint shape under whatever sanctions-source decision the Phase 2 PR makes.
+
+**Cross-references:**
+
+- 2026-05-17 "Porichoy deferred — manual NID review for MVP" — same operational pattern, same rationale (sub-50-submissions/day envelope, manual review already happening, false-confidence risk of half-built automation).
+- 2026-05-17 "Sprint 2 kick-off — scope, human-checkpoints, and Porichoy deferral" — the kick-off document that introduced Checkpoint #5 (now dissolved by this amendment).
+- 2026-05-17 "KYC reviewer role for MVP — super-admin-only" — defines who does the manual eTIN/sanctions review.
+
+**Consequences:**
+
+- **Day 14 simplified.** One PR landing the state machine, the submit endpoint, the audit trail, and notification stubs. No regex code, no sanctions JSON file, no validator tests, no `flags` column migration. The /review pass focuses on RLS + audit-write completeness + state-machine correctness without the cognitive load of validator algorithm review.
+- **Reviewer workload at MVP scale: unchanged.** Same ~10 minutes/submission × ~48 submissions/day per reviewer × 1 super-admin reviewer = ~48/day cap that the Porichoy deferral already accepted. Manual eTIN + sanctions review fits inside this envelope; we'd already committed to the cap. If volume exceeds ~30/day sustained, that's the existing Phase 2 trigger for both Porichoy and validator automation — likely landed together as a single "KYC automation pass" PR.
+- **Audit-trail intact.** `kyc_submissions.fields` jsonb already captures eTIN + NID number from Items 7+8; reviewer queue UI (Item 13) surfaces them. When automated validation lands in Phase 2, validators read the same `fields` column and write a new `flags` column — no schema migration to the data they validate, only addition of the flag artefacts. Historical manual submissions remain `flags=null`, audit-trail clear.
+- **Path back to automation (Phase 2, single PR shape):** (a) one migration adds `kyc_submissions.flags jsonb default '{}'::jsonb`; (b) `validators/etin.ts` (regex) + `validators/sanctions.ts` (matcher against whatever sanctions source is operational); (c) wire into submit endpoint via **non-blocking advisory flag pattern** — validators flag for reviewer attention, reviewer still makes the final call (never auto-reject); (d) reviewer queue UI surfaces flag chips alongside the existing eTIN/NID display from Item 13. No business-logic refactor needed.
+- **§29 trigger if scope-reduction holds past Phase 2:** if eTIN/sanctions automation is still not implemented at Phase 3 kick-off (≈Sprint 13), file a §29 Open Decision asking whether the manual-review pattern is acceptable in perpetuity or whether at-scale automation must land before Phase 4 marketplace volume.
+
+---
+
 ## 2026-05-17 · Canonical GitHub Actions → AWS OIDC trust pattern (project standard)
 
 **Context:** Sprint 2 Day 13's first auto-deploy surfaced two gaps in the original Sprint 1 Day 9-10 OIDC plumbing: (a) the AWS-side OIDC provider + assumable role were never actually created — `AWS_OIDC_ROLE_STAGING` was a placeholder secret; (b) the trust shape needed three independent checks to enforce "only `deploy-staging.yml` running from `main` with the staging environment can assume the role." This entry establishes the trust-pattern as the project standard so future deploy roles (prod, future per-env workers, future per-team roles) all conform — and so a single canonical reference exists when a §17 playbook bump captures it.
