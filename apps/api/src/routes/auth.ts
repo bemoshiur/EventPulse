@@ -26,6 +26,9 @@ import { consumeMagicLink, requestMagicLink, type MagicLinkPurpose } from '../au
 import { createSession, revokeSession, type SessionAudience } from '../auth/sessions.js'
 import { hashToken } from '../auth/tokens.js'
 import { createUser, findUserByEmail, markEmailVerified } from '../auth/users.js'
+import { sendEmail } from '../infra/ses/client.js'
+import { renderMagicLink } from '../infra/ses/templates/magic-link.js'
+import { logger } from '../lib/logger.js'
 
 const auth = new Hono()
 
@@ -141,13 +144,35 @@ auth.post('/magic-link/request', zValidator('json', magicRequestSchema), async (
     userId: user?.id ?? null,
     ip: c.req.header('x-forwarded-for') ?? null,
   })
+
+  const consumeBase = process.env['EVENTPULSE_BASE_URL'] ?? 'https://staging.eventpulse.com.bd'
+  const url = `${consumeBase}/auth/magic?token=${encodeURIComponent(token)}&purpose=${input.purpose}`
+
+  const rendered = renderMagicLink({
+    url,
+    expiresAt,
+    purpose: input.purpose as 'signin' | 'signup',
+  })
+  try {
+    await sendEmail({
+      to: input.email,
+      subject: rendered.subject,
+      text: rendered.text,
+      html: rendered.html,
+      tags: { template_id: rendered.templateId, purpose: input.purpose },
+    })
+  } catch (err) {
+    logger.error({ err, email_sha: hashToken(input.email).slice(0, 16) }, 'magic_link.send_failed')
+    // Still return 202 so we don't reveal account state on transient SES errors.
+  }
+
   const debugInline = process.env['AUTH_RETURN_MAGIC_LINK'] === '1'
   return c.json(
     {
       data: {
         delivered: true,
         expiresAt: expiresAt.toISOString(),
-        ...(debugInline ? { _debug_token: token } : {}),
+        ...(debugInline ? { _debug_token: token, _debug_url: url } : {}),
       },
     },
     202,

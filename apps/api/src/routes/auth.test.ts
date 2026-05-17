@@ -24,6 +24,7 @@ describeIfDb('auth routes (integration)', () => {
     process.env['JWT_ACCESS_SECRET'] = 'a'.repeat(64)
     process.env['JWT_REFRESH_SECRET'] = 'b'.repeat(64)
     process.env['AUTH_RETURN_MAGIC_LINK'] = '1'
+    process.env['MAIL_DRY_RUN'] = '1'
   })
 
   afterAll(async () => {
