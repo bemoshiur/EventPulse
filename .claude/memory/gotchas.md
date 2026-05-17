@@ -4,6 +4,34 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## Pre-push hook blocks tag pushes from `main` as if they were branch pushes
+
+**Status:** WORKAROUND 2026-05-17 — `v0.1.0-sprint-1` tag pushed via documented `--no-verify` override per `.husky/pre-push` instruction. Hook improvement deferred to Sprint 2 Day 11 housekeeping.
+
+**Symptom:** `git push origin v0.1.0-sprint-1` (with no branch ref) fails with `✋  Direct push to 'main' is blocked.` from the pre-push hook even though only a tag is being pushed.
+
+**Why it happens:** `.husky/pre-push` checks `git symbolic-ref --short HEAD` to determine the current branch and matches against `^(main|prod)$`. When pushing only a tag, HEAD is still on `main` (because that's where the local checkout sits), so the hook fires identically to a branch push. The hook does not inspect git's pre-push stdin (which provides per-ref `<local ref> <local sha> <remote ref> <remote sha>` lines that would distinguish tag refs from branch refs).
+
+**Fix (immediate):** `git push --no-verify origin <tag>` per the hook's own documented override. Tag pushes are release operations, not direct branch pushes; the override is correct, not a violation.
+
+**Fix (durable, Sprint 2 housekeeping):** Update `.husky/pre-push` to read stdin and only block when at least one pushed ref starts with `refs/heads/main` or `refs/heads/prod`. Skeleton:
+
+```bash
+while read local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/prod)
+      # block as before
+      ;;
+    *)
+      ;;
+  esac
+done
+```
+
+**How to avoid:** For tag pushes from a protected branch checkout, use `--no-verify` and document the reason here. Don't bypass the hook for any other reason without filing a gotcha first.
+
+---
+
 ## Postgres superusers ALWAYS bypass RLS — `FORCE ROW LEVEL SECURITY` only binds table owners
 
 **Status:** RESOLVED 2026-05-17 — Sprint 1 Day 5-6 first CI integration test pass surfaced this. Tenant A's "expected 1, got 2" assertions revealed that RLS wasn't engaging at all even though every policy was correct and every `ENABLE ROW LEVEL SECURITY` / `FORCE ROW LEVEL SECURITY` was set.
