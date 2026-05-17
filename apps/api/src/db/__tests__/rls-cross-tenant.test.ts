@@ -6,6 +6,7 @@ import { resetPool, withSuperAdmin, withTenant } from '../client.js'
 import {
   feeOverrideLog,
   handleHistory,
+  kycSubmissions,
   oauthIdentities,
   reservedHandles,
   tenantFeeConfig,
@@ -226,6 +227,88 @@ describeIfDb('RLS cross-tenant isolation', () => {
       db.select().from(reservedHandles),
     )
     expect(tenantContextRows.length).toBeGreaterThan(0)
+  })
+
+  // ─── kyc_submissions (Sprint 2 Day 13 Item 7) ────────────────────────
+
+  it('tenant A can INSERT + SELECT its own kyc_submissions row', async () => {
+    const inserted = await withTenant(fixtures.tenantA!, async (db) =>
+      db
+        .insert(kycSubmissions)
+        .values({
+          tenantId: fixtures.tenantA!,
+          submissionType: 'individual',
+          tierRequested: 'tier_1',
+          documents: { nid_front: 's3://eventpulse-kyc-staging/tenants/.../nid_front.jpg' },
+          fields: { nid_number: '0000000000' },
+        })
+        .returning({ id: kycSubmissions.id, status: kycSubmissions.status }),
+    )
+    expect(inserted.length).toBe(1)
+    expect(inserted[0]!.status).toBe('submitted')
+
+    const rows = await withTenant(fixtures.tenantA!, async (db) =>
+      db.select().from(kycSubmissions).where(eq(kycSubmissions.id, inserted[0]!.id)),
+    )
+    expect(rows.length).toBe(1)
+    expect(rows[0]!.tenantId).toBe(fixtures.tenantA!)
+  })
+
+  it('tenant B cannot SELECT tenant A kyc_submissions rows', async () => {
+    const visibleToB = await withTenant(fixtures.tenantB!, async (db) =>
+      db.select().from(kycSubmissions).where(eq(kycSubmissions.tenantId, fixtures.tenantA!)),
+    )
+    expect(visibleToB.length).toBe(0)
+  })
+
+  it('tenant A cannot INSERT a kyc_submissions row stamped for tenant B (WITH CHECK)', async () => {
+    await expect(
+      withTenant(fixtures.tenantA!, async (db) =>
+        db.insert(kycSubmissions).values({
+          tenantId: fixtures.tenantB!,
+          submissionType: 'individual',
+          tierRequested: 'tier_1',
+        }),
+      ),
+    ).rejects.toThrow()
+  })
+
+  it('tenant A cannot UPDATE another tenant kyc_submissions row (zero rows affected)', async () => {
+    // Manufacture a tenant-B kyc row as super-admin.
+    const tenantBSubmission = await withSuperAdmin(async (db) =>
+      db
+        .insert(kycSubmissions)
+        .values({
+          tenantId: fixtures.tenantB!,
+          submissionType: 'individual',
+          tierRequested: 'tier_1',
+        })
+        .returning({ id: kycSubmissions.id }),
+    )
+    const target = tenantBSubmission[0]!.id
+
+    const updated = await withTenant(fixtures.tenantA!, async (db) =>
+      db
+        .update(kycSubmissions)
+        .set({ status: 'approved' })
+        .where(eq(kycSubmissions.id, target))
+        .returning({ id: kycSubmissions.id }),
+    )
+    expect(updated.length).toBe(0)
+
+    // Cleanup tenant-B's row via super-admin.
+    await withSuperAdmin(async (db) =>
+      db.delete(kycSubmissions).where(eq(kycSubmissions.id, target)),
+    )
+  })
+
+  it('super-admin can SELECT all kyc_submissions across tenants (BYPASSRLS)', async () => {
+    const rows = await withSuperAdmin(async (db) =>
+      db.select({ id: kycSubmissions.id, tenantId: kycSubmissions.tenantId }).from(kycSubmissions),
+    )
+    const tenantIds = new Set(rows.map((r) => r.tenantId))
+    // Tenant A's own insert from the first test above must be visible to super-admin.
+    expect(tenantIds.has(fixtures.tenantA!)).toBe(true)
   })
 
   // Touch the unused imports so eslint-unused-imports doesn't trip; also

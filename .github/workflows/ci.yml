@@ -113,6 +113,38 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
 
+  api-build:
+    # Sprint 2 Day 13 carry. Item 5's deploy attempt 4 (PR #62) was caused
+    # by `apps/api/tsconfig.build.json` inheriting `declarationMap: true`
+    # from the base tsconfig — `tsc --noEmit` (typecheck) doesn't trip
+    # the constraint, only the real production build does. This job runs
+    # the real production build for @eventpulse/api so the next prod-only
+    # foot-gun lands on a PR check, not a staging deploy retry.
+    name: API production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @eventpulse/api build
+
   integration-tests:
     name: Integration + RLS tests
     needs: detect-scope
