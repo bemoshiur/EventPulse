@@ -55,21 +55,28 @@ git reset --hard "origin/$REF"
 COMMIT=$(git rev-parse --short HEAD)
 echo "checked out $COMMIT"
 
-# 2) Install. Two flags worth their own comment:
+# 2) Install. Three knobs worth their own comment:
 #
-#   --prod=false: NODE_ENV=production (set by .env.staging above) makes
-#   pnpm skip devDependencies by default. We need devDeps installed for
-#   the build step — `next build` and `tsc` are both devDeps. The
-#   runtime doesn't need them, but we don't currently prune (next build
-#   on a fresh devDep install is faster than pruning + re-installing
-#   on the next deploy). `--prod=false` overrides the NODE_ENV default.
+#   NPM_CONFIG_PRODUCTION=false: NODE_ENV=production (set by
+#   .env.staging above) makes pnpm skip devDependencies by default.
+#   We need devDeps for `next build` and `tsc`. The env-var form is
+#   used instead of the CLI flag because pnpm's `--prod=false` parsing
+#   has version-to-version drift; NPM_CONFIG_PRODUCTION is the
+#   compatibility-stable knob across pnpm 8/9/10.
 #
 #   HUSKY=0: the root package.json `prepare` script invokes husky to
 #   wire git hooks. On a server with no developer commits there's
-#   nothing for husky to wire, but `husky` is a devDep and isn't
-#   guaranteed to be on PATH before the install completes. HUSKY=0 is
-#   husky's documented "skip me" env var per its README.
-HUSKY=0 $PNPM install --frozen-lockfile --prod=false
+#   nothing for husky to wire, and husky as a devDep isn't on PATH
+#   before the install completes. HUSKY=0 is husky's documented "skip
+#   me" env var.
+#
+#   --config.confirm-modules-purge=false: when the previous install
+#   left node_modules in a partial state (e.g. a prior --prod install
+#   then a later --prod=false), pnpm prompts "modules directories
+#   will be removed and reinstalled from scratch (Y/n)". SSM commands
+#   have no TTY → the prompt hangs forever. This flag auto-confirms.
+HUSKY=0 NPM_CONFIG_PRODUCTION=false \
+  $PNPM install --frozen-lockfile --config.confirm-modules-purge=false
 
 # 3) Build. NODE_OPTIONS caps the V8 heap below the t3.small (2 GB) RAM
 # ceiling — next build on the default heap (~1.7 GB) can OOM on a
