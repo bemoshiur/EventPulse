@@ -4,6 +4,34 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## AWS Security Group rule description rejects `>` (and most non-ASCII punctuation)
+
+**Status:** RESOLVED 2026-05-17 — discovered while authoring inbound rules for `eventpulse-staging-web` SG. Description "HTTP -> HTTPS redirect + ACME http-01 fallback" rejected with `InvalidParameterValue: Invalid rule description`.
+
+**Symptom:** `aws ec2 authorize-security-group-ingress` returns `(InvalidParameterValue) Invalid rule description. Valid descriptions are strings less than 256 characters from the following set: a-zA-Z0-9. _-:/()#,@[]+=&;{}!$*`.
+
+**Why it happens:** AWS restricts SG rule descriptions to a narrow ASCII set. Crucially absent: `>` `<` `'` `"` `\` `|` `?` `~`. Easy to slip in `->` arrows or HTML-like text without thinking about it. The error is descriptive but it's a paper-cut that costs one retry every time it happens.
+
+**Fix:** Spell the arrow out (`"HTTP redirect to HTTPS plus ACME http-01 fallback"`). Or just drop ornamental punctuation from SG descriptions entirely.
+
+**How to avoid:** When writing SG descriptions, stick to the allowed set: `a-zA-Z0-9 . _ - : / ( ) # , @ [ ] + = & ; { } ! $ *`. Single-quote and double-quote characters are also out — wrap-quotes are fine in your shell command but cannot appear *inside* the description string.
+
+---
+
+## IAM `--description` field rejects em-dash and other non-Latin-1 characters
+
+**Status:** RESOLVED 2026-05-17 — discovered when creating IAM role `eventpulse-staging-ec2` with description containing `—` (em-dash, U+2014).
+
+**Symptom:** `aws iam create-role --description "Event Pulse staging EC2 instance role — SSM access, ..."` returns `ValidationError: Value at 'description' failed to satisfy constraint: Member must satisfy regular expression pattern: <tab/LF/CR + ASCII printable + Latin-1 Supplement>` (the full regex in the AWS error message contains literal tab and CR characters that do not reproduce cleanly in markdown).
+
+**Why it happens:** The allowed character set is tab/LF/CR plus printable ASCII plus the Latin-1 Supplement block (`U+00A1`-`U+00FF`). Em-dash (`U+2014`), en-dash (`U+2013`), curly quotes (`U+2018`-`U+201F`), ellipsis (`U+2026`) — all outside that range. Easy to slip in via copy-paste from documents that auto-promote `--` to `—`.
+
+**Fix:** Use ASCII `-` (regular hyphen-minus) in `--description` fields. If a longer separator is needed, write a double-dash `--`.
+
+**How to avoid:** Avoid copying CLI commands out of word processors. When pasting from the playbook (which uses real em-dashes for prose readability), strip them in the command line. Same risk applies to other AWS `--description` fields (KMS keys, etc).
+
+---
+
 ## CLAUDE.md §14.1 contradicts schema §9.12 on default fee mode
 
 **Status:** RESOLVED 2026-05-16 — see `decisions.md` → "Default fee handling mode: pass_through". §9.12 was updated to match §14.1.
