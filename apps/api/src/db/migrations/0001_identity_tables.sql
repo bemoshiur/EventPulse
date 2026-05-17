@@ -212,4 +212,22 @@ CREATE TRIGGER trg_tenant_fee_config_updated_at
   BEFORE UPDATE ON tenant_fee_config
   FOR EACH ROW EXECUTE FUNCTION _eventpulse_set_updated_at();
 
+-- ─── grant table + sequence privileges to eventpulse_admin ─────────────
+-- BYPASSRLS only skips RLS *policy* checks; the role still needs
+-- ordinary table privileges to read/write. ALTER DEFAULT PRIVILEGES
+-- propagates the same grants to any future tables created in this
+-- schema by CURRENT_USER (the migration runner).
+GRANT USAGE ON SCHEMA public TO eventpulse_admin;
+GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES, TRIGGER
+  ON ALL TABLES IN SCHEMA public TO eventpulse_admin;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO eventpulse_admin;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO eventpulse_admin;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES, TRIGGER ON TABLES TO eventpulse_admin;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO eventpulse_admin;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT EXECUTE ON FUNCTIONS TO eventpulse_admin;
+
 COMMIT;
