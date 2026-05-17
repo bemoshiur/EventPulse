@@ -1,12 +1,19 @@
 # Event Pulse — Claude Code Mega Playbook
 
 > **One prompt. Bootstrap to production.**
-> Version 2.1 · 16 May 2026
+> Version 2.2 · 17 May 2026
 > Author: Moshiur Rahman / Public Pulse Agency / TiCON System Limited
 
 ---
 
 ## §-1 — Changelog
+
+**v2.2 — 17 May 2026 (minor)**
+- **Auth library locked to rolled-our-own** — Lucia (in maintenance mode as of 2026) replaced by an in-repo composition of `@noble/hashes` (argon2id), `jose` (JWT), `arctic` (OAuth providers), and a custom Postgres session adapter. Decision rationale in `.claude/memory/decisions.md` "Auth foundation library choice" (2026-05-17). Tech-stack table updated (§1.2). Auth section rewritten (§5).
+- **Role hierarchy codified into §4** — `eventpulse_app` (non-superuser, RLS engages) ← `eventpulse_admin` (BYPASSRLS + table grants) as the canonical Postgres role pair. Surfaces the gotcha that superusers always bypass RLS regardless of `FORCE ROW LEVEL SECURITY`; BYPASSRLS alone is not enough without table grants. (§4.2.1)
+- **§13.0 KYC Status block** — Porichoy NID validation deferred to a dedicated PR once credentials arrive. MVP ships KYC validation as manual review (eTIN regex + bank-name match + sanctions list). Reflects `.claude/memory/decisions.md` "Porichoy deferred — manual NID review for MVP" (2026-05-17).
+- **§17 clarifications** — SSM-only shell access pattern (no SSH keys, no port 22) explicit in §17.2 + §17.7; staging EBS sized at 30 GB explicitly (§17.2); five explicit staging DNS A records enumerated (§17.6); KYC bucket gets its own per-purpose CMK per `.claude/memory/decisions.md` "Dedicated KMS CMK for KYC bucket" (2026-05-17) — pattern documented in §17.9.
+- **§29 Open Decisions** — Items resolved during Sprint 1 and the Sprint 2 kick-off marked closed with date + decision pointer: auth library (resolved 2026-05-17, rolled-our-own), GitHub plan branch protection (resolved 2026-05-16, pre-push hook + CI gates), KYC reviewer role for MVP (resolved 2026-05-17, super-admin-only), Porichoy deferral path (resolved 2026-05-17, manual review + scaffold-only adapter).
 
 **v2.1 — 16 May 2026 (minor)**
 - **Attendee accounts** brought forward from Phase 3 to Phase 2; new portal at `my.eventpulse.com.bd` (§2.1, §2.7, §17.6)
@@ -95,7 +102,7 @@ These decisions are final. Do not propose alternatives without asking.
 | Email | AWS SES | n/a | Plus tenant-domain DKIM in white-label tier |
 | SMS | SSL Wireless API (Bangladesh) | n/a | Primary; secondary fallback TBD |
 | Payments | EPS Bangladesh (`eps-gateway-nodejs` npm) | latest | Production from day one |
-| Auth core | Lucia Auth + JWT | latest | Custom Postgres session adapter; three audiences (super-admin, tenant, attendee) |
+| Auth core | Rolled-our-own (in-repo) | n/a | `@noble/hashes` argon2id + `jose` JWT (HS256, 15-min access + 7-day refresh) + `arctic` for OAuth providers + custom Postgres session adapter (`sessions` table). Three audiences (super-admin, tenant, attendee). **Lucia was the original pick (v1.0–v2.1) but is in maintenance mode as of 2026; we composed the same surface ourselves.** Decision rationale: `.claude/memory/decisions.md` "Auth foundation library choice" (2026-05-17). |
 | Auth providers | Email/password, Email magic link, Google OAuth 2.0, Apple Sign-In | n/a | All four available from day one (see §5) |
 | Validation | zod | latest | Every API input |
 | Logging | pino (structured JSON) | latest | Files on disk, rotated by PM2, shipped to CloudWatch Agent |
@@ -663,6 +670,11 @@ export async function withTenant<T>(
 ): Promise<T> {
   const client = await pool.connect()
   try {
+    // SET LOCAL ROLE first — only then does RLS engage. The pool owner is
+    // typically a superuser (so it can create extensions / run migrations);
+    // superusers ALWAYS bypass RLS regardless of FORCE ROW LEVEL SECURITY.
+    // Per §4.2.1: tenant-scoped queries MUST run as eventpulse_app.
+    await client.query('SET LOCAL ROLE eventpulse_app')
     await client.query('SELECT set_config($1, $2, true)', [
       'app.current_tenant_id', tenantId,
     ])
@@ -676,7 +688,9 @@ export async function withTenant<T>(
 export async function withSuperAdmin<T>(
   fn: (tx: NodePgDatabase) => Promise<T>
 ): Promise<T> {
-  // Run as a Postgres role that bypasses RLS (eventpulse_admin)
+  // Run as a Postgres role that bypasses RLS (eventpulse_admin).
+  // BYPASSRLS alone is NOT enough — the role also needs explicit table grants;
+  // see §4.2.1 for the grants the migration must include.
   const client = await pool.connect()
   try {
     await client.query('SET LOCAL ROLE eventpulse_admin')
@@ -687,6 +701,37 @@ export async function withSuperAdmin<T>(
   }
 }
 ```
+
+### 4.2.1 Postgres Role Hierarchy (load-bearing — read carefully)
+
+Multi-tenant isolation depends on two specific Postgres roles existing and being used correctly. The pool owner (typically a superuser used for migrations + extension creation) **MUST NOT** be used for application queries. Every application query runs as one of:
+
+- `eventpulse_app` — **NOLOGIN**, **NOT** a superuser, **NOT** BYPASSRLS. Granted `SELECT, INSERT, UPDATE, DELETE, REFERENCES, TRIGGER` on `ALL TABLES IN SCHEMA public` + matching `ALTER DEFAULT PRIVILEGES`. This is the role `withTenant()` switches into via `SET LOCAL ROLE`. Because it is a non-superuser without BYPASSRLS, **RLS engages**, and `current_setting('app.current_tenant_id')` filters reads/writes per the policies in §4.3.
+- `eventpulse_admin` — **NOLOGIN**, **NOT** a superuser, **BYPASSRLS**. Granted `SELECT, INSERT, UPDATE, DELETE, REFERENCES, TRIGGER` on `ALL TABLES IN SCHEMA public` + matching `ALTER DEFAULT PRIVILEGES`. This is the role `withSuperAdmin()` switches into. RLS does not engage (BYPASSRLS), but **the role still needs table grants** — BYPASSRLS skips only the policy check, not the underlying `GRANT` check, which is a separate authorisation layer.
+
+Migration template (every migration that adds new tables must include this, or the matching `ALTER DEFAULT PRIVILEGES` must be in place):
+
+```sql
+GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES, TRIGGER
+  ON ALL TABLES IN SCHEMA public TO eventpulse_app, eventpulse_admin;
+
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public
+  TO eventpulse_app, eventpulse_admin;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES, TRIGGER
+  ON TABLES TO eventpulse_app, eventpulse_admin;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO eventpulse_app, eventpulse_admin;
+```
+
+**Why this is load-bearing:**
+
+1. **Postgres superusers bypass RLS unconditionally.** `ENABLE ROW LEVEL SECURITY` + `FORCE ROW LEVEL SECURITY` only bind non-superuser, non-BYPASSRLS roles. If you query through a superuser connection — including the pool owner during dev — RLS silently does nothing and tenant A's queries see tenant B's data. The test suite will pass against your superuser connection while the runtime leaks data across tenants.
+2. **BYPASSRLS skips only the policy check, not table grants.** A role created with `CREATE ROLE eventpulse_admin BYPASSRLS;` but no `GRANT` will error `permission denied for table users` the first time `withSuperAdmin()` runs. The first PR that added this pattern (PR #43, Sprint 1 Day 5-6) hit this exact error in CI; the fix is the `GRANT` block above.
+
+**Gotcha trail:** `.claude/memory/gotchas.md` "Postgres superusers ALWAYS bypass RLS" + "BYPASSRLS roles need explicit table grants — they're not implicit". Treat both as immutable rules for the lifetime of the multi-tenant model.
 
 ### 4.3 RLS Policy Template
 
@@ -709,7 +754,7 @@ ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;
 ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
 ```
 
-The `eventpulse_admin` role uses `BYPASSRLS` for super admin operations.
+`eventpulse_app` runs under the policies; `eventpulse_admin` bypasses them. See §4.2.1 for the full role definition and grants.
 
 ### 4.4 RLS Test Pattern (Required for Every New Table)
 
@@ -747,9 +792,9 @@ All four methods feed into the same `users` row. Linking is automatic when the v
 
 **Email + password.** Argon2id hashed. Rate-limited 5 attempts / 15 min / (email + IP). Optional TOTP MFA.
 
-**Email magic link.** Default for new sign-ups. One-time token, 15-minute TTL, single-use, bound to the requesting IP's `/24` for low friction without sacrificing safety. Implemented with Lucia's one-time-token primitive plus our `magic_links` table.
+**Email magic link.** Default for new sign-ups. One-time token, 15-minute TTL, single-use, bound to the requesting IP's `/24` for low friction without sacrificing safety. Implemented with a SHA-256-hashed 256-bit random token stored in `magic_links` keyed on `token_hash` (raw token never persisted); consume-once enforced by `consumed_at` + atomic `UPDATE … WHERE consumed_at IS NULL`. `apps/api/src/auth/magic-link.ts`.
 
-**Google OAuth 2.0.** OIDC flow via `arctic` (Lucia's OAuth helper library). Scopes: `openid email profile`. Stores Google `sub` in `oauth_identities`. Required env: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`.
+**Google OAuth 2.0.** OIDC flow via `arctic` (a small, framework-agnostic OAuth helper library; works fine without Lucia). Scopes: `openid email profile`. Stores Google `sub` in `oauth_identities`. Required env: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`.
 
 **Apple Sign-In.** OIDC flow via `arctic` with Apple's specific JWT-based client_secret minted from the team's private key. Apple's name field is only sent on first auth — we capture it. Required env: `APPLE_OAUTH_CLIENT_ID` (Services ID), `APPLE_OAUTH_TEAM_ID`, `APPLE_OAUTH_KEY_ID`, `APPLE_OAUTH_PRIVATE_KEY` (PEM, multi-line via Secrets Manager).
 
@@ -767,7 +812,17 @@ All four methods feed into the same `users` row. Linking is automatic when the v
 
 ### 5.3 Session Adapter
 
-Lucia Auth with a custom Postgres adapter using the `sessions` table:
+**Rolled our own.** Lucia (the original v1.0–v2.1 pick) entered maintenance mode in early 2026; rather than adopt a soon-orphaned dependency for the most security-critical surface we own, we compose the same surface in-repo. See `.claude/memory/decisions.md` "Auth foundation library choice" (2026-05-17) for the full rationale.
+
+The pieces, all under `apps/api/src/auth/`:
+
+- `hash.ts` — argon2id via `@noble/hashes` (pure JS, no native build dependency). Per-password salt; default parameters tuned for `~100ms` hash time on `t3.small`.
+- `tokens.ts` — 256-bit `crypto.randomBytes` → base64url for the wire token; SHA-256 of the wire token is what we store. IPv4 `/24` prefix bound to the token for magic-link consumption.
+- `sessions.ts` — custom Postgres session adapter. Sessions live in the `sessions` table (DDL below); `id` is a 256-bit opaque token; cookie is HttpOnly, Secure, SameSite=Lax, set on the per-audience subdomain. Lookup is one indexed `WHERE id = $1 AND expires_at > now()` query per request.
+- `magic-link.ts` — 15-minute TTL, single-use, /24-bound. `magic_links` table per §9.1.
+- `jwt.ts` — HS256 via `jose`. 15-minute access token + 7-day refresh token; refresh rotates the access token without re-querying user state, refresh rotation regenerates the refresh token (revoke chain). JWT carries `aud` (super-admin / tenant / attendee), `sub` (user id), `tenant_id` (when audience is tenant). Signing key from Secrets Manager; rotated quarterly with overlap window.
+- `oauth.ts` — Google + Apple via `arctic` (lazy-loaded so missing credentials in dev don't crash boot). PKCE always on. Verified-email auto-link per §5.2.
+- `middleware.ts` — `requireSuperAdmin`, `requireTenant`, `requireAttendee`, `optionalAuth`. Each verifies JWT, hydrates session from `sessions` row, attaches `c.set('user', ...)` + audience-specific context.
 
 ```sql
 CREATE TABLE sessions (
@@ -2019,6 +2074,27 @@ Toggle in `white_label_settings`. Affects:
 
 ## §13 — KYC Engine
 
+### 13.0 Status (v2.2) — Porichoy deferred, MVP uses manual review
+
+> **Read this before §13.1.** Porichoy (`api.porichoy.gov.bd`) is treated throughout §13 as the **primary automated NID validation source**. At Sprint 2 kick-off (2026-05-17), Moshiur reported Porichoy is unreachable and procurement of API credentials is unclear. Per `.claude/memory/decisions.md` "Porichoy deferred — manual NID review for MVP" (2026-05-17), the MVP ships KYC validation as a **manual reviewer flow**, with the Porichoy integration **scaffolded but not wired**.
+>
+> **What ships in MVP (Sprint 2):**
+>
+> - NID validation: **manual.** Super admin review queue displays the uploaded NID image inline; reviewer enters the NID number from the image into a dedicated field for audit; system performs no automated check against Porichoy.
+> - eTIN format check: **local regex** (no external call).
+> - Bank/MFS name match against NID name: **manual** checkbox on the review form.
+> - BFIU sanctions screening: **manual list-check** against `infra/compliance/sanctions.json` (seeded from BFIU's public sanctions notice, manual monthly refresh).
+> - SIM-NID match: **deferred** until Porichoy lands (the operator API was always called via Porichoy in the original design).
+> - Porichoy adapter: **scaffold only.** Interface `PorichoyClient`, env vars `POROCHOY_API_KEY` + `POROCHOY_BASE_URL`, Secrets Manager entry placeholder, TODO-stub for `nidVerify()`.
+>
+> **Behaviour of §13.1–§13.3 under the deferral:** the flow description in §13.1 still reads accurately, but the bullet "Run automated checks: NID format / eTIN format / Bank/MFS name match / SIM-NID match / BFIU sanctions / Porichoy NID validation" applies only to **automated** sub-items that can run today (NID format + eTIN format). All other sub-items become **manual reviewer steps** that the super admin completes in the review queue. The `kyc_submissions.nid_verified` boolean is set to true by reviewer action rather than by API call; `kyc_submissions.porichoy_verification_id` stays nullable. When Porichoy lands, new submissions populate the column from the API; historical manual submissions remain null (and audit-trail clear).
+>
+> **Throughput ceiling under manual review:** ~10 minutes per submission × ~48 submissions/day per reviewer × 1 reviewer (super-admin-only per `.claude/memory/decisions.md` "KYC reviewer role for MVP — super-admin-only" 2026-05-17) = ~48/day cap. Sprint 3 trigger to revisit: > 30 submissions/day sustained, OR before any third party gets KYC-reviewer responsibility, whichever first.
+>
+> **When credentials arrive:** one focused PR wires `nidVerify()` + integration tests against a recorded fixture; no business-logic changes needed because the manual flow already produces the same `nid_verified` column shape the live integration would write. The Porichoy scaffold landed during Sprint 2 Day 20 is structured specifically to make that PR small.
+>
+> **Sub-50-submissions/day operational assumption:** Phase 1 will not exceed this; Phase 2 expansion (attendee accounts + self-service hosting at `my.eventpulse.com.bd` per §2.1) is the trigger to reassess. If Porichoy remains unreachable through Phase 2, the entry in §29 (resolved 2026-05-17 with this deferral) reopens as a §29 Open Decision asking for an alternative NID validation source.
+
 ### 13.1 Tier Flow
 
 ```
@@ -2483,16 +2559,17 @@ Internet
 
 ### 17.2 EC2 Server Specification
 
-| Item | Value |
-|---|---|
-| Instance type | `t3.large` (2 vCPU, 8 GB RAM). Can scale up to `m6i.xlarge` if needed |
-| AMI | Canonical Ubuntu 24.04 LTS |
-| Storage | 100 GB gp3 EBS root volume (3000 IOPS, 125 MB/s) |
-| Elastic IP | One static IP, attached at boot |
-| Security group | inbound: 80, 443 from 0.0.0.0/0; 22 from bastion IP only; outbound: all |
-| IAM role | EC2 instance profile with S3 write to `eventpulse-prod-*` and SES send + Secrets Manager read |
-| Backup | Daily EBS snapshot retained 7 days + nightly pg_dump to S3 retained 90 days |
-| Monitoring | CloudWatch Agent (CPU, memory, disk, swap) + custom Node app metrics via pino → CloudWatch Logs |
+| Item | Value (production target) | Value (staging — actual MVP) |
+|---|---|---|
+| Instance type | `t3.large` (2 vCPU, 8 GB RAM). Can scale up to `m6i.xlarge` if needed | `t3.small` (2 vCPU, 2 GB RAM) — sized for the $40/mo AWS Budget canary during dev |
+| AMI | Canonical Ubuntu 24.04 LTS | Canonical Ubuntu 24.04 LTS (noble) |
+| Storage | 100 GB gp3 EBS root volume (3000 IOPS, 125 MB/s), KMS-encrypted | **30 GB** gp3 EBS root volume, KMS-encrypted with `alias/eventpulse-staging` CMK. KYC documents live in S3 (§17.9), not on the EBS volume — the staging size is intentional and bounded |
+| Elastic IP | One static IP, attached at boot | One static IP, attached at boot (currently `18.141.7.246`) |
+| Security group | **inbound 80 + 443 only** (both IPv4 + IPv6, from `0.0.0.0/0` + `::/0`); **port 22 NEVER opened** — shell access is SSM Session Manager only (§17.7); outbound: all | Same as production |
+| IAM role | EC2 instance profile with S3 write to `eventpulse-*` (env-scoped) + SES send + Secrets Manager read + SSM core (`AmazonSSMManagedInstanceCore`) + scoped ACME Route 53 for certbot DNS-01 | Same as production, namespaced to `staging` resources |
+| IMDSv2 | Required (hop limit 2) | Required (hop limit 2) — protects against SSRF-style metadata abuse |
+| Backup | Daily EBS snapshot retained 7 days + nightly pg_dump to S3 retained 90 days | Same as production |
+| Monitoring | CloudWatch Agent (CPU, memory, disk, swap) + custom Node app metrics via pino → CloudWatch Logs | Same as production |
 
 ### 17.3 Software Stack on the EC2
 
@@ -2632,7 +2709,7 @@ Deploys use `pm2 reload ecosystem.config.js` for zero-downtime reload.
 
 ### 17.6 Route 53 Configuration
 
-Single hosted zone for `eventpulse.com.bd`:
+Single hosted zone for `eventpulse.com.bd`. **Production target** (as planned for prod cutover):
 
 ```
 Type   Name                          Value                       TTL
@@ -2650,7 +2727,24 @@ TXT    <SES DKIM CNAMEs>             ...                         3600
 TXT    eventpulse.com.bd             v=spf1 include:amazonses.com -all   3600
 ```
 
+**Staging — actual MVP records** (in hosted zone `Z003493917KJX7VCR8ZMR`, pointing at Elastic IP `18.141.7.246`). Note: staging deliberately does **NOT** use a wildcard; five explicit A records are enumerated instead so each subdomain is auditable and Let's Encrypt issues a SAN cert covering exactly that list (no surprises from an over-broad wildcard during dev):
+
+```
+Type   Name                              Value          TTL
+A      staging.eventpulse.com.bd         18.141.7.246   300
+A      app.staging.eventpulse.com.bd     18.141.7.246   300
+A      admin.staging.eventpulse.com.bd   18.141.7.246   300
+A      api.staging.eventpulse.com.bd     18.141.7.246   300
+A      my.staging.eventpulse.com.bd      18.141.7.246   300
+```
+
+Plus the apex-shared records that serve both environments: SES DKIM CNAMEs (3 records), DMARC TXT at `_dmarc`, SPF TXT at apex.
+
+When prod cuts over, the wildcard pattern from the production-target block above replaces the five enumerated staging records (or coexists, depending on whether staging stays in the same zone post-launch).
+
 ### 17.7 TLS — Let's Encrypt Wildcard via DNS-01
+
+**Production target** (wildcard issuance):
 
 ```bash
 certbot certonly \
@@ -2661,6 +2755,31 @@ certbot certonly \
   --agree-tos \
   --non-interactive
 ```
+
+**Staging — actual MVP** (SAN-only, matching the five explicit records from §17.6):
+
+```bash
+certbot certonly \
+  --dns-route53 \
+  -d staging.eventpulse.com.bd \
+  -d app.staging.eventpulse.com.bd \
+  -d admin.staging.eventpulse.com.bd \
+  -d api.staging.eventpulse.com.bd \
+  -d my.staging.eventpulse.com.bd \
+  --email moshiur@publicpulse.com.bd \
+  --agree-tos \
+  --non-interactive
+```
+
+(LE registration email: `moshiur@publicpulse.com.bd` while `security@eventpulse.com.bd` does not yet have a deliverable mailbox — SES inbound + S3 + Lambda forwarder is scheduled for Sprint 3 per `.claude/memory/handoff.md`.)
+
+**Shell access (load-bearing — no SSH, no port 22 ever).** All operator + deploy shell access is via AWS SSM Session Manager:
+
+```bash
+aws ssm start-session --target i-02e4fddeb923c14f9 --profile eventpulse
+```
+
+The EC2 security group has port 22 closed permanently. No SSH key pair is generated for the instance. CI deploys use SSM `SendCommand` against a documented runbook script (§18.2) — not `ssh user@host`. Every session is logged to S3 (`eventpulse-staging-ssm-logs` + CloudWatch Logs `/eventpulse/staging/ssm-sessions`) with KMS encryption and 90-day retention.
 
 Renewal via systemd timer `certbot.timer` running twice daily.
 
@@ -2674,9 +2793,9 @@ Renewal via systemd timer `certbot.timer` running twice daily.
 
 ### 17.9 Secrets Management
 
-For MVP, secrets live in `/home/eventpulse/.env.production` with `chmod 600` and owner `eventpulse:eventpulse`. The file is **never committed**. It is bootstrapped from AWS Secrets Manager on instance start via a launch script that reads `eventpulse/prod/*` and writes the env file.
+For MVP, secrets live in `/home/eventpulse/.env.production` (or `.env.staging`) with `chmod 600` and owner `eventpulse:eventpulse`. The file is **never committed**. It is bootstrapped from AWS Secrets Manager on instance start via a launch script that reads `eventpulse/<env>/*` and writes the env file.
 
-Secrets Manager entries:
+Secrets Manager entries (one per integration — the **per-purpose pattern**, kept consistent with the per-purpose KMS pattern below):
 
 ```
 eventpulse/prod/database
@@ -2692,7 +2811,22 @@ eventpulse/prod/oauth-google
 eventpulse/prod/oauth-apple
 ```
 
+(Replace `prod` with `staging` for the staging environment; each environment owns its own set.)
+
 JWT signing key rotated quarterly with overlap; DB master semi-annually.
+
+**KMS — per-purpose CMK pattern (load-bearing for blast-radius isolation).** Each environment gets a *general* CMK for routine encryption (EBS root volume, SSM session logs S3 bucket, CloudWatch Logs group) plus *dedicated* CMKs for high-PII surfaces. The general CMK compromise scope is "operational logs + EBS volume contents"; a dedicated CMK compromise scope is the single high-PII data store and nothing else.
+
+| CMK alias | Scope | Rationale |
+|---|---|---|
+| `alias/eventpulse-<env>` | EBS root volume, SSM session logs S3 bucket, CloudWatch Logs group, env-level catch-all | Routine encryption for operational data |
+| `alias/eventpulse-kyc-<env>` | KYC documents S3 bucket only (`eventpulse-kyc-<env>`) | Per `.claude/memory/decisions.md` "Dedicated KMS CMK for KYC bucket — per-purpose blast-radius isolation" (2026-05-17). KYC documents are the highest-PII-sensitivity data on the platform per §1.3 R4 |
+| `alias/eventpulse-payouts-<env>` *(planned, Sprint 7+)* | Banking + MFS account snapshots encrypted at rest beyond Postgres RLS | Same rationale, separate blast radius |
+| `alias/eventpulse-contracts-<env>` *(planned, Phase 3)* | Signed legal artefacts (Trust Center consent receipts as PDFs, custom enterprise contracts) | Same rationale, separate blast radius |
+
+Cost is trivial ($1/month per CMK). The pattern is enforced by code review (`/review` flags any new bucket/log group encrypted with a CMK that doesn't match the data's sensitivity tier).
+
+Rotation is on for every CMK. Rotation cycle interval defaults to one year; high-PII CMKs may rotate more aggressively if a compromise scenario surfaces.
 
 ### 17.10 Backups
 
@@ -3278,7 +3412,7 @@ A unit of work is "done" when all of the following are true:
 - Day 1–2: Scaffold monorepo (Turborepo, pnpm, tsconfig, eslint, prettier, vitest, playwright). Configure design tokens, Tailwind theme with the §1.5 palette, glass utilities, and gradient mesh component.
 - Day 3–4: Provision EC2 (staging first), run Ansible playbook to install Node 22, Postgres 16, Redis 7, Nginx, certbot, pm2. Configure Route 53 hosted zone + Elastic IP + wildcard cert. Verify HTTPS works on `staging.eventpulse.com.bd`, `app.staging.eventpulse.com.bd`, `admin.staging.eventpulse.com.bd`.
 - Day 5–6: Drizzle schema for `tenants`, `users`, `oauth_identities`, `magic_links`, `sessions`, `tenant_users`, `super_admins`, `tenant_fee_config`. Migrations + RLS policies + seed scripts + unit + RLS tests.
-- Day 7–8: Auth flows — email/password, magic link, Google OAuth, Apple OAuth (all four). Lucia adapter wired to Postgres `sessions` table. JWT issuance per audience (super-admin, tenant, attendee).
+- Day 7–8: Auth flows — email/password, magic link, Google OAuth, Apple OAuth (all four). Custom Postgres session adapter wired to `sessions` table (rolled-our-own composition; Lucia rejected — see v2.2 changelog and §5.3). JWT issuance per audience (super-admin, tenant, attendee).
 - Day 9–10: Email sending via SES (verify domain, ship `tenant_welcome`, `verify_email`, `magic_link_signin` templates). PM2 ecosystem file configured; deploy.sh + rollback.sh runbook scripts. CI green.
 
 **Sprint 2 — KYC, Onboarding & Trust Center Skeleton**
@@ -3419,6 +3553,14 @@ Claude Code must STOP and ask before proceeding if any of these come up. Items m
 - ✓ Social layer (follows, friends-attending): deferred to Phase 4
 - ✓ Handle convention: 3–30 chars lowercase, picked at first event publish, 30-day redirect on change
 - ✓ GitHub plan: free; branch protection enforced via pre-push hooks + CI gates + `workflow_dispatch` typed inputs (`.claude/memory/decisions.md` 2026-05-16). Upgrade to Pro the day a second developer joins.
+
+**Resolved in v2.2 (Sprint 1 + Sprint 2 kick-off):**
+- ✓ Auth foundation library — rolled our own in-repo composition (`@noble/hashes` argon2id + `jose` JWT + `arctic` OAuth + custom Postgres session adapter). Lucia is in maintenance mode as of 2026 and not adoptable for the most security-critical surface. See `.claude/memory/decisions.md` "Auth foundation library choice" (2026-05-17). Documented in §1.2 + §5.
+- ✓ Porichoy NID validation availability — service unreachable at Sprint 2 kick-off; procurement timeline unclear. MVP ships KYC validation as manual reviewer flow with Porichoy adapter scaffolded but not wired. Reopens as §29 Open Decision if Porichoy remains unreachable through Phase 2. See `.claude/memory/decisions.md` "Porichoy deferred — manual NID review for MVP" (2026-05-17) and §13.0 Status block above.
+- ✓ KYC reviewer role for MVP — super-admin-only. `kyc_reviewer` role + multi-reviewer routing deferred to Phase 2 Sprint 6 alongside team-management UI. See `.claude/memory/decisions.md` "KYC reviewer role for MVP — super-admin-only" (2026-05-17).
+- ✓ KYC bucket KMS — dedicated `alias/eventpulse-kyc-<env>` CMK per per-purpose blast-radius pattern (§17.9). See `.claude/memory/decisions.md` "Dedicated KMS CMK for KYC bucket" (2026-05-17).
+- ✓ Trust Center v0.1 placeholder content policy — skeleton-only (real headings + one-sentence "PLACEHOLDER — to be drafted by counsel covering X" per section), non-dismissable DRAFT banner, no AI-generated full-text drafts. See `.claude/memory/decisions.md` "Trust Center v0.1 placeholders — skeleton-only" (2026-05-17). Onboarding flow gates on consent → consent gates on v1.0 documents → first paying tenant blocked until counsel returns drafts.
+- ✓ Postgres role hierarchy for RLS — `eventpulse_app` (NOLOGIN, non-superuser, no BYPASSRLS) ← `eventpulse_admin` (NOLOGIN, non-superuser, BYPASSRLS) with explicit table grants for both. Codified in §4.2.1. Surfaced by the Sprint 1 Day 5-6 CI failure documented in `.claude/memory/gotchas.md` "Postgres superusers ALWAYS bypass RLS" + "BYPASSRLS roles need explicit table grants".
 
 **Still open — Claude Code asks before assuming:**
 
