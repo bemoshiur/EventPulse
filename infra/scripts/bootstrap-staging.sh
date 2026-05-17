@@ -127,6 +127,73 @@ secret_put() {
   rm -f "$tmp"
 }
 
+# ─── 0) Postgres superuser prep — must run BEFORE migration 0001 ─────
+#
+# The migration runner connects as the non-superuser `eventpulse` role.
+# That role can CREATE ROLE (it has CREATEROLE on staging) but it CANNOT
+# `GRANT eventpulse_app TO CURRENT_USER WITH ADMIN OPTION` for a role it
+# just created — Postgres requires ADMIN OPTION on the target role, and
+# the creator does NOT automatically get ADMIN OPTION (PG 16 semantics).
+# This caught us during Sprint 2 Day 11 Item 5 (8 deploy attempts; one
+# of the operator fixes was running this manually as `postgres` via psql).
+# See `.claude/memory/gotchas.md` "Postgres `eventpulse` user lacks
+# ADMIN OPTION → migration 0001 GRANT fails".
+#
+# The fix has to happen as the `postgres` superuser, via local socket.
+# This step is idempotent: re-running just re-applies grants that already
+# exist (Postgres treats re-granting as a no-op).
+#
+# Additionally, on a fresh EC2 the public-schema tables that already
+# exist (from a manual setup or a prior bootstrap) need eventpulse
+# ownership so the migration runner can ALTER them. This is the
+# ownership half of the carry from Day 11 (gotchas.md "Postgres tables
+# pre-existed without migration history").
+
+log "step 0: Postgres superuser prep"
+sudo -u postgres /usr/lib/postgresql/16/bin/psql -d eventpulse_staging -v ON_ERROR_STOP=1 <<'PGEOF'
+-- Idempotent role creation. Migration 0001 also has this guard, but
+-- doing it here as superuser means the WITH ADMIN OPTION grant below
+-- can land BEFORE migration 0001 ever runs.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'eventpulse_app') THEN
+    CREATE ROLE eventpulse_app WITH NOLOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'eventpulse_admin') THEN
+    CREATE ROLE eventpulse_admin WITH NOLOGIN BYPASSRLS;
+  END IF;
+END
+$$;
+
+-- WITH ADMIN OPTION so the migration runner can re-issue the GRANTs
+-- (no-op when already granted, but errors without ADMIN OPTION).
+GRANT eventpulse_app   TO eventpulse WITH ADMIN OPTION;
+GRANT eventpulse_admin TO eventpulse WITH ADMIN OPTION;
+
+-- Reassign ownership of any pre-existing public-schema tables that are
+-- still owned by `postgres` (typical of out-of-band manual setup).
+-- Tables owned by eventpulse are skipped. Required for migrations that
+-- ALTER TABLE / CREATE POLICY against existing tables (only the table
+-- owner can do that, regardless of GRANT level). This was discovered
+-- during Sprint 2 Day 11 Item 5 deploy attempt 7. Idempotent — if the
+-- table is already eventpulse-owned the ALTER is a no-op.
+DO $$
+DECLARE
+  t record;
+BEGIN
+  FOR t IN
+    SELECT schemaname, tablename
+    FROM pg_tables
+    WHERE schemaname = 'public'
+      AND tableowner = 'postgres'
+  LOOP
+    EXECUTE format('ALTER TABLE %I.%I OWNER TO eventpulse', t.schemaname, t.tablename);
+  END LOOP;
+END
+$$;
+PGEOF
+log "  postgres prep complete (roles, ADMIN OPTION, ownership)"
+
 # ─── 1) git checkout ────────────────────────────────────────────────────
 
 log "step 1: git checkout"

@@ -14,7 +14,9 @@
     "db:seed:reserved-handles": "tsx src/db/seeds/seed-reserved-handles.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1048.0",
     "@aws-sdk/client-sesv2": "^3.726.1",
+    "@aws-sdk/s3-request-presigner": "^3.1048.0",
     "@eventpulse/shared-types": "workspace:*",
     "@eventpulse/shared-utils": "workspace:*",
     "@hono/node-server": "^1.13.7",

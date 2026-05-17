@@ -316,6 +316,72 @@ export const reservedHandles = pgTable('reserved_handles', {
 })
 
 // ─────────────────────────────────────────────────────────────────────────
+// KYC SUBMISSIONS — Sprint 2 Day 13 Item 7 (CLAUDE.md §9.2 + §13).
+//
+// Tenant-scoped via RLS (`tenant_id`). One row per submission attempt;
+// reviewer fields populated by super-admin actions per §13.1.
+//
+// Status note (vs. CLAUDE.md §9.2):
+//   §9.2 enumerates ('submitted','under_review','approved','rejected').
+//   We adopt the §13.1 reality: a submission is created in `submitted`
+//   exactly once by POST /tenant/kyc/submissions (Day 14). For Day 13
+//   only the upload-url endpoint ships; the submit endpoint lands the
+//   row directly in `submitted` once documents + fields are validated.
+//   No `draft` state: server doesn't track per-upload state, client
+//   uploads to a known prefix and the submit POST atomically materialises
+//   the row.
+//
+// Porichoy deferral (decisions.md 2026-05-17): `nid_verified` is set by
+// reviewer action in MVP; `porichoy_verification_id` stays nullable
+// (live calls land in a separate PR once credentials arrive).
+// ─────────────────────────────────────────────────────────────────────────
+
+export const kycSubmissions = pgTable(
+  'kyc_submissions',
+  {
+    id: uuid()
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    submissionType: text('submission_type').notNull(),
+    tierRequested: text('tier_requested').notNull(),
+    // documents: { nid_front: 's3://.../nid_front.jpg', etin_certificate: '...' }
+    documents: jsonb()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    // fields: { nid_number: '...', etin: '...', bank: {...} } — submission-type-shaped
+    fields: jsonb()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    status: text().notNull().default('submitted'),
+    reviewerId: uuid('reviewer_id').references(() => users.id),
+    decisionReason: text('decision_reason'),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    nidVerified: boolean('nid_verified').notNull().default(false),
+    porichoyVerificationId: text('porichoy_verification_id'),
+    bankNameMatch: boolean('bank_name_match').notNull().default(false),
+    bfiuScreened: boolean('bfiu_screened').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('kyc_submissions_type_chk', sql`${t.submissionType} IN ('individual','organisation')`),
+    check(
+      'kyc_submissions_status_chk',
+      sql`${t.status} IN ('submitted','under_review','approved','rejected')`,
+    ),
+    check(
+      'kyc_submissions_tier_chk',
+      sql`${t.tierRequested} IN ('tier_1','tier_2','tier_3','org_a','org_b','org_c')`,
+    ),
+    index('idx_kyc_status').on(t.status, t.createdAt),
+    index('idx_kyc_tenant').on(t.tenantId, t.createdAt),
+  ],
+)
+
+// ─────────────────────────────────────────────────────────────────────────
 // HANDLE HISTORY — 30-day redirect on handle change.
 // ─────────────────────────────────────────────────────────────────────────
 
