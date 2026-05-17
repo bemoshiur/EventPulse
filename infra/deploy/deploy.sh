@@ -49,11 +49,28 @@ fi
 set -a; source "$ENV_FILE"; set +a
 
 # 1) Fetch
+#
+# REF can be either a branch name ("main") or a 40-char commit SHA — the
+# CI workflow passes ${{ github.sha }} which is always a SHA, while
+# manual invocations from a runbook typically pass "main". Resolve in
+# precedence order:
+#   1. origin/<REF> — works when REF is a branch name
+#   2. <REF> directly — works when REF is a SHA already fetched
+# If neither resolves, fail loud rather than silently checking out the
+# wrong commit.
 cd "$APP_DIR"
 git fetch --all --prune
-git reset --hard "origin/$REF"
+if TARGET="$(git rev-parse --verify "origin/$REF" 2>/dev/null)"; then
+  :
+elif TARGET="$(git rev-parse --verify "$REF" 2>/dev/null)"; then
+  :
+else
+  echo "ERROR: ref '$REF' does not resolve to any local-fetched commit (tried 'origin/$REF' and '$REF')"
+  exit 1
+fi
+git reset --hard "$TARGET"
 COMMIT=$(git rev-parse --short HEAD)
-echo "checked out $COMMIT"
+echo "checked out $COMMIT (from ref=$REF)"
 
 # 2) Install. Three knobs worth their own comment:
 #
