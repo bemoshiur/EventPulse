@@ -1,5 +1,7 @@
 import { Hono } from 'hono'
 
+import { authRoutes } from './routes/auth.js'
+
 /**
  * Hono application factory. Kept side-effect-free so tests can request routes
  * without binding to a port. `src/index.ts` wraps this with `@hono/node-server`.
@@ -16,6 +18,8 @@ export function createApp() {
       },
     }),
   )
+
+  app.route('/api/v1/auth', authRoutes)
 
   return app
 }

@@ -18,8 +18,12 @@
     "@eventpulse/shared-utils": "workspace:*",
     "@hono/node-server": "^1.13.7",
     "@hono/zod-validator": "^0.8.0",
+    "@noble/hashes": "^1.6.1",
+    "arctic": "^3.7.0",
     "drizzle-orm": "^0.36.4",
     "hono": "^4.12.19",
+    "jose": "^5.9.6",
+    "oslo": "^1.2.1",
     "pg": "^8.13.1",
     "pino": "^10.3.1",
     "zod": "^3.23.8"
