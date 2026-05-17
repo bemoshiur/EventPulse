@@ -8,15 +8,27 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS citext;
 
--- ─── eventpulse_admin role (BYPASSRLS for super-admin code) ────────────
+-- ─── Roles ────────────────────────────────────────────────────────────
+-- eventpulse_app:    NOLOGIN, subject to RLS. withTenant() SETs to this.
+-- eventpulse_admin:  NOLOGIN, BYPASSRLS. withSuperAdmin() SETs to this.
+--
+-- Why both: in CI the connection user (POSTGRES_USER from the postgres
+-- image) is a SUPERUSER. Superusers always bypass RLS regardless of
+-- FORCE ROW LEVEL SECURITY. The only way RLS actually engages is to
+-- SET LOCAL ROLE to a non-superuser role. We always do that at the
+-- start of every request -- see apps/api/src/db/client.ts.
 DO $$
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'eventpulse_app') THEN
+    CREATE ROLE eventpulse_app WITH NOLOGIN;
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'eventpulse_admin') THEN
-    CREATE ROLE eventpulse_admin WITH BYPASSRLS;
+    CREATE ROLE eventpulse_admin WITH NOLOGIN BYPASSRLS;
   END IF;
 END
 $$;
 
+GRANT eventpulse_app TO CURRENT_USER;
 GRANT eventpulse_admin TO CURRENT_USER;
 
 -- ─── users ─────────────────────────────────────────────────────────────
@@ -212,22 +224,22 @@ CREATE TRIGGER trg_tenant_fee_config_updated_at
   BEFORE UPDATE ON tenant_fee_config
   FOR EACH ROW EXECUTE FUNCTION _eventpulse_set_updated_at();
 
--- ─── grant table + sequence privileges to eventpulse_admin ─────────────
+-- ─── grant table + sequence privileges to BOTH app + admin roles ──────
 -- BYPASSRLS only skips RLS *policy* checks; the role still needs
 -- ordinary table privileges to read/write. ALTER DEFAULT PRIVILEGES
 -- propagates the same grants to any future tables created in this
 -- schema by CURRENT_USER (the migration runner).
-GRANT USAGE ON SCHEMA public TO eventpulse_admin;
+GRANT USAGE ON SCHEMA public TO eventpulse_app, eventpulse_admin;
 GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES, TRIGGER
-  ON ALL TABLES IN SCHEMA public TO eventpulse_admin;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO eventpulse_admin;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO eventpulse_admin;
+  ON ALL TABLES IN SCHEMA public TO eventpulse_app, eventpulse_admin;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO eventpulse_app, eventpulse_admin;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO eventpulse_app, eventpulse_admin;
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES, TRIGGER ON TABLES TO eventpulse_admin;
+  GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES, TRIGGER ON TABLES TO eventpulse_app, eventpulse_admin;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT USAGE, SELECT ON SEQUENCES TO eventpulse_admin;
+  GRANT USAGE, SELECT ON SEQUENCES TO eventpulse_app, eventpulse_admin;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT EXECUTE ON FUNCTIONS TO eventpulse_admin;
+  GRANT EXECUTE ON FUNCTIONS TO eventpulse_app, eventpulse_admin;
 
 COMMIT;

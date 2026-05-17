@@ -48,8 +48,10 @@ export async function resetPool(): Promise<void> {
 }
 
 /**
- * Run `fn` inside a transaction scoped to `tenantId`. Sets the session
- * variable that RLS policies read. Always rolls back if `fn` throws.
+ * Run `fn` inside a transaction scoped to `tenantId`. Drops to the
+ * non-superuser `eventpulse_app` role (so RLS engages — Postgres
+ * superusers always bypass RLS) and sets the session variable that
+ * RLS policies read. Always rolls back if `fn` throws.
  */
 export async function withTenant<T>(
   tenantId: string,
@@ -58,6 +60,7 @@ export async function withTenant<T>(
   const client = await pool().connect()
   try {
     await client.query('BEGIN')
+    await client.query('SET LOCAL ROLE eventpulse_app')
     await client.query("SELECT set_config('app.current_tenant_id', $1, true)", [tenantId])
     const db = drizzle(client, { schema })
     const result = await fn(db)

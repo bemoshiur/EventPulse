@@ -181,21 +181,37 @@ describeIfDb('RLS cross-tenant isolation', () => {
 
   it('audience=tenant session WITHOUT app.current_tenant_id sees nothing in tenants', async () => {
     // Simulate a buggy code path that forgot to set the session var:
-    // call raw pg without withTenant() — the read should return 0 rows.
-    const client = await new pg.Pool({
+    // a tenant-context session (eventpulse_app role) reads `tenants`
+    // without setting `app.current_tenant_id` first. RLS policies cast
+    // `current_setting('app.current_tenant_id', true)::uuid` which
+    // either returns 0 rows or raises `invalid_text_representation` —
+    // both outcomes satisfy "tenant rows aren't visible".
+    const tinyPool = new pg.Pool({
       connectionString: process.env['DATABASE_URL']!,
       max: 1,
-    }).connect()
+    })
+    const client = await tinyPool.connect()
     try {
-      const r = await client.query<{ id: string }>('SELECT id FROM tenants LIMIT 100')
-      // The 2 fixture tenants would be visible only via BYPASSRLS or with the
-      // session var set. A plain query as the application role should return 0.
-      const visibleFixtureIds = r.rows
-        .map((row) => row.id)
-        .filter((id) => id === fixtures.tenantA || id === fixtures.tenantB)
+      await client.query('BEGIN')
+      await client.query('SET LOCAL ROLE eventpulse_app')
+      let visibleFixtureIds: string[] = []
+      try {
+        const r = await client.query<{ id: string }>('SELECT id FROM tenants LIMIT 100')
+        visibleFixtureIds = r.rows
+          .map((row) => row.id)
+          .filter((id) => id === fixtures.tenantA || id === fixtures.tenantB)
+      } catch (err) {
+        if (!(err instanceof Error && /invalid input syntax for type uuid/i.test(err.message))) {
+          throw err
+        }
+        // Cast-from-empty-string raised — that means RLS evaluated and
+        // rejected; equivalent to zero rows from the test's perspective.
+      }
       expect(visibleFixtureIds.length).toBe(0)
     } finally {
+      await client.query('ROLLBACK').catch(() => undefined)
       client.release()
+      await tinyPool.end()
     }
   })
 
