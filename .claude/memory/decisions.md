@@ -4,6 +4,65 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-17 · OAuth callback security model (Sprint 2 Item 4)
+
+**Context:** Sprint 1 Day 7-8 (PR #47) landed the `arctic` Google + Apple clients as lazy constructors but no route handlers — the actual `/oauth/<provider>/{start,callback}` surface carried to Sprint 2 Item 4. Before code landed, Moshiur pre-flagged three security concerns to address: (a) state cookie integrity (HMAC + TTL + single-use) to close the most common OAuth account-takeover vector — attacker forging a callback to link their OAuth identity to someone else's account; (b) code-replay resistance + PKCE; (c) Apple email-relay quirk (relay addresses can be rotated by Apple and must NEVER be used for auto-link). This entry locks the answers as the canonical security model so Item 4 (and future OAuth provider additions) extend a consistent design instead of relitigating each surface.
+
+**Decision:** The full OAuth callback security chain:
+
+**State cookie — `apps/api/src/auth/oauth-state.ts`:**
+
+- HMAC-SHA256 signed using a key DERIVED from `JWT_ACCESS_SECRET` via the domain-separation tag `oauth-state-v1`. Result: a leak of one secret doesn't compromise the other; no new env var to provision/rotate.
+- Payload: `{ state, codeVerifier, provider, exp }`. `codeVerifier` (PKCE) ships inside the signed cookie so it survives the redirect round-trip without server-side storage. `provider` field is defence-in-depth: cookie minted for Google won't verify against the Apple callback even if delivered there.
+- TTL: 10 minutes (well over a normal OAuth round-trip; tight enough to bound replay window).
+- Cookie attributes: `HttpOnly` + `SameSite=Lax` + `Path=/` + `Max-Age=600`. `Secure` flag added only when `NODE_ENV=production` (drops in local dev where HTTPS isn't available).
+- Provider-specific cookie names (`oauth_state_google`, `oauth_state_apple`) so two parallel OAuth flows from the same browser don't collide.
+- Single-use: callback handler clears the cookie via `Set-Cookie ...; Max-Age=0` **before** any DB write. Replay would require recovering both the cookie AND a fresh IdP code in the 10-minute window — IdP codes are single-use server-side.
+- `__Host-` prefix considered, deferred to Phase 2: requires `Secure` always-on which collides with HTTP local dev. Marginal hardening; not worth the env-juggling for MVP.
+
+**PKCE:**
+
+- **Google: ON.** `arctic.generateCodeVerifier()` + `Google.createAuthorizationURL(state, codeVerifier, scopes)`. PKCE-S256 by default in arctic v3.
+- **Apple: NOT APPLICABLE.** Apple Sign-In uses a JWT-based `client_secret` minted from the team's private key per call; `Apple.createAuthorizationURL(state, scopes)` signature explicitly does not accept a `codeVerifier`. Apple's request-signature model is the verifier-of-record there.
+
+**ID token verification — `verifyGoogleIdToken` / `verifyAppleIdToken` in `apps/api/src/auth/oauth.ts`:**
+
+- Always via `jose.jwtVerify` against the live JWKS (`createRemoteJWKSet` for Google's `https://www.googleapis.com/oauth2/v3/certs` and Apple's `https://appleid.apple.com/auth/keys`). JWKS is fetched and cached by `jose` on first use.
+- Issuer + audience enforced: Google `iss ∈ {accounts.google.com, https://accounts.google.com}`, audience = our client ID. Apple `iss = https://appleid.apple.com`, audience = our Services ID.
+- `decodeIdToken` (no verification) is NEVER trusted in this codebase. The presence of an `arctic.decodeIdToken` export is a foot-gun; we use `jose.jwtVerify` exclusively.
+- Email normalised to lowercase before any DB comparison.
+
+**Auto-link decision — `decideAutoLink` pure function in `oauth.ts`:**
+
+Match order on every successful callback:
+
+1. **Primary:** look up `oauth_identities` by `(provider, provider_user_id)`. For Apple this is the ONLY stable identifier Apple guarantees; for Google it's the fast path on repeat sign-ins.
+2. **Secondary (auto-link):** if no primary match AND IdP says `email_verified=true` AND `is_private_email !== true` (Google: always; Apple: only when user shared their real email) → look up `users` by email; if found, link.
+3. **Tertiary:** create a new user with whatever email the IdP provided (including Apple relay addresses for users who chose to hide their real email).
+
+The **`is_private_email` gate** is the load-bearing piece. Without it, Apple could rotate a relay address to a different human; that new human signs in with the same relay later; we auto-link them to the OLD attacker's account → silent account takeover. With the gate, relay addresses always create new accounts; the user gets a settings UI to manually link later if they want (Phase 2 surface).
+
+**Write context:** all auto-link writes happen under `withSuperAdmin` (the user isn't authenticated until the callback completes — `withUser` is impossible to call). The integrity chain that justifies the super-admin write: `HMAC state cookie` → `PKCE round-trip (Google) / JWT client_secret (Apple)` → `signed ID token` → `verified email or stable sub`. Any link breaking → bail to new user or fail closed.
+
+**Response handling:**
+
+- Google callback: `GET` with `code` + `state` query params.
+- Apple callback: `POST application/x-www-form-urlencoded` because Apple uses `response_mode=form_post` to deliver the `user` (name) field on first auth. Apple's `user` blob is JSON-encoded `{name: {firstName, lastName}, email}`; captured only on first auth (Apple never sends it again).
+- On any failure mode (missing cookie, bad state, expired, IdP error, code-exchange rejection, ID-token verify failure): respond `400` with envelope `{ error: { code: 'OAUTH_CALLBACK_FAILED', message: 'OAuth callback failed; please try signing in again.', _internal_reason: '<detail>' } }`. The `_internal_reason` ends up in logs only; never exposed to the user beyond the generic message. Single-error code from the public surface so probing the failure doesn't leak which gate failed.
+
+**Session cookie set on success:** `eventpulse_session` (existing name used by password/magic-link routes), `HttpOnly` + `Secure` (in prod) + `SameSite=Lax` + `Path=/` + `Max-Age=7 days`. Audience is `attendee` for OAuth-originated sessions; tenant onboarding happens after sign-in.
+
+**Consequences:**
+
+- This is the canonical OAuth security model for Event Pulse. Future provider additions (GitHub for tenant SSO, BTRC eID, etc) follow the same shape: state cookie → ID token verify → auto-link decision → super-admin write.
+- The decision matrix in `decideAutoLink` is the only place where "should I link this OAuth identity to an existing user" lives. Future providers extend it; never inline the decision in a route handler.
+- ID-token verification via `jose.jwtVerify` + remote JWKS adds a small startup-time JWKS fetch on first OAuth use. Cached automatically. No cold-start mitigation needed.
+- `is_private_email`-gated auto-link blocks a very specific Apple takeover vector. If Apple ever changes the relay-rotation policy, the gate stays in place — relay addresses are never linkable on Event Pulse, period.
+- `_internal_reason` field in error responses is a logging tag, not a contract. Frontend treats `OAUTH_CALLBACK_FAILED` as a single failure mode; reason field is read only by Sentry / log search.
+- Item 4 carry to Sprint 2 closeout: configure OAuth credentials in Secrets Manager (`eventpulse/staging/oauth-google` + `eventpulse/staging/oauth-apple`) and exercise the full happy path manually against the staging EC2 before Sprint 2 wraps.
+
+---
+
 ## 2026-05-17 · Sprint 2 plan approved with 5 amendments — see Day 11 kick-off
 
 **Context:** Sprint 2 plan presented after the `/sprint` closeout (Sprint 1 tag `v0.1.0-sprint-1` at `53ae000`, GitHub issue [#52](https://github.com/publicpulseagency/EventPulse/issues/52), closeout PR [#53](https://github.com/publicpulseagency/EventPulse/pull/53) merged at `4c49e1d`). 16 atomic items across Days 11-20 mapped to §26.1 Sprint 2 scope with the Porichoy deferral amendment applied. Moshiur reviewed the plan and approved it with five sharpening amendments + three checkpoint pre-answers that allow the autonomous portions to proceed without round-trips.
