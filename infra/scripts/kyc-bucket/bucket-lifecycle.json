@@ -4,9 +4,7 @@
       "ID": "kyc-docs-glacier-ir-at-30d",
       "Status": "Enabled",
       "Filter": { "Prefix": "tenants/" },
-      "Transitions": [
-        { "Days": 30, "StorageClass": "GLACIER_IR" }
-      ]
+      "Transitions": [{ "Days": 30, "StorageClass": "GLACIER_IR" }]
     },
     {
       "ID": "kyc-noncurrent-versions-90d",

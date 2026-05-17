@@ -7,10 +7,7 @@
       "Effect": "Deny",
       "Principal": "*",
       "Action": "s3:*",
-      "Resource": [
-        "arn:aws:s3:::${KYC_BUCKET}",
-        "arn:aws:s3:::${KYC_BUCKET}/*"
-      ],
+      "Resource": ["arn:aws:s3:::${KYC_BUCKET}", "arn:aws:s3:::${KYC_BUCKET}/*"],
       "Condition": {
         "Bool": { "aws:SecureTransport": "false" }
       }
@@ -80,10 +77,7 @@
         "s3:PutBucketOwnershipControls",
         "s3:DeleteBucket"
       ],
-      "Resource": [
-        "arn:aws:s3:::${KYC_BUCKET}",
-        "arn:aws:s3:::${KYC_BUCKET}/*"
-      ]
+      "Resource": ["arn:aws:s3:::${KYC_BUCKET}", "arn:aws:s3:::${KYC_BUCKET}/*"]
     }
   ]
 }

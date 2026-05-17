@@ -14,19 +14,13 @@
   {
     "Sid": "S3KycBucketObjects",
     "Effect": "Allow",
-    "Action": [
-      "s3:GetObject",
-      "s3:PutObject"
-    ],
+    "Action": ["s3:GetObject", "s3:PutObject"],
     "Resource": "arn:aws:s3:::${KYC_BUCKET}/tenants/*"
   },
   {
     "Sid": "S3KycBucketList",
     "Effect": "Allow",
-    "Action": [
-      "s3:ListBucket",
-      "s3:GetBucketLocation"
-    ],
+    "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
     "Resource": "arn:aws:s3:::${KYC_BUCKET}",
     "Condition": {
       "StringLike": {

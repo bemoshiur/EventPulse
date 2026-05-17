@@ -13,11 +13,7 @@
       "Sid": "AllowS3ServiceUseOfKey",
       "Effect": "Allow",
       "Principal": { "Service": "s3.amazonaws.com" },
-      "Action": [
-        "kms:GenerateDataKey*",
-        "kms:Decrypt",
-        "kms:DescribeKey"
-      ],
+      "Action": ["kms:GenerateDataKey*", "kms:Decrypt", "kms:DescribeKey"],
       "Resource": "*",
       "Condition": {
         "StringEquals": {
