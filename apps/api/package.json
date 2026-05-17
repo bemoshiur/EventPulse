@@ -21,7 +21,7 @@
     "@hono/zod-validator": "^0.8.0",
     "@noble/hashes": "^1.6.1",
     "arctic": "^3.7.0",
-    "drizzle-orm": "^0.36.4",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.12.19",
     "jose": "^5.9.6",
     "oslo": "^1.2.1",
