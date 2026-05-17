@@ -133,26 +133,40 @@ export const RESERVED_HANDLES: ReadonlyArray<ReservedHandle> = [
 ]
 
 /**
- * Idempotent seed runner. Once the Drizzle schema for `reserved_handles`
- * lands (Sprint 1 Day 5-6), wire this to actually write rows. Today it
- * just validates the list and logs counts so the script can be run as a
- * smoke check in CI.
+ * Idempotent seed runner. Inserts every entry in {@link RESERVED_HANDLES};
+ * existing rows are left alone via `ON CONFLICT DO NOTHING`. Re-runnable.
+ *
+ * Skipped automatically (no DB writes) when `DATABASE_URL` is not set, so
+ * the file can also serve as a CI-time lint of the list shape.
  */
 export async function run(): Promise<void> {
   validateList(RESERVED_HANDLES)
 
-  // TODO(Sprint 1 Day 5-6): wire to db
-  //
-  //   import { withSuperAdmin } from '../src/db/client.js'
-  //   import { reservedHandles } from '../src/db/schema.js'
-  //
-  //   await withSuperAdmin(async (db) => {
-  //     await db.insert(reservedHandles)
-  //       .values(RESERVED_HANDLES)
-  //       .onConflictDoNothing({ target: reservedHandles.handle })
-  //   })
+  if (!process.env['DATABASE_URL']) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `reserved handles: ${RESERVED_HANDLES.length} entries validated (DATABASE_URL not set; skipping insert)`,
+    )
+    return
+  }
 
-  console.log(`reserved handles: ${RESERVED_HANDLES.length} entries ready to seed`)
+  // Dynamic import so consumers that just want the array (and the unit
+  // test file) don't pay the cost of pulling in pg + drizzle.
+  const { withSuperAdmin, resetPool } = await import('../client.js')
+  const { reservedHandles } = await import('../schema/index.js')
+
+  try {
+    await withSuperAdmin(async (db) => {
+      await db
+        .insert(reservedHandles)
+        .values(RESERVED_HANDLES.map((r) => ({ handle: r.handle, reason: r.reason })))
+        .onConflictDoNothing({ target: reservedHandles.handle })
+    })
+    // eslint-disable-next-line no-console
+    console.log(`reserved handles: ${RESERVED_HANDLES.length} entries seeded`)
+  } finally {
+    await resetPool()
+  }
 }
 
 /**

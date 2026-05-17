@@ -4,6 +4,31 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## Postgres superusers ALWAYS bypass RLS — `FORCE ROW LEVEL SECURITY` only binds table owners
+
+**Status:** RESOLVED 2026-05-17 — Sprint 1 Day 5-6 first CI integration test pass surfaced this. Tenant A's "expected 1, got 2" assertions revealed that RLS wasn't engaging at all even though every policy was correct and every `ENABLE ROW LEVEL SECURITY` / `FORCE ROW LEVEL SECURITY` was set.
+
+**Symptom:** `withTenant(tenantA, ...)` reads `tenants` and gets BOTH the A and B fixture rows, instead of just A. The RLS policy `id = current_setting('app.current_tenant_id', true)::uuid` looks correct. The session variable is set correctly. Yet rows from other tenants are still visible.
+
+**Why it happens:** PG docs are explicit but easy to miss:
+
+> Superusers and roles with the BYPASSRLS attribute always bypass the row security system when accessing a table. Table owners normally bypass row security as well, though a table owner can choose to be subject to row security with ALTER TABLE ... FORCE ROW LEVEL SECURITY.
+
+In CI the connection user is `POSTGRES_USER` from the postgres image — a SUPERUSER. Superusers bypass RLS regardless of FORCE. The session variable is read; the policy is evaluated; the result is *thrown away* because the calling role is a superuser.
+
+This is also why the issue didn't show locally — local tests `describe.skip` without `DATABASE_URL`, so they never exercised the bug.
+
+**Fix:** Always run *application* queries as a non-superuser role. Migration creates `eventpulse_app` (NOLOGIN, no BYPASSRLS), grants it to the connection user, gives it ordinary table privileges. `withTenant()` does `SET LOCAL ROLE eventpulse_app` before setting `app.current_tenant_id`. `withSuperAdmin()` keeps using `SET LOCAL ROLE eventpulse_admin` (which has BYPASSRLS and is the *only* sanctioned way to bypass RLS).
+
+**How to avoid:**
+
+1. **Anywhere RLS matters, the application code must `SET LOCAL ROLE` a non-superuser role at the start of every transaction.** This is non-negotiable; relying on "the connection user isn't superuser in prod" is a foot-gun because dev/CI environments often run as superuser.
+2. **Test RLS against a real Postgres in CI, not just unit tests.** Without the integration test, this would have shipped silently.
+3. **Add a smoke check to every RLS migration: `SET LOCAL ROLE eventpulse_app` then count rows in a tenant-scoped table; should return 0 when the session variable is unset.** Catches future regressions.
+4. **The `eventpulse_admin` BYPASSRLS role is the audit-logged escape hatch.** Don't put any business logic into "the connection user happens to be a superuser" — that's an accident waiting to leak across tenants.
+
+---
+
 ## AWS Security Group rule description rejects `>` (and most non-ASCII punctuation)
 
 **Status:** RESOLVED 2026-05-17 — discovered while authoring inbound rules for `eventpulse-staging-web` SG. Description "HTTP -> HTTPS redirect + ACME http-01 fallback" rejected with `InvalidParameterValue: Invalid rule description`.
