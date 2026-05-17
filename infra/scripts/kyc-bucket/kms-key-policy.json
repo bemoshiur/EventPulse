@@ -1,0 +1,30 @@
+{
+  "Version": "2012-10-17",
+  "Id": "key-policy-eventpulse-kyc-${ENVIRONMENT}",
+  "Statement": [
+    {
+      "Sid": "EnableIAMUserPermissions",
+      "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::${AWS_ACCOUNT_ID}:root" },
+      "Action": "kms:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowS3ServiceUseOfKey",
+      "Effect": "Allow",
+      "Principal": { "Service": "s3.amazonaws.com" },
+      "Action": [
+        "kms:GenerateDataKey*",
+        "kms:Decrypt",
+        "kms:DescribeKey"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "kms:ViaService": "s3.${AWS_REGION}.amazonaws.com",
+          "kms:CallerAccount": "${AWS_ACCOUNT_ID}"
+        }
+      }
+    }
+  ]
+}

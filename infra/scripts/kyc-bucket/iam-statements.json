@@ -1,0 +1,37 @@
+[
+  {
+    "Sid": "KmsKycBucketEnvelope",
+    "Effect": "Allow",
+    "Action": [
+      "kms:Encrypt",
+      "kms:Decrypt",
+      "kms:ReEncrypt*",
+      "kms:GenerateDataKey*",
+      "kms:DescribeKey"
+    ],
+    "Resource": "${KYC_KMS_KEY_ARN}"
+  },
+  {
+    "Sid": "S3KycBucketObjects",
+    "Effect": "Allow",
+    "Action": [
+      "s3:GetObject",
+      "s3:PutObject"
+    ],
+    "Resource": "arn:aws:s3:::${KYC_BUCKET}/tenants/*"
+  },
+  {
+    "Sid": "S3KycBucketList",
+    "Effect": "Allow",
+    "Action": [
+      "s3:ListBucket",
+      "s3:GetBucketLocation"
+    ],
+    "Resource": "arn:aws:s3:::${KYC_BUCKET}",
+    "Condition": {
+      "StringLike": {
+        "s3:prefix": "tenants/*"
+      }
+    }
+  }
+]

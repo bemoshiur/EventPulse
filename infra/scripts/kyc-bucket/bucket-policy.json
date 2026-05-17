@@ -1,0 +1,89 @@
+{
+  "Version": "2012-10-17",
+  "Id": "eventpulse-kyc-${ENVIRONMENT}-bucket-policy",
+  "Statement": [
+    {
+      "Sid": "DenyInsecureTransport",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::${KYC_BUCKET}",
+        "arn:aws:s3:::${KYC_BUCKET}/*"
+      ],
+      "Condition": {
+        "Bool": { "aws:SecureTransport": "false" }
+      }
+    },
+    {
+      "Sid": "DenyPutWithoutKmsHeader",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::${KYC_BUCKET}/*",
+      "Condition": {
+        "StringNotEquals": {
+          "s3:x-amz-server-side-encryption": "aws:kms"
+        }
+      }
+    },
+    {
+      "Sid": "DenyPutWithWrongKmsKey",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::${KYC_BUCKET}/*",
+      "Condition": {
+        "StringNotEquals": {
+          "s3:x-amz-server-side-encryption-aws-kms-key-id": "${KYC_KMS_KEY_ARN}"
+        }
+      }
+    },
+    {
+      "Sid": "DenyPutWithoutExplicitKmsKeyId",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::${KYC_BUCKET}/*",
+      "Condition": {
+        "Null": {
+          "s3:x-amz-server-side-encryption-aws-kms-key-id": "true"
+        }
+      }
+    },
+    {
+      "Sid": "DenyUnencryptedTransitMetadata",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::${KYC_BUCKET}/*",
+      "Condition": {
+        "Null": {
+          "s3:x-amz-server-side-encryption": "true"
+        }
+      }
+    },
+    {
+      "Sid": "DenyDestructiveActionsByEC2Role",
+      "Effect": "Deny",
+      "Principal": {
+        "AWS": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/eventpulse-${ENVIRONMENT}-ec2"
+      },
+      "Action": [
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion",
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucketPolicy",
+        "s3:PutEncryptionConfiguration",
+        "s3:PutLifecycleConfiguration",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:PutBucketOwnershipControls",
+        "s3:DeleteBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::${KYC_BUCKET}",
+        "arn:aws:s3:::${KYC_BUCKET}/*"
+      ]
+    }
+  ]
+}
