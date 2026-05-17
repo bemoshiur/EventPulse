@@ -1,58 +1,67 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-05-17 (end of Sprint 2 Day 13)
+**Last update:** 2026-05-17 (end of Sprint 2 Day 14)
 **Driver:** Claude Code (Opus 4.7) — Sprint 2 standard execution mode (1 day/session, `/start` → `/work` → `/end`)
 
 ## State right now
 
-**Sprint 2 Day 13 closed. Two PRs merged to main + first end-to-end auto-deploy verified.**
+**Sprint 2 Day 14 closed. Item 9 PR merged to main + 2 memory PRs (Item 10 scope amendment + Day 14 closeout) landed.**
 
 ```text
-977df1b feat(infra): Sprint 2 Day 13 closeout — GitHub OIDC infra + deploy.sh SHA handling (#67)
-7c30539 feat(api): Sprint 2 Day 13 — KYC pipeline foundations (Items 7 + 8) (#66)
-cad2d62 memory: Sprint 2 Day 12 closeout — Item 6 (KYC bucket) shipped + StringNotEqualsIfExists gotcha (#65)
-a422847 feat(infra): Sprint 2 Item 6 — KYC bucket + dedicated CMK (#64)
-9d83172 memory: Sprint 2 Item 5 closeout — first real staging deploy + 7 gotchas (#63)
+<pending>     memory: Sprint 2 Day 14 closeout — Item 9 shipped + audit_logs scope decision + 2 new gotchas (this PR)
+d9d765f       feat(api): Sprint 2 Day 14 — Item 9 KYC submission state machine + submit endpoint + audit trail + notification scaffolding (#70)
+42f1bb9       memory: log Sprint 2 Item 10 scope amendment — third-party verification deferred to manual review (#69)
+9622c93       memory: Sprint 2 Day 13 closeout — KYC pipeline shipped + canonical OIDC pattern + 4 new gotchas (#68)
+977df1b       feat(infra): Sprint 2 Day 13 closeout — GitHub OIDC infra + deploy.sh SHA handling (#67)
+7c30539       feat(api): Sprint 2 Day 13 — KYC pipeline foundations (Items 7 + 8) (#66)
 ```
 
-## What landed in Day 13
+## What landed in Day 14
 
-**Items 7+8 + 3 Day 12 carries absorbed (PR #66):**
+**Morning — Sprint 2 plan amendment (PR #69 `42f1bb9`):**
 
-- `kyc_submissions` table + RLS + per-table grants (migration 0004); 5 cross-tenant RLS tests; NO DeleteObject grant per BFIU §15.1
-- `apps/api/src/infra/s3/client.ts` + `apps/api/src/routes/tenant/kyc.ts` with `POST /api/v1/tenant/kyc/upload-url`; SSE-KMS + key-id headers baked into presigned URL signature; 8 integration tests
-- `bootstrap-staging.sh` step 0 (Postgres superuser prep — roles, ADMIN OPTION, ownership)
-- `api-build` CI job mirroring `deploy.sh`'s build command
-- `STAGING_DEPLOY_ENABLED=true` flipped
+- Item 10 (eTIN regex + BFIU sanctions matcher) deferred to Phase 2 — same operational pattern as the Porichoy deferral two days earlier
+- Day 14 reduced to Item 9 only; Item 10 residual (surface eTIN/NID in reviewer UI) absorbs into Item 13 (Day 18)
+- Checkpoint #5 dissolved — `infra/compliance/sanctions.json` no longer in Sprint 2 scope; do NOT pre-stage
+- CLAUDE.md §13.0 update queued for Sprint 2 closeout v2.3 bump
 
-**Day 13 closeout (PR #67):**
+**Item 9 (PR #70 `d9d765f`):**
 
-- AWS OIDC provider `arn:aws:iam::739275468267:oidc-provider/token.actions.githubusercontent.com`
-- IAM role `arn:aws:iam::739275468267:role/eventpulse-deploy/eventpulse-deploy-staging` with the **canonical three-claim trust** (aud + sub=environment + job_workflow_ref) per `.claude/memory/decisions.md` "Canonical GitHub Actions → AWS OIDC trust pattern (project standard)" 2026-05-17
-- Inline policy `eventpulse-deploy-staging-ssm` scoped to one instance + AWS-RunShellScript document, with BOTH `ec2:instance` and `ssm:managed-instance` ARN forms for `SendCommand`
-- `infra/scripts/setup-github-oidc.sh` developer-side orchestrator (idempotent, parameterised for prod cutover)
-- `deploy.sh` REF resolution accepts both branch names and SHAs
-- GH secrets `AWS_OIDC_ROLE_STAGING` (real ARN) + `STAGING_EC2_INSTANCE_ID` (corrected) both validated
+- Migration 0005 — `kyc_submissions.status` CHECK widened to add `draft` (for `rejected → draft` resubmit lane); new `audit_logs` table per §9.10 with RLS forced + tenant-scoped policies + REVOKE UPDATE/DELETE/TRUNCATE FROM eventpulse_app for defence-in-depth immutability (§1.3 R8)
+- KYC state machine module (`apps/api/src/domain/kyc/state-machine.ts`) — `transition()` for existing rows only (row creation routed through route handler since de-facto-draft is the upload-url step); `canTransition()` predicate; `InvalidKycTransitionError` with greppable from/to
+- Audit helper (`apps/api/src/services/audit/kyc.ts`) — `writeKycTransition(tx, ...)` writes atomically inside withTenant tx
+- Three notification stubs (`apps/api/src/services/notifications/kyc.ts`) — `kyc_submitted`/`approved`/`rejected` with `[STUB]` log marker and Item 16 TODO
+- `POST /api/v1/tenant/kyc/submissions` — discriminated zod (individual + tier_1/2/3 vs organisation + org_a/b/c), client-supplied submissionId as row PK for natural idempotency, server regenerates `documents` jsonb as `s3://` URIs from JWT tenantId via new `buildKycObjectUri()` (extracted into `infra/s3/client.ts` as single source of truth), atomic withTenant tx with INSERT … ON CONFLICT DO NOTHING + SELECT-back, cross-tenant submissionId conflict → 409, notification fire-and-forget after commit with logged `.catch()` (per /review finding #3 to prevent 500-after-commit risk when Item 16 wires real SES)
+- 33 new tests: 17 state-machine unit + 8 audit_logs RLS + 8 submit-endpoint integration. All gated by `describeIfDb` so they auto-skip locally without DATABASE_URL; CI's integration-tests job runs them against PG 16
+- /review (feature-dev:code-reviewer): finding #3 (high — notification 500-after-commit) fixed in-PR; findings #2 + #4 (medium) clarified with comments; finding #1 (low — audit_logs unset-GUC smoke test) queued to Sprint 2 closeout
 
-**End-to-end verification:** workflow_dispatch run [25988575225](https://github.com/publicpulseagency/EventPulse/actions/runs/25988575225) — all 10 steps green; EC2-side `deploy.sh` returned exit 0; all 3 smoke endpoints `200`.
+**Evening — audit_logs scope decision logged (this memory commit):**
 
-**Migration state on staging:** all four migrations (0001/0002/0003/0004) applied; `kyc_submissions` table is live.
+- audit_logs writes at Item 9 are KYC-transitions-only by design, not by oversight (decision logged with full rationale)
+- S3 signed URL issuance backfill → Sprint 2 closeout (single helper call in `getKycUploadUrl`; KYC-scoped, natural extension of Item 6+7+8 work)
+- Auth events backfill (sign-in/out, magic-link issued/consumed, OAuth link) → Sprint 3 paired with the session-revocation fix as a single auth-hardening PR
 
 ## Next concrete step
 
-**Day 14 — Item 9 only.** Item 10 (eTIN regex + BFIU sanctions matcher) **deferred to Phase 2** per the Sprint 2 plan amendment landed today (decisions.md 2026-05-17 "Sprint 2 Item 10 scope amendment — third-party verification deferred to manual review"). Same operational pattern as the Porichoy deferral two days earlier: sub-50-submissions/week at MVP, reviewer is already looking at every submission, false-confidence risk of half-built automation. Checkpoint #5 dissolved — `infra/compliance/sanctions.json` no longer in Sprint 2 scope; do NOT pre-stage it.
+**Day 15 — Item 11: post-login Account-Type modal.** Per §1.6 ("Account type chosen on first dashboard load via a friendly modal, not at sign-up") + §2.4 (the modal kicks the user into the appropriate onboarding path — Path A self-service free, Path B self-service paid, Path C organisation).
 
-**Item 9 scope:**
+**Item 11 scope (planned, subject to refinement at Day 15 `/start`):**
 
-- KYC submission state machine per §13.3 — `draft → submitted → under_review → approved | rejected`, with `rejected → draft` for resubmit. No other transitions legal.
-- `POST /tenant/kyc/submissions` — finalises a submission after the Day 13 upload-url step. Idempotent on `(tenant_id, submission_id)` (double-click returns same row). Server regenerates S3 object keys from `submission_id`; never trusts client-supplied keys. Body validates against the per-type zod schema (individual vs org per Item 8), including eTIN and NID number as **plain captured data fields** (no automated format validation — Item 10 deferred).
-- Audit every transition (not just terminal): `audit_logs` row per §9.10 with `from_state`, `to_state`, `actor_user_id`, `actor_role`, `reason` (nullable; required on rejection), `at_timestamp`, `tenant_id`, `submission_id`.
-- Notification firing scaffolded (templates land Item 16 / Day 20): on `→ under_review` fire `kyc_submitted`, on `→ approved` fire `kyc_approved`, on `→ rejected` fire `kyc_rejected` with reason. Stub functions in `apps/api/src/services/notifications/kyc.ts` wired to the state machine; SES templates land at Item 16.
-- RLS: submit endpoint runs under `withTenant(tenant_id)`, never `withSuperAdmin`. Cross-tenant negative test required as defence in depth (signed URL from Day 13 already enforces at S3 layer).
-- Tests required: cross-tenant negative (RLS), idempotency (double-submit returns same row), state machine transitions (all legal pass, all illegal throw clear errors), audit log write per transition, notification stub firing per terminal transition. **No eTIN regex tests, no sanctions matcher tests.**
-- **Item 10 residual** — surface eTIN + NID number captured in `fields` jsonb clearly in the reviewer queue UI — absorbs into Item 13 (Day 18) rather than standing as its own item.
+- New `/dashboard/account-type` modal route (Next.js app router under `(tenant)`) — shows on first dashboard load when `users.account_type_chosen_at` is null
+- Three cards: "Host events for myself" (individual, Path A/B), "Host events for an organisation I represent" (org, Path C), "Just here to attend / browse" (attendee context, no tenant)
+- Persists choice to `users.account_type_chosen_at` + writes audit row (`action='user.account_type_chosen'`, `entity_type='user'`) — wire `writeAuditEvent` helper for non-KYC actions OR keep KYC-specific writer and add a thin generic helper (Day 15 plan decides)
+- Frontend work: design system Card + Glass primitives, modal with backdrop blur, three CTA cards with hover-lift animation per §1.5 motion principles
+- Routing follow-through: individual → `/dashboard` (no KYC gate yet, paths A/B), org → `/dashboard/kyc/wizard` (gates publishing per CHECKPOINT #4), attendee → `/my` redirect
 
-## Sprint 2 standard execution mode (still in force for Days 14-20)
+**STOP-ASK conditions** for Day 15 (same protocol as Days 12-14):
+
+- New table or schema column needed beyond what the modal requires → halt
+- Any AWS write beyond staging blast radius → halt
+- §29 Open Decision arising mid-item → halt
+- Contradictions with decisions.md → halt
+- Audit writer pattern question (KYC-specific vs generic helper) → halt and surface as a design decision
+
+## Sprint 2 standard execution mode (still in force for Days 15-20)
 
 - One session per day. `/start` reads context + proposes focus; `/end` updates progress.md + handoff.md + any new gotchas same-day.
 - `/review` (iac-reviewer or feature-dev:code-reviewer subagent) **before every commit on KYC-touching code** (Items 6-13). Every commit. PII + §1.3 R4.
@@ -62,16 +71,18 @@ a422847 feat(infra): Sprint 2 Item 6 — KYC bucket + dedicated CMK (#64)
 ## Sprint 2 closeout candidates (queued for v0.2.0-sprint-2 + v2.3 CLAUDE.md bump)
 
 - **CLAUDE.md §17 amendment** — codify the canonical OIDC trust pattern (three-claim shape) as project standard in the playbook.
-- **CLAUDE.md §13.0 amendment** — drop "eTIN format check: local regex" and "BFIU sanctions screening: manual list-check against `infra/compliance/sanctions.json`" from the §13.0 MVP-scope language. Replace with "Both deferred to manual reviewer responsibility for MVP" alongside the existing Porichoy deferral paragraph. Path back to automation in Phase 2 per decisions.md "Sprint 2 Item 10 scope amendment" 2026-05-17.
+- **CLAUDE.md §13.0 + §13.3 amendment** — drop the "eTIN format check: local regex" + "BFIU sanctions screening: manual list-check against `infra/compliance/sanctions.json`" language from §13.0; document the `draft` state added in migration 0005 in §13.3.
+- **S3 signed URL issuance audit_logs backfill** — single audit write inside `getKycUploadUrl()` (per Day 14 evening decision).
+- **audit_logs unset-GUC smoke test** — one-test follow-up to `rls-cross-tenant.test.ts` per Day 14 /review finding #1.
 - Reviewer S4 (Day 12) — dedicated KMS key-admin role for the KYC CMK.
 - Reviewer S6 (Day 12) — noncurrent-version transitions to GLACIER_IR vs STANDARD-90d trade-off.
-- Session revocation gap in `apps/api/src/auth/middleware.ts` — fix before Day 16-17 wizard ships.
 - KYC `documents` / `fields` jsonb tightening — pairs with Day 16-17 wizard.
 
 ## Cross-sprint carries (not closeout)
 
 - GitHub Pro upgrade → Environment branch-protection on `staging` (and later `prod`) — already a Sprint 1 carry; pairs with the canonical OIDC pattern decision.
 - Sprint 4 — `eventpulse-deploy-prod` role using the same canonical three-claim pattern with `environment:production` + `deploy-prod.yml@refs/heads/prod`.
+- **Sprint 3 auth-hardening bundle PR** — session revocation fix in `apps/api/src/auth/middleware.ts` `extractAndVerify` (moved from Sprint 2 closeout per Day 14 decision so it can be joint-reviewed with the auth events backfill) + auth events audit_logs backfill (sign-in success/fail, sign-out, magic-link issued/consumed, OAuth link created).
 
 ## Open questions for Moshiur
 
@@ -88,6 +99,8 @@ a422847 feat(infra): Sprint 2 Item 6 — KYC bucket + dedicated CMK (#64)
 - §21.3 host-liability clause is load-bearing — don't weaken via code defaults or UX implying platform endorsement.
 - KYC bucket policy: never `StringNotEqualsIfExists` on encryption-key enforcement.
 - GitHub Actions OIDC trust policies: **canonical three-claim shape only** (aud + sub=environment + job_workflow_ref). Inline policies for SSM-based deploys include **both** `ec2:instance` and `ssm:managed-instance` ARN forms. See `decisions.md` for the project standard; PRs that diverge get rejected.
+- **audit_logs is APPEND-ONLY** (§1.3 R8). No UPDATE/DELETE from application code; REVOKE enforces at the GRANT layer in addition to RLS policy absence. Retention sweeps go through a maintenance PR via `withSuperAdmin`.
+- **Idempotent inserts under RLS** (e.g. ON CONFLICT DO NOTHING + SELECT-back) must handle the zero-rows-after-collision case as cross-tenant ownership (409 CONFLICT), not 404 or 500. See `gotchas.md` for the trap.
 
 ## Useful runbook fragments
 

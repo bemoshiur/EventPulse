@@ -4,6 +4,43 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-17 · audit_logs scope at Item 9 — KYC transitions only; auth events + S3 issuance backfill deferred
+
+**Context:** Sprint 2 Day 14 Item 9 is the first feature to write to `audit_logs` (§9.10). Items 5/7+8 didn't create the table because they didn't need auditable state transitions. During the Day 14 plan review, Moshiur surfaced the question explicitly: is the choice to scope `audit_logs` writes to KYC transitions only — and NOT backfill auth events from Day 11 (sign-in success/fail, sign-out, magic-link issued/consumed, OAuth link created) or S3 signed URL issuance from Day 13 (`getKycUploadUrl` calls) — a deliberate decision or an unnoticed gap?
+
+**Answer:** unnoticed gap. The Item 9 plan scoped `audit_logs` writes to "what Item 9 needs"; auth events and S3 issuance are classic targets for a payment platform's audit trail and should also write rows. Backfilling them is cheap before production data hits the table and expensive after.
+
+**Decision:**
+
+- **Item 9 ships as-planned**: `audit_logs` writes scoped to KYC state transitions only. No scope expansion into Day 14 (that would be scope creep on a single-day item).
+- **S3 signed URL issuance backfill** → **Sprint 2 closeout** (v0.2.0-sprint-2 bundle). Single helper call added inside `getKycUploadUrl()` in `apps/api/src/infra/s3/client.ts`. KYC-scoped, so it lands as a natural extension of Items 6+7+8 KYC work. Audit row shape: `actor_type='tenant_user'`, `action='kyc.upload_url_issued'`, `entity_type='kyc_submission'`, `entity_id=submissionId`, `metadata={documentType, contentType, expiresIn}`. No PII in the row (per §1.3 R5).
+- **Auth events backfill** (sign-in success/fail, sign-out, magic-link issued/consumed, OAuth link created) → **Sprint 3 dedicated PR**, paired with the session-revocation fix from `progress.md` Sprint 2 closeout candidates list. Both are auth-hardening work; joint /review is cheaper than two separate ones. Some rows will have nullable `tenant_id` (sign-in occurs before context-switch); migration 0005's RLS policy already accommodates the nullable-tenant_id case via the BYPASSRLS write path (system-action audit rows are written under `withSuperAdmin`, never under tenant context).
+- Both backfills land before any production data hits `audit_logs` — first paid tenant onboards no earlier than Sprint 4 — so no retroactive-write concern.
+
+**Cross-references:**
+
+- `apps/api/src/services/audit/kyc.ts` — first writer; defines the helper pattern subsequent backfill writers will mirror (one helper per entity, atomic inside the caller's transaction, deterministic shape per §9.10).
+- 2026-05-17 "Sprint 2 Item 10 scope amendment" — same operational pattern of "ship the minimum at Item N, queue the related-but-not-strictly-needed work for a dedicated PR rather than expanding scope".
+- `.claude/memory/progress.md` Sprint 2 closeout candidates list — gains the S3 issuance backfill bullet; session-revocation bullet picks up the auth-events backfill cross-reference for Sprint 3.
+
+**Consequences:**
+
+- **Day 14 PR stays focused.** /review didn't have to wade through three sets of audit writers in one PR; the KYC transition writer is the only auditable code path under review. Future per-entity audit writers (S3 issuance, auth events, fee changes, payouts) ship as small per-domain PRs that mirror the `services/audit/kyc.ts` shape.
+- **One-helper-per-domain pattern** stays consistent. We do NOT introduce a generic `writeAudit()` god-helper that takes all the §9.10 fields as freeform parameters — that loses the per-domain type safety that `writeKycTransition()` provides (e.g. `fromState: KycSubmissionStatus | null`, `toState: KycSubmissionStatus` are typed; a generic helper would accept any strings).
+- **Sprint 2 closeout PR shape** (v0.2.0-sprint-2 bundle) now includes:
+  - S3 signed URL issuance audit backfill (single helper call in `getKycUploadUrl`)
+  - CLAUDE.md §17 OIDC pattern codification (queued Day 13)
+  - CLAUDE.md §13.0 + §13.3 update for `draft` state + manual-review language (queued Day 14 morning)
+  - Reviewer S4 (KMS key-admin role) + S6 (Glacier_IR vs STANDARD-90d) from Day 12 reviewer
+  - audit_logs unset-GUC smoke test (from Day 14 code-reviewer finding #1)
+- **Sprint 3 PR shape** for the auth-hardening bundle:
+  - Session revocation fix in `apps/api/src/auth/middleware.ts` `extractAndVerify` (existing closeout candidate)
+  - Auth events audit backfill — sign-in, sign-out, magic-link issuance + consumption, OAuth link creation. Some rows tenant-scoped, others user-scoped or system-action; the writer per-event-type chooses the right execution context.
+
+**Path-back if either backfill drifts further:** if S3 issuance hasn't landed by end of Sprint 2, this entry becomes a §29 Open Decision asking whether the audit trail's incompleteness is acceptable for the first paying tenant or whether the closeout is gated on backfill completion. Same shape for auth events at Sprint 3 closeout.
+
+---
+
 ## 2026-05-17 · Sprint 2 Item 10 scope amendment — third-party verification deferred to manual review
 
 **Context:** Sprint 2's original Item 10 (Day 14, alongside Item 9) shipped two automated local validators inside the submit endpoint: an eTIN format regex and a BFIU sanctions-list matcher (against `infra/compliance/sanctions.json` seeded from BFIU's public notice — Checkpoint #5 in the Sprint 2 kick-off). At Day 14 kick-off, after Day 13's KYC pipeline foundations landed and verified end-to-end (PRs #66, #67, #68), Moshiur reduced Item 10's scope materially — the same operational pattern as the Porichoy deferral two days earlier. Two automated validators that occasionally reject valid eTINs or miss real sanctions are worse than no validator at all (false confidence). MVP submission volume is sub-50/week through Phase 1, the reviewer is already looking at every submission anyway, and binding the system to a specific regex / sanctions-source algorithm at this stage commits us to maintenance cost without a corresponding fraud-prevention payoff.
