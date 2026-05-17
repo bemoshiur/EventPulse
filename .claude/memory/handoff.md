@@ -1,43 +1,65 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last session:** 2026-05-16 (Sprint 1 Day 1-2 + GitHub wiring)
-**Ended by:** Moshiur Rahman
+**Last update:** 2026-05-17 (mid-session checkpoint during 12-hour autonomy window)
+**Driver:** Claude Code (Opus 4.7) under autonomy mandate from Moshiur
 
 ## State right now
 
-Four commits on `main` (and `prod`, pushed to private repo `publicpulseagency/EventPulse`):
+On branch `feat/day-3-4-ec2-route53` (un-pushed work-in-progress; will land via PR before any merge to `main`). `main` HEAD remains `edcd6f9` (last commit was the postcss bump #16).
 
-- `6a89a29` chore: bootstrap repo with CLAUDE.md v2.0, .claude/ protocols, memory seed
-- `82ab55a` memory+docs: resolve §14.1 vs §9.12 fee-mode contradiction (pass_through wins)
-- `1b45b16` feat(scaffold): sprint 1 day 1-2 — monorepo + design system + sign-in screen
-- `21dad2c` chore(github): wire repo for collaboration — workflows, templates, dependabot, repo-level files
+**AWS resources live in `739275468267` / `ap-southeast-1`:**
 
-Sprint 1 Day 1-2 fully closed (typecheck green, 8/8 tests, `next build` prerenders, `/health` responds, static `/sign-in` exercises §1.5 system end-to-end). GitHub wiring sub-task closed — 5 workflows, 4 issue templates, PR template, CODEOWNERS, dependabot, repo-level files (SECURITY/LICENSE/CONTRIBUTING/CODE_OF_CONDUCT), 15 labels, 16 Sprint 1 issues (#19–#34) live, 3 environments created (bare shells), 7 secret placeholders + 2 deploy-gate variables, wiki disabled, Dependabot vuln alerts + automated security updates on.
+- KMS CMK `f8eeb424-6c1f-4c14-bc79-aae499815cb8` aliased `alias/eventpulse-staging` (rotation on)
+- IAM role `eventpulse-staging-ec2` + instance profile (same name) — `AmazonSSMManagedInstanceCore` + `eventpulse-staging-app` inline + `eventpulse-staging-acme-route53` inline (scoped to zone `Z003493917KJX7VCR8ZMR`)
+- S3 bucket `eventpulse-staging-ssm-logs` (BlockPublicAccess all, KMS encryption, versioning, 90d lifecycle, TLS-only + KMS-only bucket policy)
+- CW Logs group `/eventpulse/staging/ssm-sessions` KMS-encrypted, 90d retention
+- SSM document `SSM-SessionManagerRunShell` configured with both S3 + CW Logs sinks
+- Security group `sg-0f4fd53e848eda1f9` ("eventpulse-staging-web") inbound 80/443 v4+v6 only — **no port 22**
+- Elastic IP `eipalloc-0641d86f38bbf5ef0` = **`18.141.7.246`** attached to instance
+- EC2 `i-02e4fddeb923c14f9` (t3.small, Ubuntu 24.04 noble AMI `ami-04592e28abc2b9fc9`, 30GB gp3 KMS-encrypted, IMDSv2 required, in `subnet-094036f117b4a2934` AZ `ap-southeast-1b`, instance profile attached, SSM agent Online)
+- Route 53: 5 staging A records under zone `Z003493917KJX7VCR8ZMR` (`staging`, `app.staging`, `admin.staging`, `api.staging`, `my.staging` → `18.141.7.246`), TTL 300, change `C0701652V9QV6127UVNF` INSYNC
+
+**Software install** COMPLETE on EC2: Node 22.22.2, pnpm 9.15.9, pm2 7.0.1, Postgres 16.14 cluster running on `:5432` with `eventpulse_staging` DB + pgcrypto + citext extensions, `eventpulse_admin` BYPASSRLS role, Redis 8.6.3 on localhost:6379, Nginx 1.24 with HTTP-to-HTTPS redirect vhost + HTTPS vhost serving `/health` and `/`, certbot 5.6 with auto-renew systemd timer, CloudWatch Agent installed (not yet configured), fail2ban running.
+
+**TLS cert** issued by Let's Encrypt (production server) covering all 5 SAN names — `staging.eventpulse.com.bd`, `app.staging.eventpulse.com.bd`, `admin.staging.eventpulse.com.bd`, `api.staging.eventpulse.com.bd`, `my.staging.eventpulse.com.bd`. ECDSA, issuer "E7", expires 2026-08-15. Auto-renew via certbot's systemd timer.
+
+**HTTPS verified externally:** all 5 hostnames respond HTTPS 200; HTTP returns 301 to HTTPS. The placeholder page renders.
+
+**AWS Budget** `eventpulse-monthly` set at $40/mo USD with email alerts at 50% actual, 80% actual, and forecast 100% to `moshiur@publicpulse.com.bd`. Confirm-or-change on Moshiur's return.
 
 ## Where we are in §26.1
 
-- Day 1-2 → **done**
-- Day 3-4 → **next**, blocked on AWS profile + domain registrar confirmation
-- Day 5-6 (Drizzle identity-tables schema + RLS) — issues #24, #25, #26, #27
-- Day 7-8 (auth: email/password, magic link, Google, Apple, Lucia) — issues #28, #29, #30, #31
-- Day 9-10 (SES + PM2 + deploy + green CI) — issues #32, #33, #34
+- Day 1-2 → **done** (last session)
+- Day 3-4 → **done** (PR pending merge to main; commit `0ae79a1` memory + AWS infra all live)
+- Day 5-6 (identity schema + RLS) — **next**, will land on branch `feat/day-5-6-identity-schema`
+- Day 7-8 (4 auth methods) — queued
+- Day 9-10 (SES + PM2 + deploy.sh) — queued
 
-## Immediate next step (one of)
+## Immediate next steps the autonomy session will tackle (in order)
 
-1. **Bump CLAUDE.md to playbook v2.1** — user is saving v2.1 to `Playbook/EventPulse_Claude_Code_Playbook_v2.1.md`. On confirmation: copy to CLAUDE.md, log decisions.md entry for v2.0 → v2.1, commit as `memory+docs: bump CLAUDE.md to playbook v2.1`. v2.1 adds attendee accounts to Phase 2, self-service hosting, unified identity model, handle system. Schema (issue #24) will pick up `users.handle`, `users.handle_chosen_at`, `tenants.is_personal`, `tenants.owner_user_id`.
-2. **Day 3-4 — EC2 + Route 53** — once v2.1 is in or the user chooses to defer it.
+1. Open PR `feat/day-3-4-ec2-route53` → main, let CI run, squash-merge
+2. Switch to Day 5-6 branch, write Drizzle identity schema (`users`, `tenants` + `is_personal`/`owner_user_id`, `oauth_identities`, `magic_links`, `sessions`, `tenant_users`, `super_admins`, `tenant_fee_config`, `fee_override_log`, `reserved_handles`, `handle_history`, `event_reports`) + RLS policies + cross-tenant RLS negative tests + reserved-handles seed
+3. Day 7-8: Auth flows (Lucia + email/pw + magic link + Google OAuth via arctic + Apple Sign-In via arctic with JWT client_secret)
+4. Day 9-10: SES domain identity + transactional templates + PM2 ecosystem + deploy.sh/rollback.sh, CI green end-to-end
 
-## Open questions for Moshiur (carry into next session)
+## Open questions / decisions that need Moshiur's sign-off on his return
 
-- **AWS profile** for staging — assume `eventpulse-staging` unless told otherwise.
-- **Domain `eventpulse.com.bd` registrar** — Route 53 must be authoritative for DNS-01 wildcard cert. If domain is elsewhere, NS records → Route 53 first.
-- **GitHub plan upgrade** — branch protection + environment reviewers + advanced security all blocked on GitHub Free for private repos. $4/month Pro (user) or convert to org + Team. Cheapest path: Pro. Tracked in `gotchas.md` and `progress.md` Blocked.
-- **User → Organization conversion** — needed for CODEOWNERS team (`@publicpulseagency/eventpulse-core`) to validate and for team-based push restrictions on prod. Manual step in GitHub Settings.
-- **GitHub Project v2** — `gh auth refresh -s project,read:project` to unblock; then I can create the project + 4 custom fields + add the 16 Sprint 1 issues.
-- **15 Dependabot PRs** opened immediately after first push. Many are major version bumps that would break the locked §1.2 stack (Next 15→16, zod 3→4, vitest 2→4). Triage when ready; consider tightening dependabot.yml `ignore` rules for locked majors.
-- **3 Dependabot security alerts** flagged — review and decide on patch acceptance.
-- §29 #9 (withholding tax/AIT) and #10 (VAT/Mushak) — book legal consult by week 4-5 of Phase 1.
+- **AWS Budgets at $40/mo** — I will create this myself as the cost canary (consistent with the §17.11 monitoring philosophy). Confirm OK or change the threshold.
+- **`security@eventpulse.com.bd` mailbox** — does not yet exist. For staging LE cert I'm using `moshiur@publicpulse.com.bd` as the registration email; production cert deferred until mailbox set up. Suggest setting up an SES inbound rule to forward `security@`, `legal@`, `privacy@`, etc. to a personal mailbox before going to production.
+- **GitHub plan upgrade** — still on Free. Branch protection on `main`/`prod` still discipline-only. Bump to Pro the day a second person gets repo access. See `gotchas.md`.
+- **§29 #9 (AIT/withholding)** + **§29 #10 (VAT/Mushak)** — book legal consult by week 4-5 of Phase 1. Not blocking dev but blocking go-live.
+- **7 slash commands** — content was placeholder last time. Re-send when ready.
 
-## Half-done items
+## Half-done items at this moment
 
-None — both Day 1-2 and the GitHub wiring sub-task are fully closed.
+- Day 3-4 PR not yet merged to `main`. Will open + squash-merge as the next sub-task.
+- Day 5-6 / 7-8 / 9-10 not yet started.
+
+## Hard guardrails I am operating under
+
+- Single EC2 only — no production instance during dev, no RDS, no ALB, no ECS, no Lambda, no managed-pricey-service. Co-located stack per §17.1.
+- ~$22/month projected. AWS Budget canary at $40 to catch drift.
+- No SSH key, no port 22. All shell access via `aws ssm start-session --target i-02e4fddeb923c14f9 --profile eventpulse`.
+- No direct pushes to `main` or `prod`. All work via feature branches + PR; squash to main; merge-commit to prod.
+- Memory commits (`memory:` prefix) separate from feature commits.
+- No fee math anywhere except `apps/api/src/domain/payments/fee-calculator.ts` (will land in Day 9-10 or later).

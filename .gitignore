@@ -8,6 +8,12 @@ build/
 .next/
 out/
 *.tsbuildinfo
+.turbo/
+
+# Local backups
+**/* copy.md
+**/* copy.ts
+**/* copy.tsx
 
 # Env (all .env files except the example)
 .env*

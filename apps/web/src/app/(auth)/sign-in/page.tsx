@@ -23,7 +23,7 @@ export default function SignInPage() {
         <OAuthButtonGroup />
       </div>
 
-      <div className="text-ep-graphite/60 my-6 flex items-center gap-4 text-xs uppercase tracking-wide">
+      <div className="text-ep-graphite/60 my-6 flex items-center gap-4 text-xs tracking-wide uppercase">
         <span className="bg-ep-line h-px flex-1" />
         or
         <span className="bg-ep-line h-px flex-1" />
