@@ -4,6 +4,177 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## Postgres tables pre-existed on staging without migration history → 0001 re-apply fails
+
+**Status:** RESOLVED 2026-05-17 during Sprint 2 Day 11 Item 5 (first real deploy).
+
+**Symptom:** Deploy attempt 6's migration runner reported `relation "users" already exists` while applying `0001_identity_tables.sql`. The 12 identity tables existed in `eventpulse_staging` (likely from a Sprint 1 Day 5-6 manual verification run), but the `_eventpulse_schema_migrations` table was empty — the runner had no way to know 0001/0002 were already in place.
+
+**Why it happens:** The hand-rolled migration runner (`apps/api/src/db/migrate.ts`) maintains its own history table. If schema state was created outside the runner (manual psql + .sql application, drizzle-kit push, or a different test harness), the runner is blind to it and tries to replay every migration from scratch.
+
+**Fix (when it happens):** Backfill the migrations history table with the already-applied filenames, then re-run the deploy:
+
+```sql
+INSERT INTO _eventpulse_schema_migrations (filename, applied_at)
+VALUES ('0001_identity_tables.sql', now()),
+       ('0002_identity_rls_policies.sql', now())
+ON CONFLICT DO NOTHING;
+```
+
+Verify the runner is in sync afterwards: `SELECT * FROM _eventpulse_schema_migrations ORDER BY filename;` should list every migration that has had its DDL applied.
+
+**How to avoid:** Never apply schema via `psql -f *.sql` directly on a long-lived environment — always go through `pnpm --filter @eventpulse/api db:migrate`. For test/scratch DBs, prefer dropping + recreating the DB rather than applying SQL out-of-band.
+
+---
+
+## Postgres `eventpulse` user lacks ADMIN OPTION → migration 0001 GRANT fails
+
+**Status:** RESOLVED 2026-05-17 during Sprint 2 Day 11 Item 5.
+
+**Symptom:** `error: permission denied to grant role "eventpulse_app"` — `Only roles with the ADMIN option on role "eventpulse_app" may grant this role.` Migration 0001 runs `GRANT eventpulse_app TO CURRENT_USER` (and same for eventpulse_admin); the CURRENT_USER (`eventpulse` login role on staging) didn't have ADMIN OPTION on the target roles.
+
+**Why it happens:** In CI the migration runs as the Postgres superuser (`postgres` from the postgres container's `POSTGRES_USER` default), which has ADMIN OPTION on every role implicitly. On staging the runtime DB user (`eventpulse`, a non-superuser LOGIN role created in Sprint 1 Day 3-4) does not. When 0001 creates `eventpulse_app` / `eventpulse_admin` it succeeds (no special perm needed if eventpulse has CREATEROLE), but the subsequent GRANT fails without ADMIN OPTION on those new roles.
+
+**Fix (one-time, as postgres superuser via local socket):**
+
+```sql
+GRANT eventpulse_app   TO eventpulse WITH ADMIN OPTION;
+GRANT eventpulse_admin TO eventpulse WITH ADMIN OPTION;
+```
+
+After this, the migration's `GRANT ... TO CURRENT_USER` is a no-op (eventpulse already has the role with ADMIN OPTION) and 0001 applies cleanly. Verify via:
+
+```sql
+SELECT r.rolname AS member_of, g.rolname AS member, m.admin_option
+FROM pg_auth_members m
+JOIN pg_roles r ON m.roleid=r.oid
+JOIN pg_roles g ON m.member=g.oid
+WHERE r.rolname LIKE 'eventpulse%';
+```
+
+`admin_option=t` should appear for both eventpulse_app and eventpulse_admin members where member = eventpulse.
+
+**How to avoid:** Make this part of the Ansible playbook from Sprint 1 Day 3-4, OR extend `infra/scripts/bootstrap-staging.sh` to ensure the roles + grants are in place before the first deploy. (Deferred to a follow-up cleanup; current staging is bootstrapped manually.)
+
+---
+
+## Postgres CREATE POLICY requires table ownership → 0003 fails for non-owner
+
+**Status:** RESOLVED 2026-05-17 during Sprint 2 Day 11 Item 5.
+
+**Symptom:** Migration 0003's `CREATE POLICY users_self_select ON users` failed with `must be owner of table users`. The runtime DB user (`eventpulse`) was running the migration, but the tables were owned by `postgres` (from a Sprint 1 Day 5-6 manual setup).
+
+**Why it happens:** `CREATE POLICY`, `ALTER TABLE`, `DROP TABLE` and similar DDL all require table ownership (or superuser). Tables created by `postgres` via `psql -f` belong to `postgres` and can't be modified by `eventpulse` even with CREATEROLE + WITH ADMIN OPTION on the role family.
+
+**Fix (one-time, as postgres superuser):** Transfer ownership of every public-schema table to the runtime DB user:
+
+```sql
+DO $$
+DECLARE t record;
+BEGIN
+  FOR t IN SELECT tablename FROM pg_tables WHERE schemaname='public' AND tableowner='postgres'
+  LOOP
+    EXECUTE format('ALTER TABLE public.%I OWNER TO eventpulse', t.tablename);
+  END LOOP;
+END $$;
+```
+
+After this, `eventpulse` can run any DDL against those tables. Future tables created BY eventpulse during a migration are automatically owned by eventpulse, so this is a one-time fix.
+
+**Why not `REASSIGN OWNED BY postgres TO eventpulse`:** That command operates on ALL objects owned by postgres in the current DB, including DB-system objects we can't reassign. Result: `cannot reassign ownership of objects owned by role postgres because they are required by the database system`. Scoping to public-schema-only via the loop above sidesteps this.
+
+**How to avoid:** Don't seed schema as `postgres` on a long-lived environment. Either run the migration runner from a fresh DB (where eventpulse creates everything), or fold the chown into the Ansible/bootstrap step alongside the role+ADMIN OPTION setup above.
+
+---
+
+## pnpm v9: `NODE_ENV=production` skips devDeps; `--prod=false` and `NPM_CONFIG_PRODUCTION=false` do NOT override it
+
+**Status:** RESOLVED 2026-05-17 during Sprint 2 Day 11 Item 5 — deploy.sh uses `NODE_ENV=development` for the install command, then restores `NODE_ENV=production` for build + migrate + pm2.
+
+**Symptom:** Deploy attempts 2 + 3 had `pnpm install --frozen-lockfile --prod=false` or `NPM_CONFIG_PRODUCTION=false pnpm install --frozen-lockfile` and pnpm reported "Already up to date" but `apps/web/node_modules/` contained only the 10 prod deps — no `@tailwindcss/postcss`, no `typescript`, no `husky`. Next build then failed: `Cannot find module '@tailwindcss/postcss'`.
+
+**Why it happens:** In pnpm v9.15.x, the `--prod` CLI flag has version-to-version parsing drift, and the `NPM_CONFIG_PRODUCTION` env var is treated as advisory at best — neither overrides pnpm's direct read of `NODE_ENV`. If `NODE_ENV=production` is in scope when pnpm runs, devDeps are skipped regardless of any "no, install everything" signals.
+
+**Fix (in deploy.sh / rollback.sh):** Wrap the install command with `NODE_ENV=development`:
+
+```bash
+# .env.staging has NODE_ENV=production — correct for runtime.
+# But pnpm install needs to see development to include devDeps for build.
+HUSKY=0 NODE_ENV=development \
+  $PNPM install --frozen-lockfile --config.confirm-modules-purge=false
+
+# Restore NODE_ENV for the rest of the script.
+NODE_ENV=production
+export NODE_ENV
+```
+
+This is the only reliable knob in pnpm v9. The CLI flag and `NPM_CONFIG_PRODUCTION` env var do not work as documented; assume `NODE_ENV` is authoritative until pnpm v10+ behavior is verified.
+
+**How to avoid:** Don't trust pnpm CLI flag documentation in v9.x for prod/dev toggling. Always test with `NODE_ENV` set to verify which knob actually moves the install behavior.
+
+---
+
+## pnpm `--frozen-lockfile` prompts "modules will be reinstalled" with no TTY in SSM → hangs
+
+**Status:** RESOLVED 2026-05-17 during Sprint 2 Day 11 Item 5 — `--config.confirm-modules-purge=false` flag added.
+
+**Symptom:** Deploy attempt 2 hung indefinitely. SSM command output showed `The modules directories will be removed and reinstalled from scratch. Proceed? (Y/n) ‣ true` with an ANSI escape sequence trying to redraw the prompt. SSM's command channel has no PTY, so pnpm's `enquirer`-based prompt never got an answer and the command timed out.
+
+**Why it happens:** When a previous install left node_modules in a partial state (e.g. an earlier `--prod` install then a later one requiring devDeps), pnpm decides the modules tree needs to be purged + reinstalled. It prompts the user for confirmation by default. SSM RunShellScript invocations don't allocate a TTY.
+
+**Fix:** `pnpm install --config.confirm-modules-purge=false` auto-confirms the purge. Add it to every `pnpm install` invocation that might run in a non-TTY context (deploy scripts, CI, SSM, container entrypoints).
+
+**How to avoid:** For any shell script that runs unattended, audit every interactive-capable subcommand for a non-interactive flag. pnpm has several others to watch: `--reporter=append-only` (no spinner), `--config.confirm-modules-purge=false`, `--config.fund=false`. CI environments usually set `CI=true` which pnpm respects for some prompts but not all.
+
+---
+
+## TypeScript `declarationMap` requires `declaration` or `composite` — base tsconfig + override interaction
+
+**Status:** RESOLVED 2026-05-17 during Sprint 2 Day 11 Item 5 — `apps/api/tsconfig.build.json` explicitly sets `declarationMap: false`.
+
+**Symptom:** `tsc --project tsconfig.build.json` failed with `error TS5069: Option 'declarationMap' cannot be specified without specifying option 'declaration' or option 'composite'.`
+
+**Why it happens:** Base config (`packages/tsconfig/node.json`) sets `declaration: true` + `declarationMap: true`. `apps/api/tsconfig.build.json` overrides `declaration: false` but doesn't override `declarationMap`, so `declarationMap=true` is inherited alone. TS 5.6+ catches this combination.
+
+**Why CI didn't catch it:** `pnpm typecheck` invokes `tsc --noEmit` against `tsconfig.json`, not `tsconfig.build.json`. The build config is only exercised by `pnpm --filter @eventpulse/api build` which runs on the EC2 during deploy. CI's `pnpm test` uses vitest + tsx (which bypasses tsc's compiler-options validation entirely).
+
+**Fix:** Explicit `declarationMap: false` alongside `declaration: false` in any tsconfig that disables `declaration` while inheriting from a base that enables `declarationMap`.
+
+**How to avoid:** Add a CI step that runs the actual production build (`pnpm --filter @eventpulse/api build`) — not just typecheck against the dev tsconfig. The "Lint + typecheck + format" CI job currently doesn't exercise build configs. Sprint 2 Day 12 housekeeping candidate: add `build` to the CI matrix.
+
+---
+
+## SSM `commands=[]` array entries run in SEPARATE shells — env vars don't persist between entries
+
+**Status:** RESOLVED 2026-05-17 during Sprint 2 Day 11 Item 5 (workaround: combine commands with `;` or `&&` into a single array entry).
+
+**Symptom:** A multi-step SSM command like:
+
+```bash
+aws ssm send-command --parameters 'commands=[
+  "PG_PASSWORD=$(sudo awk -F: ... .pgpass)",
+  "sudo PG_PASSWORD=\"$PG_PASSWORD\" /path/to/bootstrap.sh"
+]'
+```
+
+failed with `PG_PASSWORD: must be set in caller env`. The first entry set the variable; the second entry couldn't see it.
+
+**Why it happens:** AWS SSM RunShellScript runs each `commands[]` array entry as a SEPARATE invocation of `bash -c`. Each gets its own shell + its own env. Variables set in one entry are gone by the time the next starts. This is documented but easy to miss because the array format looks like a script with multiple lines.
+
+**Fix:** Combine dependent steps into a single array entry, chained with `;` (sequence) or `&&` (sequence-with-early-abort):
+
+```bash
+commands=[
+  "set -e; PG_PASSWORD=$(sudo awk -F: ... .pgpass); sudo PG_PASSWORD=\"$PG_PASSWORD\" /path/to/bootstrap.sh"
+]
+```
+
+This way the whole pipeline runs in one shell and variables persist. Or write a small wrapper script + invoke it as a single command.
+
+**How to avoid:** Mentally treat each entry in the SSM commands array as its own self-contained shell script. Need state to flow between them? Either combine them, or persist via a tempfile (`/tmp/foo.env` then `source /tmp/foo.env`).
+
+---
+
 ## Pre-push hook blocks tag pushes from `main` as if they were branch pushes
 
 **Status:** RESOLVED 2026-05-17 — `.husky/pre-push` rewritten to inspect git's per-ref stdin and gate solely on branch refs (`refs/heads/main` and `refs/heads/prod`). Tag pushes (`refs/tags/*`) and feature-branch pushes (`refs/heads/feat/*`, etc) pass cleanly even when HEAD is on main. Verified against an 8-case test matrix covering tag-only, branch-only, mixed, empty-stdin, and dual-protected scenarios before merge. Sprint 2 Day 11 Item 2; durable fix landed in the same sprint the issue surfaced.
