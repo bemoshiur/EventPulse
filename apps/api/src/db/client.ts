@@ -1,13 +1,26 @@
 /**
- * Postgres connection + tenant-scoping helpers per CLAUDE.md §4.2.
+ * Postgres connection + RLS-scoping helpers per CLAUDE.md §4.2 / §4.2.1.
  *
- * Every request that touches tenant-scoped data goes through `withTenant`,
- * which sets `app.current_tenant_id` on the session before any query runs.
- * RLS policies (see migrations/0002_identity_rls_policies.sql) read that
- * setting and enforce isolation at the database layer.
+ * Three context helpers, one per audience:
  *
- * Super-admin code goes through `withSuperAdmin` which switches the role
- * to `eventpulse_admin` (BYPASSRLS). Use sparingly and audit-log every call.
+ *   - withTenant(tenantId, fn) — tenant routes. Sets `app.current_tenant_id`.
+ *     Tenant-scoped RLS policies (migrations/0002_identity_rls_policies.sql)
+ *     read that var.
+ *
+ *   - withUser(userId, fn)     — /my/* routes (user-scoped, no tenant).
+ *     Sets `app.current_user_id`. User-scoped RLS policies
+ *     (migrations/0003_user_scoped_rls.sql) read that var.
+ *
+ *   - withSuperAdmin(fn)       — super-admin routes. Switches Postgres role
+ *     to `eventpulse_admin` (BYPASSRLS). Use sparingly and audit-log every
+ *     call.
+ *
+ * The first two switch to `eventpulse_app` first (non-superuser, RLS engages
+ * — Postgres superusers always bypass RLS regardless of FORCE; see
+ * .claude/memory/gotchas.md). The third switches to `eventpulse_admin`.
+ *
+ * All three open a transaction; `fn` runs inside it; commit on success,
+ * rollback on throw.
  */
 
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres'
@@ -62,6 +75,52 @@ export async function withTenant<T>(
     await client.query('BEGIN')
     await client.query('SET LOCAL ROLE eventpulse_app')
     await client.query("SELECT set_config('app.current_tenant_id', $1, true)", [tenantId])
+    const db = drizzle(client, { schema })
+    const result = await fn(db)
+    await client.query('COMMIT')
+    return result
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
+  }
+}
+
+/**
+ * Run `fn` inside a transaction scoped to `userId`. Drops to the
+ * non-superuser `eventpulse_app` role (so RLS engages) and sets
+ * `app.current_user_id` for user-scoped policies (migration 0003) to
+ * read. Use for `/my/*` routes and any other endpoint that authorises
+ * by user identity rather than by tenant membership.
+ *
+ * Visible under this context (per migration 0003):
+ *   - users           : only the row matching userId
+ *   - sessions        : only sessions belonging to userId
+ *   - oauth_identities: only OAuth links belonging to userId
+ *
+ * NOT visible under this context (deliberate — BYPASSRLS-only):
+ *   - magic_links     : operational; tokens are consumed via withSuperAdmin
+ *   - handle_history  : audit trail; read via middleware (BYPASSRLS)
+ *
+ * Tenant-scoped tables also see zero rows here because
+ * `app.current_tenant_id` is not set; that's correct — withUser is for
+ * routes that don't have a tenant context. If you need both, today the
+ * call site uses withSuperAdmin and does the auth check in application
+ * code; a combined `withUserInTenant(userId, tenantId, fn)` helper can
+ * be added later if a real use case appears.
+ *
+ * Always rolls back if `fn` throws.
+ */
+export async function withUser<T>(
+  userId: string,
+  fn: (tx: NodePgDatabase<Schema>) => Promise<T>,
+): Promise<T> {
+  const client = await pool().connect()
+  try {
+    await client.query('BEGIN')
+    await client.query('SET LOCAL ROLE eventpulse_app')
+    await client.query("SELECT set_config('app.current_user_id', $1, true)", [userId])
     const db = drizzle(client, { schema })
     const result = await fn(db)
     await client.query('COMMIT')

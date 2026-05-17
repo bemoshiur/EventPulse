@@ -234,7 +234,13 @@ export const sessions = pgTable(
       'sessions_tenant_consistency_chk',
       sql`(${t.audience} = 'tenant' AND ${t.tenantId} IS NOT NULL) OR (${t.audience} <> 'tenant' AND ${t.tenantId} IS NULL)`,
     ),
-    index('idx_sessions_user').on(t.userId),
+    // Composite index supports the "my active sessions" query
+    // (WHERE user_id = $1 AND expires_at > now()) and also covers any
+    // single-column user_id lookup via the leftmost prefix. Replaces
+    // the original idx_sessions_user (dropped in migration 0003).
+    // A partial WHERE expires_at > now() is NOT used because now() is
+    // STABLE not IMMUTABLE — Postgres rejects it in index predicates.
+    index('idx_sessions_user_active').on(t.userId, t.expiresAt),
     index('idx_sessions_expires').on(t.expiresAt),
   ],
 )
