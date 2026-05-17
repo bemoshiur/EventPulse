@@ -4,6 +4,37 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-17 · Checkpoint #2 confirmed — KYC bucket KMS strategy: dedicated CMK for blast-radius isolation
+
+**Context:** Sprint 2 Day 12 Item 6 creates the staging S3 bucket holding KYC documents (NID images, eTIN certs, bank/MFS evidence). Per the Sprint 2 plan, Checkpoint #2 requires explicit confirmation before any AWS write. Moshiur pre-staged the answer at Day 12 kick-off. This entry locks the answer so the Item 6 PR doesn't re-litigate it.
+
+**Decision:**
+
+- Dedicated `alias/eventpulse-kyc-staging` CMK in `ap-southeast-1` — **NOT** reusing the general `alias/eventpulse-staging` CMK. Per §17.9 per-purpose KMS pattern (same pattern that already separates SSM session logs from EBS).
+- Bucket: `eventpulse-kyc-staging`, region `ap-southeast-1`.
+- BlockPublicAccess: all four flags enabled. Versioning on. BucketOwnerEnforced.
+- Default encryption: SSE-KMS with the dedicated CMK; `BucketKeyEnabled=true` to cap KMS request cost.
+- Bucket policy: deny non-TLS (`aws:SecureTransport=false`); deny PUT without `x-amz-server-side-encryption=aws:kms`; deny PUT with any KMS key ID other than the dedicated CMK.
+- Prefix structure: `tenants/{tenant_id}/kyc/{submission_id}/{document_type}.{ext}`.
+- 5-year retention per BFIU §15.1 — enforced at the app layer (no DELETE call before 5 years) plus the bucket has **no** expiration lifecycle rule on `tenants/*/kyc/*`. Legal-hold capability via Object Lock is **deferred to Phase 2** — staging uses versioning + IAM-deny-delete instead.
+- Storage class lifecycle: STANDARD → GLACIER_IR at 30 days (the Checkpoint text says "Glacier transition at 30 days"; GLACIER_IR chosen over GLACIER_DEEP because BFIU/reviewer access patterns may need same-day retrieval during disputes).
+- IAM: scoped policy on existing `eventpulse-staging-ec2` role granting `s3:PutObject/GetObject/DeleteObject/ListBucket` ONLY on `arn:aws:s3:::eventpulse-kyc-staging` + `arn:aws:s3:::eventpulse-kyc-staging/tenants/*` (prefix-shape only, never bucket-wide for write); `kms:Encrypt/Decrypt/GenerateDataKey/DescribeKey` ONLY on the dedicated CMK ARN.
+- Secrets Manager: bucket name + KMS key ID/ARN land in `eventpulse/staging/kyc` so app reads them at boot via the same bootstrap pipeline as JWT secrets.
+- Codification: bucket + CMK creation logic added to `infra/scripts/bootstrap-staging.sh` so a fresh-EC2 bootstrap (or future prod cutover with `-prod` suffix) is one command.
+
+**Consequences:**
+
+- KYC bucket compromise scope is bounded: a key compromise affects KYC documents only, not the EBS volume / SSM session logs / CloudWatch Logs group / Postgres backups. Establishes the per-purpose CMK pattern that planned analogues `alias/eventpulse-payouts-<env>` (Sprint 7+) and `alias/eventpulse-contracts-<env>` (Phase 3) will follow.
+- Cost: ~$1/mo per CMK + S3 storage proportional to KYC doc volume (single-digit dollars at MVP scale). Comfortably inside the $40/mo `eventpulse-monthly` AWS Budget.
+- Rotation: KMS auto-rotation enabled (default 365-day cycle). KMS handles re-encryption transparently.
+- KYC documents that move to Glacier_IR at 30 days incur a small retrieval cost when a reviewer needs to inspect them post-30-days; this is an acceptable trade-off for the long-tail nature of KYC re-review (BFIU/audit access at year 2+).
+- The dedicated-CMK pattern is now load-bearing: future KYC code must use the CMK ARN from Secrets Manager, never the general CMK. Code review enforces this.
+- Object Lock deferral: revisit in Phase 2 alongside the legal-hold workflow for disputed events; staging's versioning + IAM-deny-delete is adequate for MVP but is **not** WORM compliance.
+- `eventpulse-staging-ec2` role gains exactly two scoped statements; no broader S3/KMS permissions. Verify with `aws iam get-role-policy` post-grant — the principle of least privilege is the whole point of the dedicated CMK pattern.
+- Prod cutover (Sprint 7+ or Phase 3, when prod EC2 lands) re-runs the same script with `prod` suffix and gets `alias/eventpulse-kyc-prod` + `eventpulse-kyc-prod` bucket. No code duplication; the bootstrap script is environment-parameterised.
+
+---
+
 ## 2026-05-17 · Sprint 2 Item 5 — first real staging deploy succeeded (after 8 attempts + 5 fix PRs)
 
 **Context:** Item 5 was the first time `deploy.sh` ran against a built artefact on staging. Eight deploy attempts surfaced layered issues — each fix unblocked the next failure mode. All resolved; tag `4265b5a` through `58c96f6` plus operational fixes via SSM. The real Next.js + Hono apps now serve on all 5 staging vhosts; migration 0003 applied; 11 identity tables live; both PM2 processes online.

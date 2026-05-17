@@ -1,0 +1,22 @@
+{
+  "Rules": [
+    {
+      "ID": "kyc-docs-glacier-ir-at-30d",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "tenants/" },
+      "Transitions": [{ "Days": 30, "StorageClass": "GLACIER_IR" }]
+    },
+    {
+      "ID": "kyc-noncurrent-versions-90d",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "tenants/" },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 90 }
+    },
+    {
+      "ID": "abort-incomplete-mpu-7d",
+      "Status": "Enabled",
+      "Filter": {},
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+    }
+  ]
+}

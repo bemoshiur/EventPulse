@@ -7,6 +7,9 @@
 #   - GitHub deploy key for this server installed on the repo (read-only)
 #   - SSH config at /home/eventpulse/.ssh/config points to the deploy key
 #   - GitHub host fingerprint accepted (ssh -T git@github.com OK)
+#   - KYC bucket + CMK provisioned via infra/scripts/setup-kyc-bucket.sh
+#     (run from a developer workstation with admin AWS perms — the EC2
+#     role only has operational perms, NOT KMS/S3 create perms)
 #
 # Run BEFORE the first invocation of infra/deploy/deploy.sh.
 #
@@ -18,6 +21,10 @@
 #      Secrets Manager is the source of truth — .env.staging is a
 #      derivative file. Values NEVER appear in SSM stdout, deploy logs,
 #      or anywhere observable.
+#      Also fetches the KYC bucket + CMK identifiers from
+#      eventpulse/staging/kyc (non-secret config; same pattern). If the
+#      secret is missing, .env.staging is written with empty KYC_* values
+#      so KYC routes fail loudly at runtime instead of defaulting silently.
 #   3. Install + symlink the Nginx vhost config from
 #      infra/nginx/eventpulse-staging.conf. `nginx -t` + reload.
 #   4. Set up pm2 systemd unit so the API + web survive reboot.
@@ -52,6 +59,7 @@ AWS_REGION="${AWS_REGION:-ap-southeast-1}"
 SM_PREFIX="eventpulse/staging"
 SM_JWT_ACCESS="${SM_PREFIX}/jwt-access-secret"
 SM_JWT_REFRESH="${SM_PREFIX}/jwt-refresh-secret"
+SM_KYC_CONFIG="${SM_PREFIX}/kyc"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "ERROR: must run as root (use sudo). It needs to write nginx + systemd."
@@ -89,28 +97,34 @@ secret_exists() {
     --output text >/dev/null 2>&1
 }
 
-# Create-or-update a secret. Value passed via SECRET_VALUE env var to
-# avoid command-line exposure (which would show in `ps`). On success
-# logs "created"/"updated"; on failure exits non-zero.
+# Create-or-update a secret. Value passed via a 0600 temp file referenced
+# with `file://`, NOT via `--secret-string "$value"` directly — the
+# direct form puts the value on argv where it's visible to `ps -ef` /
+# `/proc/<pid>/cmdline` while the call is in flight. The temp file is
+# unlinked the moment the call returns.
 secret_put() {
-  local name="$1"
+  local name="$1" value="$2"
+  local tmp; tmp="$(mktemp -p /home/eventpulse)"
+  chmod 600 "$tmp"
+  printf '%s' "$value" > "$tmp"
   if secret_exists "$name"; then
-    SECRET_VALUE="$2" aws secretsmanager put-secret-value \
+    aws secretsmanager put-secret-value \
       --secret-id "$name" \
-      --secret-string "$2" \
+      --secret-string "file://${tmp}" \
       --region "$AWS_REGION" \
       --output text --query 'VersionId' >/dev/null
     log "  secrets-manager: updated $name"
   else
-    SECRET_VALUE="$2" aws secretsmanager create-secret \
+    aws secretsmanager create-secret \
       --name "$name" \
-      --secret-string "$2" \
+      --secret-string "file://${tmp}" \
       --description "Event Pulse staging — managed by bootstrap-staging.sh" \
       --tags Key=managed-by,Value=bootstrap-staging.sh Key=env,Value=staging \
       --region "$AWS_REGION" \
       --output text --query 'Name' >/dev/null
     log "  secrets-manager: created $name"
   fi
+  rm -f "$tmp"
 }
 
 # ─── 1) git checkout ────────────────────────────────────────────────────
@@ -162,6 +176,38 @@ else
   secret_put "$SM_JWT_REFRESH" "$JWT_REFRESH_SECRET"
 fi
 
+# KYC bucket + CMK identifiers (non-secret, but canonical in Secrets
+# Manager so a fresh EC2 reads the same shape JWT secrets do). Created
+# upstream by `infra/scripts/setup-kyc-bucket.sh` from a developer
+# workstation — the EC2 instance role does NOT have KMS/S3 create perms.
+KYC_BUCKET_NAME=""
+KYC_KMS_KEY_ID=""
+KYC_KMS_KEY_ARN=""
+KYC_KMS_KEY_ALIAS=""
+
+if secret_exists "$SM_KYC_CONFIG"; then
+  log "  fetching $SM_KYC_CONFIG from Secrets Manager"
+  KYC_CONFIG_JSON="$(secret_get "$SM_KYC_CONFIG")"
+  # One python3 invocation, four newline-separated values read into bash —
+  # avoids spawning four subprocesses and avoids eval (defence vs. shell
+  # metachars in values, even though AWS bucket/key identifiers are safe ASCII).
+  { read -r KYC_BUCKET_NAME
+    read -r KYC_KMS_KEY_ID
+    read -r KYC_KMS_KEY_ARN
+    read -r KYC_KMS_KEY_ALIAS
+  } < <(printf '%s' "$KYC_CONFIG_JSON" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+for k in ("bucket_name", "kms_key_id", "kms_key_arn", "kms_key_alias"):
+    print(d[k])
+')
+  unset KYC_CONFIG_JSON
+  log "  KYC config materialised (bucket=$KYC_BUCKET_NAME, alias=$KYC_KMS_KEY_ALIAS)"
+else
+  log "  WARN: $SM_KYC_CONFIG missing — KYC upload code will fail at runtime."
+  log "        Run infra/scripts/setup-kyc-bucket.sh from a workstation with admin AWS perms first."
+fi
+
 # Sanity check — non-empty, ≥ 32 chars (jwt.ts secret() enforces this).
 if [[ -z "$JWT_ACCESS_SECRET" || ${#JWT_ACCESS_SECRET} -lt 32 ]]; then
   log "ERROR: JWT_ACCESS_SECRET empty or too short"; exit 1
@@ -209,16 +255,27 @@ SES_FROM_ADDRESS=no-reply@eventpulse.com.bd
 # Base URLs
 EVENTPULSE_API_BASE_URL=https://api.staging.eventpulse.com.bd
 EVENTPULSE_WEB_BASE_URL=https://staging.eventpulse.com.bd
+
+# KYC documents bucket — sourced from $SM_KYC_CONFIG in Secrets Manager.
+# Empty values mean setup-kyc-bucket.sh has not been run yet; KYC upload
+# routes will fail at runtime (intentional — fail loudly, never default).
+KYC_BUCKET_NAME=${KYC_BUCKET_NAME}
+KYC_KMS_KEY_ID=${KYC_KMS_KEY_ID}
+KYC_KMS_KEY_ARN=${KYC_KMS_KEY_ARN}
+KYC_KMS_KEY_ALIAS=${KYC_KMS_KEY_ALIAS}
 EOF
 mv "$TMP_ENV" "$ENV_FILE"
 chown "$EVENTPULSE_USER:$EVENTPULSE_GROUP" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 # Clear in-memory secrets from this shell — defence in depth even though
-# the shell exits right after.
-unset JWT_ACCESS_SECRET JWT_REFRESH_SECRET PG_PASSWORD
+# the shell exits right after. KYC_* values are non-secret (bucket name +
+# key ARN) but unset for cleanliness.
+unset JWT_ACCESS_SECRET JWT_REFRESH_SECRET PG_PASSWORD \
+      KYC_BUCKET_NAME KYC_KMS_KEY_ID KYC_KMS_KEY_ARN KYC_KMS_KEY_ALIAS
 log "  $ENV_FILE written (chmod 600 owner $EVENTPULSE_USER:$EVENTPULSE_GROUP)"
 log "  verify Secrets Manager presence: aws secretsmanager describe-secret --secret-id $SM_JWT_ACCESS"
 log "  verify Secrets Manager presence: aws secretsmanager describe-secret --secret-id $SM_JWT_REFRESH"
+log "  verify Secrets Manager presence: aws secretsmanager describe-secret --secret-id $SM_KYC_CONFIG"
 
 # ─── 3) Nginx vhost ─────────────────────────────────────────────────────
 

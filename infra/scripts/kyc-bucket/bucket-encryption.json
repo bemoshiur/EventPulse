@@ -1,0 +1,11 @@
+{
+  "Rules": [
+    {
+      "ApplyServerSideEncryptionByDefault": {
+        "SSEAlgorithm": "aws:kms",
+        "KMSMasterKeyID": "${KYC_KMS_KEY_ARN}"
+      },
+      "BucketKeyEnabled": true
+    }
+  ]
+}
