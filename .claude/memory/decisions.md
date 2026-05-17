@@ -4,6 +4,63 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-17 · Sprint 2 Item 5 — first real staging deploy succeeded (after 8 attempts + 5 fix PRs)
+
+**Context:** Item 5 was the first time `deploy.sh` ran against a built artefact on staging. Eight deploy attempts surfaced layered issues — each fix unblocked the next failure mode. All resolved; tag `4265b5a` through `58c96f6` plus operational fixes via SSM. The real Next.js + Hono apps now serve on all 5 staging vhosts; migration 0003 applied; 11 identity tables live; both PM2 processes online.
+
+**Decision:** The staging deploy pipeline shape is now locked. Future deploys against this EC2 are one-shot via `aws ssm send-command ... deploy.sh main`. The eight-attempt walk-through is documented in gotchas.md so a fresh-EC2 bootstrap doesn't re-traverse the same path.
+
+**Fix PRs landed (in order, all merged):**
+
+- PR #58 — staging bootstrap + Nginx proxy_pass + env-sourcing deploy.sh (Item 5 prep)
+- PR #59 — `HUSKY=0` + `--prod=false` on install (first fix attempt; --prod=false didn't engage)
+- PR #60 — `NPM_CONFIG_PRODUCTION=false` + `--config.confirm-modules-purge=false` (second fix; the env var also didn't engage but the purge auto-confirm did help unstick the install)
+- PR #61 — `NODE_ENV=development` for the install command (the actual fix — only knob in pnpm v9 that works)
+- PR #62 — `apps/api/tsconfig.build.json` adds explicit `declarationMap: false` (caught by tsc on first build)
+
+**Operational one-time fixes on the EC2 (NOT yet codified into bootstrap-staging.sh):**
+
+- Pre-created `eventpulse_app` + `eventpulse_admin` Postgres roles as the `postgres` superuser
+- `GRANT eventpulse_app TO eventpulse WITH ADMIN OPTION` (and same for eventpulse_admin) — so migration 0001's `GRANT ... TO CURRENT_USER` succeeds
+- Granted USAGE + SELECT/INSERT/UPDATE/DELETE/REFERENCES/TRIGGER on all public tables + sequences + functions to both roles, plus ALTER DEFAULT PRIVILEGES for the same
+- Backfilled `_eventpulse_schema_migrations` with `0001_identity_tables.sql` + `0002_identity_rls_policies.sql` because the tables already existed from a manual setup but the runner had no record of them
+- `ALTER TABLE ... OWNER TO eventpulse` for every public-schema table (was `postgres`-owned from manual setup), so `CREATE POLICY` in 0003 worked
+- Added IAM Secrets Manager write perms to `eventpulse-staging-ec2` role: `SecretsManagerStagingCreate` + `SecretsManagerStagingPut` (for bootstrap to write JWT secrets directly to Secrets Manager)
+
+**Final verified state (post-deploy):**
+
+```text
+✓ staging.eventpulse.com.bd            HTTPS 200 (Next.js root)
+✓ app.staging.eventpulse.com.bd        HTTPS 200 (Next.js root)
+✓ admin.staging.eventpulse.com.bd      HTTPS 200 (Next.js root)
+✓ my.staging.eventpulse.com.bd         HTTPS 200 (Next.js root)
+✓ api.staging.eventpulse.com.bd        HTTPS 200 (Nginx /health), 404 on / (Hono has no / route — correct)
+✓ Next.js /sign-in serves "<title>Sign in · Event Pulse</title>" + "Continue with Apple/Google" buttons — proves real app, not placeholder
+✓ Hono /api/v1/* routes reachable via api.staging.eventpulse.com.bd
+✓ pm2 list: web online (pid 14976), api online (pid 14977)
+✓ pm2 startup systemd unit installed; pm2 save persisted process list
+✓ Migration history: 0001/0002 marked applied, 0003 applied by runner
+✓ Secrets Manager: eventpulse/staging/jwt-{access,refresh}-secret both present, tagged managed-by=bootstrap-staging.sh
+✓ AWS Budget eventpulse-monthly still at $40/mo, current spend well under
+```
+
+**Consequences:**
+
+- The MVP staging deploy loop works end-to-end. CI workflow `deploy-staging.yml` can be enabled (`STAGING_DEPLOY_ENABLED=true`) once we've watched 2-3 manual deploy cycles for stability.
+- Future deploys against THIS EC2 are simple: one SSM SendCommand against `deploy.sh main`. The operational fixes above persist in the EC2's Postgres state — no re-application needed.
+- A FRESH EC2 bootstrap (replacement instance, or prod cutover) would re-traverse the operational fixes. Sprint 2 Day 12 housekeeping candidate: extend `bootstrap-staging.sh` to handle the Postgres role/grant/ownership setup so fresh-EC2 bootstrap is one command.
+- The 7 new gotchas logged in this session (SSM commands-array shell-per-entry, pnpm v9 NODE_ENV trap, modules-purge prompt, TS declarationMap inheritance, Postgres ownership for CREATE POLICY, ADMIN OPTION for GRANT, migration-history backfill) collectively form the cookbook for the next environment bring-up.
+- CI does NOT currently run `pnpm --filter @eventpulse/api build` (only typecheck against tsconfig.json). Day 12 candidate: add a "build" job to the CI matrix so production-build-only issues like the declarationMap one are caught pre-deploy.
+- Manual OAuth happy-path verification (Sprint 2 Day 20 closeout punch-list) can now proceed against staging once OAuth credentials are added to .env.staging.
+
+**Carries to Sprint 2 Day 12:**
+
+- Codify the Postgres role/grant/ownership setup into `bootstrap-staging.sh` (operational fixes above → code path for fresh-EC2)
+- Add `build` job to CI matrix (catches tsconfig.build.json issues pre-deploy)
+- Enable `STAGING_DEPLOY_ENABLED=true` as a repo variable so push-to-main triggers `deploy-staging.yml` automatically (after 1-2 more manual cycles to validate)
+
+---
+
 ## 2026-05-17 · OAuth callback security model (Sprint 2 Item 4)
 
 **Context:** Sprint 1 Day 7-8 (PR #47) landed the `arctic` Google + Apple clients as lazy constructors but no route handlers — the actual `/oauth/<provider>/{start,callback}` surface carried to Sprint 2 Item 4. Before code landed, Moshiur pre-flagged three security concerns to address: (a) state cookie integrity (HMAC + TTL + single-use) to close the most common OAuth account-takeover vector — attacker forging a callback to link their OAuth identity to someone else's account; (b) code-replay resistance + PKCE; (c) Apple email-relay quirk (relay addresses can be rotated by Apple and must NEVER be used for auto-link). This entry locks the answers as the canonical security model so Item 4 (and future OAuth provider additions) extend a consistent design instead of relitigating each surface.
