@@ -147,10 +147,17 @@ export function useCreateKycDraft() {
 
 export interface KycDraftPatchInput {
   submissionId: string
-  /** Per-step PATCH body — must match IndividualTier1PatchSchema. */
+  /**
+   * Per-step PATCH body — must match IndividualTier1PatchSchema.
+   *
+   * `fields` is optional: a document-only PATCH should omit it
+   * entirely (sending `fields: {}` would wipe the user's prior typed
+   * values via the server's `||` shallow merge — Day 16 PR 3 /review
+   * BLOCKER 1).
+   */
   body: {
     step: 'identity' | 'address' | 'financial'
-    fields: Record<string, unknown>
+    fields?: Record<string, unknown>
     documents?: Record<string, { contentType: string }>
   }
 }
@@ -183,12 +190,35 @@ export function usePatchKycDraft() {
       await queryClient.cancelQueries({ queryKey: key })
       const previous = queryClient.getQueryData<KycDraftRow>(key)
       if (previous) {
+        // Build optimistic next state. `fields` is only touched when
+        // the PATCH carries them — a document-only PATCH must NOT
+        // wipe the step's prior typed values (Day 16 PR 3 /review
+        // BLOCKER 1). `documents` preserves the cached map and
+        // overlays any newly-declared slots so a step PATCH racing
+        // with a doc-upload PATCH doesn't drop the document URI
+        // (Day 16 PR 3 /review issue #5).
+        const nextFields = input.body.fields
+          ? { ...previous.fields, [input.body.step]: input.body.fields }
+          : previous.fields
+        const nextDocuments = input.body.documents
+          ? {
+              ...previous.documents,
+              ...Object.fromEntries(
+                Object.entries(input.body.documents).map(([k, v]) => [
+                  k,
+                  // Optimistic placeholder until the server returns
+                  // the materialised S3 URI. The wizard's
+                  // alreadyUploaded indicator just checks for truthy,
+                  // so the placeholder is enough to flip the slot UI.
+                  `optimistic:${v.contentType}`,
+                ]),
+              ),
+            }
+          : previous.documents
         const optimistic: KycDraftRow = {
           ...previous,
-          fields: {
-            ...previous.fields,
-            [input.body.step]: input.body.fields,
-          },
+          fields: nextFields,
+          documents: nextDocuments,
           updatedAt: new Date().toISOString(),
         }
         queryClient.setQueryData(key, optimistic)

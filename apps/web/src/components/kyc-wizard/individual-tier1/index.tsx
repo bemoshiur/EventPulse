@@ -162,16 +162,16 @@ export function IndividualTier1Wizard() {
     contentType: string,
   ) => {
     if (!submissionId) return
-    // The current step's form may not be valid yet; we PATCH only the
-    // documents map (with no fields) so the slot lands without
-    // triggering field validation. The server's discriminated union
-    // requires fields too, but per-step .partial() in the schema makes
-    // empty `fields: {}` valid for the partial PATCH branches.
+    // Document-only PATCH: deliberately omits `fields` so the server's
+    // shallow-merge doesn't replace `fields.<step>` with `{}` and wipe
+    // the user's prior typed values for that step. The schema's
+    // `fields` is optional on identity + address branches (Day 16
+    // PR 3 /review BLOCKER 1 fix). The hook's `body.fields` type
+    // declares optional too.
     await patchDraft.mutateAsync({
       submissionId,
       body: {
         step,
-        fields: {},
         documents: { [docType]: { contentType } },
       },
     })

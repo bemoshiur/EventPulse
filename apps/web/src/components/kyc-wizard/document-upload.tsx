@@ -112,7 +112,11 @@ export function DocumentUpload({
           id={inputId}
           type="file"
           accept={accept}
-          aria-describedby={hint ? hintId : undefined}
+          // Associate both the constraint hint AND the live status
+          // region with the file input so screen-reader users can
+          // navigate to upload progress / error messages via
+          // aria-describedby (Day 16 PR 3 /review BLOCKER 2).
+          aria-describedby={[hint ? hintId : undefined, statusId].filter(Boolean).join(' ')}
           onChange={(e) => {
             const f = e.currentTarget.files?.[0]
             if (f) handleFile(f)

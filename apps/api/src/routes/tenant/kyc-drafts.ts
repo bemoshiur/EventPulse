@@ -338,17 +338,20 @@ drafts.patch(
         const existingFields = (existing.fields ?? {}) as Record<string, unknown>
         const existingDocs = (existing.documents ?? {}) as Record<string, string>
 
-        // Build the new fields object: shallow-merge at the step level.
-        // Replacing the whole step's sub-object preserves the other
-        // steps (their keys aren't in `mergeFields`).
+        // Build the new fields object IF the PATCH carries fields. A
+        // document-only PATCH (fields omitted OR empty object) MUST NOT
+        // trigger a fields merge — `||` shallow merge would replace
+        // `fields.<step>` with `{}` and wipe the user's typed values.
+        // Per Day 16 PR 3 /review BLOCKER 1.
         const stepKey = patch.step // 'identity' | 'address' | 'financial'
-        const mergeFields = { [stepKey]: patch.fields }
+        const patchFields = patch.fields as Record<string, unknown> | undefined
+        const hasFields = patchFields !== undefined && Object.keys(patchFields).length > 0
 
         // Build the materialised documents map for any document slots
         // this PATCH declares. Server derives the S3 URI from
         // (tenantId, submissionId, documentType, contentType) — client
         // cannot smuggle in an arbitrary path.
-        let mergeDocs: Record<string, string> = {}
+        const mergeDocs: Record<string, string> = {}
         if (patch.step !== 'financial' && patch.documents) {
           for (const [docTypeKey, decl] of Object.entries(patch.documents)) {
             if (!decl) continue
@@ -361,19 +364,24 @@ drafts.patch(
             })
           }
         }
+        const hasDocs = Object.keys(mergeDocs).length > 0
+
+        // Reject no-op PATCH bodies early — a request that carries
+        // neither fields nor documents tells the server nothing.
+        if (!hasFields && !hasDocs) {
+          return existing
+        }
 
         // Compute the path-level diff BEFORE writing — both the before
         // and after snapshots are taken from data the handler already
         // holds, so no extra SELECT is needed.
-        const beforeFieldsAtStep = (existingFields as Record<string, unknown>)[stepKey] as
-          | Record<string, unknown>
-          | undefined
-        const afterFieldsAtStep = patch.fields as Record<string, unknown>
-        const fieldsDiff = computeFieldDiff(
-          beforeFieldsAtStep as never,
-          afterFieldsAtStep as never,
-          `fields.${stepKey}`,
-        )
+        const fieldsDiff = hasFields
+          ? computeFieldDiff(
+              (existingFields[stepKey] ?? undefined) as never,
+              patchFields as never,
+              `fields.${stepKey}`,
+            )
+          : { added: [], updated: [], removed: [] }
         const docsBefore = existingDocs as Record<string, unknown>
         const docsAfter = { ...docsBefore, ...mergeDocs } as Record<string, unknown>
         const docsDiff = computeFieldDiff(docsBefore as never, docsAfter as never, 'documents')
@@ -395,17 +403,22 @@ drafts.patch(
           combinedDiff.fields.removed.length > 0
 
         // Issue the UPDATE. `||` is jsonb concatenation (shallow merge);
-        // `documents || $1::jsonb` adds/replaces the keys in $1 while
-        // preserving any keys NOT in $1.
-        const docsJson = JSON.stringify(mergeDocs)
-        const fieldsJson = JSON.stringify(mergeFields)
+        // both columns are merged only when there's something to merge.
+        // A fields-absent PATCH skips the fields update entirely so
+        // prior typed values aren't wiped (BLOCKER 1 invariant).
+        const setClause: Record<string, unknown> = { updatedAt: new Date() }
+        if (hasFields) {
+          const mergeFields = { [stepKey]: patchFields }
+          const fieldsJson = JSON.stringify(mergeFields)
+          setClause['fields'] = sql`${kycSubmissions.fields} || ${fieldsJson}::jsonb`
+        }
+        if (hasDocs) {
+          const docsJson = JSON.stringify(mergeDocs)
+          setClause['documents'] = sql`${kycSubmissions.documents} || ${docsJson}::jsonb`
+        }
         const updated = await tx
           .update(kycSubmissions)
-          .set({
-            fields: sql`${kycSubmissions.fields} || ${fieldsJson}::jsonb`,
-            documents: sql`${kycSubmissions.documents} || ${docsJson}::jsonb`,
-            updatedAt: new Date(),
-          })
+          .set(setClause)
           .where(
             and(
               eq(kycSubmissions.id, id),

@@ -114,6 +114,7 @@ export function Step2Address({
             id="division"
             autoComplete="address-level1"
             aria-invalid={errors.division ? 'true' : 'false'}
+            aria-describedby={errors.division ? 'division-error' : undefined}
             {...register('division')}
             className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
           >
@@ -123,6 +124,11 @@ export function Step2Address({
               </option>
             ))}
           </select>
+          {errors.division ? (
+            <p id="division-error" className="mt-1 text-xs text-[var(--ep-rose)]">
+              {errors.division.message}
+            </p>
+          ) : null}
         </div>
       </div>
 

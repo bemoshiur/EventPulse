@@ -202,9 +202,18 @@ export const IndividualTier1SubmissionSchema = z.object({
 // field-by-field (step's sub-object replaced; other steps preserved;
 // documents map shallow-merged).
 
+// `fields` is **optional** on identity + address PATCH branches so a
+// document-only PATCH (e.g. when an upload completes and the wizard
+// registers the slot without re-sending typed values) doesn't
+// inadvertently wipe the user's prior step fields via the server's
+// `||` shallow merge. See Day 16 PR 3 /review BLOCKER 1: if the
+// frontend sent `fields: {}`, the server would `fields || '{"identity":
+// {}}'::jsonb` and replace the typed identity sub-object with `{}`.
+// The server's PATCH handler now skips the fields merge when `fields`
+// is undefined (or empty), preserving prior typed values.
 const identityPatchSchema = z.object({
   step: z.literal('identity'),
-  fields: IndividualTier1IdentitySchema.partial(),
+  fields: IndividualTier1IdentitySchema.partial().optional(),
   documents: z
     .object({
       nid_front: documentDeclSchema.optional(),
@@ -216,7 +225,7 @@ const identityPatchSchema = z.object({
 
 const addressPatchSchema = z.object({
   step: z.literal('address'),
-  fields: IndividualTier1AddressSchema.partial(),
+  fields: IndividualTier1AddressSchema.partial().optional(),
   documents: z
     .object({
       address_proof: documentDeclSchema.optional(),

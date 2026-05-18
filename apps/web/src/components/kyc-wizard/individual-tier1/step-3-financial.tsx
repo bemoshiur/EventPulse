@@ -58,6 +58,7 @@ export function Step3Financial({ formId, initialValues, onValidSubmit }: Step3Fi
         <select
           id="accountType"
           aria-invalid={errors.accountType ? 'true' : 'false'}
+          aria-describedby={errors.accountType ? 'accountType-error' : undefined}
           {...register('accountType')}
           className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
         >
@@ -69,6 +70,11 @@ export function Step3Financial({ formId, initialValues, onValidSubmit }: Step3Fi
             ),
           )}
         </select>
+        {errors.accountType ? (
+          <p id="accountType-error" className="mt-1 text-xs text-[var(--ep-rose)]">
+            {errors.accountType.message}
+          </p>
+        ) : null}
       </div>
 
       <div>
