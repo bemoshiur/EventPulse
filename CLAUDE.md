@@ -1,7 +1,7 @@
 # Event Pulse — Claude Code Mega Playbook
 
 > **One prompt. Bootstrap to production.**
-> Version 2.2 · 17 May 2026
+> Version 2.3 · 19 May 2026
 > Author: Moshiur Rahman / Public Pulse Agency / TiCON System Limited
 
 ---
@@ -21,7 +21,7 @@
 **v2.2 — 17 May 2026 (minor)**
 - **Auth library locked to rolled-our-own** — Lucia (in maintenance mode as of 2026) replaced by an in-repo composition of `@noble/hashes` (argon2id), `jose` (JWT), `arctic` (OAuth providers), and a custom Postgres session adapter. Decision rationale in `.claude/memory/decisions.md` "Auth foundation library choice" (2026-05-17). Tech-stack table updated (§1.2). Auth section rewritten (§5).
 - **Role hierarchy codified into §4** — `eventpulse_app` (non-superuser, RLS engages) ← `eventpulse_admin` (BYPASSRLS + table grants) as the canonical Postgres role pair. Surfaces the gotcha that superusers always bypass RLS regardless of `FORCE ROW LEVEL SECURITY`; BYPASSRLS alone is not enough without table grants. (§4.2.1)
-- **§13.0 KYC Status block** — Porichoy NID validation deferred to a dedicated PR once credentials arrive. MVP ships KYC validation as manual review (eTIN regex + bank-name match + sanctions list). Reflects `.claude/memory/decisions.md` "Porichoy deferred — manual NID review for MVP" (2026-05-17).
+- **§13.0 KYC Status block** — Porichoy NID validation deferred to a dedicated PR once credentials arrive. MVP ships KYC validation as manual review (eTIN regex + bank-name match + sanctions list). Reflects `.claude/memory/decisions.md` "Porichoy deferred — manual NID review for MVP" (2026-05-17). _(v2.2 plan; the eTIN regex + bank-name match + sanctions-list components never shipped — superseded by v2.3 platform-wide manual-verification policy. See current §13.0 + `.claude/memory/decisions.md` "Platform-wide policy — manual verification only for MVP" 2026-05-19.)_
 - **§17 clarifications** — SSM-only shell access pattern (no SSH keys, no port 22) explicit in §17.2 + §17.7; staging EBS sized at 30 GB explicitly (§17.2); five explicit staging DNS A records enumerated (§17.6); KYC bucket gets its own per-purpose CMK per `.claude/memory/decisions.md` "Dedicated KMS CMK for KYC bucket" (2026-05-17) — pattern documented in §17.9.
 - **§29 Open Decisions** — Items resolved during Sprint 1 and the Sprint 2 kick-off marked closed with date + decision pointer: auth library (resolved 2026-05-17, rolled-our-own), GitHub plan branch protection (resolved 2026-05-16, pre-push hook + CI gates), KYC reviewer role for MVP (resolved 2026-05-17, super-admin-only), Porichoy deferral path (resolved 2026-05-17, manual review + scaffold-only adapter).
 
@@ -3687,7 +3687,7 @@ Claude Code must STOP and ask before proceeding if any of these come up. Items m
 
 **Resolved in v2.2 (Sprint 1 + Sprint 2 kick-off):**
 - ✓ Auth foundation library — rolled our own in-repo composition (`@noble/hashes` argon2id + `jose` JWT + `arctic` OAuth + custom Postgres session adapter). Lucia is in maintenance mode as of 2026 and not adoptable for the most security-critical surface. See `.claude/memory/decisions.md` "Auth foundation library choice" (2026-05-17). Documented in §1.2 + §5.
-- ✓ Porichoy NID validation availability — service unreachable at Sprint 2 kick-off; procurement timeline unclear. MVP ships KYC validation as manual reviewer flow with Porichoy adapter scaffolded but not wired. Reopens as §29 Open Decision if Porichoy remains unreachable through Phase 2. See `.claude/memory/decisions.md` "Porichoy deferred — manual NID review for MVP" (2026-05-17) and §13.0 Status block above.
+- ✓ Porichoy NID validation availability — service unreachable at Sprint 2 kick-off; procurement timeline unclear. MVP ships KYC validation as manual reviewer flow with Porichoy adapter scaffolded but not wired. Reopens as §29 Open Decision if Porichoy remains unreachable through Phase 2. Originally resolved per `.claude/memory/decisions.md` "Porichoy deferred — manual NID review for MVP" (2026-05-17); that entry is now **superseded** by the broader 2026-05-19 "Platform-wide policy — manual verification only for MVP (consolidates prior per-item deferrals)" — see that entry + current §13.0 Status block above for the canonical pointer.
 - ✓ KYC reviewer role for MVP — super-admin-only. `kyc_reviewer` role + multi-reviewer routing deferred to Phase 2 Sprint 6 alongside team-management UI. See `.claude/memory/decisions.md` "KYC reviewer role for MVP — super-admin-only" (2026-05-17).
 - ✓ KYC bucket KMS — dedicated `alias/eventpulse-kyc-<env>` CMK per per-purpose blast-radius pattern (§17.9). See `.claude/memory/decisions.md` "Dedicated KMS CMK for KYC bucket" (2026-05-17).
 - ✓ Trust Center v0.1 placeholder content policy — skeleton-only (real headings + one-sentence "PLACEHOLDER — to be drafted by counsel covering X" per section), non-dismissable DRAFT banner, no AI-generated full-text drafts. See `.claude/memory/decisions.md` "Trust Center v0.1 placeholders — skeleton-only" (2026-05-17). Onboarding flow gates on consent → consent gates on v1.0 documents → first paying tenant blocked until counsel returns drafts.
