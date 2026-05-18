@@ -223,20 +223,40 @@ export function OrganisationTierAWizard() {
     aoa: Boolean(docs['aoa']),
   }
 
+  // The jsonb keys under `draft.fields` are the SHORTENED forms per
+  // the server's `fieldsKeyForStep` mapping (apps/api/src/routes/tenant/
+  // kyc-drafts.ts). The wizard's PATCH bodies send the VERBOSE step
+  // names (`org_info`, `signatory_identity`) but the server stores
+  // under shortened keys (`fields.org`, `fields.signatory`). Per
+  // decisions.md 2026-05-19 "Organisation Tier A — 6-step decomposition"
+  // step→jsonb-key mapping table. PR 1 integration test
+  // "PATCH org_info step writes fields.org sub-object (not fields.org_info)"
+  // pins this contract; the read keys here MUST match the table.
   const orgValues = (draft.fields['org'] ?? {}) as Partial<OrganisationTierAOrgInfo>
   const signatoryValues = (draft.fields['signatory'] ?? {}) as Partial<OrganisationTierASignatory>
   const financialValues = (draft.fields['financial'] ?? {}) as Partial<IndividualTier1Financial>
 
+  // Document-only step completion booleans — used both for the
+  // progress indicator's mint check AND the BLOCKER 1 fix: the
+  // wizard's primary CTA on document-only steps (currentStepIndex
+  // 2 or 3) must be DISABLED until all required documents for that
+  // step are uploaded. Without this guard a user can click Save &
+  // Continue six times with zero docs uploaded, surprise-fail at
+  // submit. Per Day 17 PR 2 /review BLOCKER 1.
+  const signatoryDocsComplete =
+    uploadedDocs['nid_front'] && uploadedDocs['nid_back'] && uploadedDocs['photograph']
+  const orgDocsComplete =
+    uploadedDocs['trade_license'] && uploadedDocs['moa'] && uploadedDocs['aoa']
+
   // Step completion heuristic — used by progress-indicator's mint check
   // marks. A step is "complete" once its fields key has at least one
   // value (text steps) OR its required doc count is met (doc steps).
+  // Reuses the signatoryDocsComplete / orgDocsComplete booleans above.
   const completedStepIds = [
     Object.keys(orgValues).length > 0 ? 'org_info' : null,
     Object.keys(signatoryValues).length > 0 ? 'signatory_identity' : null,
-    uploadedDocs['nid_front'] && uploadedDocs['nid_back'] && uploadedDocs['photograph']
-      ? 'signatory_docs'
-      : null,
-    uploadedDocs['trade_license'] && uploadedDocs['moa'] && uploadedDocs['aoa'] ? 'org_docs' : null,
+    signatoryDocsComplete ? 'signatory_docs' : null,
+    orgDocsComplete ? 'org_docs' : null,
     Object.keys(financialValues).length > 0 ? 'financial' : null,
   ].filter(Boolean) as string[]
 
@@ -301,6 +321,17 @@ export function OrganisationTierAWizard() {
 
   const isReviewStep = currentStepIndex === 5
   const isFormStep = currentStepIndex === 0 || currentStepIndex === 1 || currentStepIndex === 4
+  const isDocStep = currentStepIndex === 2 || currentStepIndex === 3
+  // BLOCKER 1 (Day 17 PR 2 /review): gate the Save & Continue CTA on
+  // document-only steps until ALL required documents for that step
+  // are uploaded. Without this guard the user could click through
+  // doc steps with zero uploads, surprise-fail at submit.
+  const isPrimaryDisabled =
+    isDocStep &&
+    !(
+      (currentStepIndex === 2 && signatoryDocsComplete) ||
+      (currentStepIndex === 3 && orgDocsComplete)
+    )
   const primaryLabel = isReviewStep ? 'Submit for review' : 'Save & continue'
   const primaryLabelBn = isReviewStep ? 'জমা দিন' : 'সংরক্ষণ ও পরবর্তী'
 
@@ -329,6 +360,7 @@ export function OrganisationTierAWizard() {
             : advance
       }
       isPrimaryBusy={patchDraft.isPending || submitDraft.isPending}
+      isPrimaryDisabled={isPrimaryDisabled}
       primaryLabel={primaryLabel}
       primaryLabelBn={primaryLabelBn}
     >

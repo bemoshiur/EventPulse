@@ -208,20 +208,23 @@ describe('usePatchKycDraft (optimistic update + rollback)', () => {
           documents: { nid_front: { contentType: 'image/jpeg' } },
         },
       })
-      // Yield so onMutate's optimistic snapshot lands in the cache.
-      await new Promise((r) => setTimeout(r, 0))
     })
 
     // Cache should reflect the optimistic state: prior fields survive,
     // new document slot filled with the `optimistic:<contentType>`
-    // placeholder URI.
+    // placeholder URI. waitFor blocks until onMutate's async chain
+    // (cancelQueries + setQueryData) commits — a single setTimeout(0)
+    // tick wouldn't be reliable per Day 17 PR 2 /review important #3.
+    await waitFor(() => {
+      const c = client.getQueryData<KycDraftRow>(['kyc', 'drafts', seededRow.id])
+      expect(c?.documents['nid_front']).toBe('optimistic:image/jpeg')
+    })
     const optimisticCached = client.getQueryData<KycDraftRow>(['kyc', 'drafts', seededRow.id])
     const optimisticFields = (optimisticCached?.fields ?? {}) as Record<
       string,
       Record<string, string> | undefined
     >
     expect(optimisticFields.identity?.fullName).toBe('Already Typed')
-    expect(optimisticCached?.documents['nid_front']).toBe('optimistic:image/jpeg')
 
     // Resolve the PATCH with the server's authoritative S3 URI.
     const serverRow = {
