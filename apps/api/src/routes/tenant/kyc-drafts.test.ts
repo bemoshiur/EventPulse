@@ -529,6 +529,60 @@ describeIfDb('/api/v1/tenant/kyc/drafts router (Item 12)', () => {
       expect(Array.isArray(body.error.details)).toBe(true)
     })
 
+    it('empty-fields-empty-documents PATCH early-returns the existing row without writing audit', async () => {
+      // Carry from Day 16 PR 3 /review BLOCKER 1 fix: the server's
+      // no-op guard catches PATCH bodies that carry neither fields nor
+      // documents and returns the existing row without touching the DB
+      // or the audit log. This test pins the guard so a future
+      // refactor can't silently re-introduce the wipe-on-empty bug.
+      const subId = uuid()
+      const app = createApp()
+      await app.request('/api/v1/tenant/kyc/drafts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${fix.tokenA}` },
+        body: JSON.stringify({ submissionId: subId }),
+      })
+      // Seed the row with identity fields first so the assertion below
+      // has something to verify *survived* the no-op PATCH.
+      await app.request(`/api/v1/tenant/kyc/drafts/${subId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${fix.tokenA}` },
+        body: JSON.stringify(validIdentityPatch()),
+      })
+
+      // No-op PATCH: schema-valid body with no fields and no documents.
+      // The PATCH schema makes `fields` optional on identity branch
+      // (BLOCKER 1 fix); a body containing just {step: 'identity'} is
+      // valid but should not mutate the row.
+      const noopRes = await app.request(`/api/v1/tenant/kyc/drafts/${subId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${fix.tokenA}` },
+        body: JSON.stringify({ step: 'identity' }),
+      })
+      expect(noopRes.status).toBe(200)
+      const noopBody = (await noopRes.json()) as {
+        data: { fields: Record<string, Record<string, string>> }
+      }
+      // Identity fields from the prior PATCH MUST survive the no-op.
+      expect(noopBody.data.fields.identity?.fullName).toBe('Mohammad Rahman')
+      expect(noopBody.data.fields.identity?.nidNumber).toBe('1234567890')
+
+      // Audit log should have exactly one draft_updated row (from the
+      // seed PATCH), not two — the no-op didn't write its own audit.
+      const audit = await withTenant(fix.tenantA!, (db) =>
+        db
+          .select()
+          .from(auditLogs)
+          .where(
+            and(
+              eq(auditLogs.entityId, subId),
+              eq(auditLogs.action, 'kyc_submission.draft_updated'),
+            ),
+          ),
+      )
+      expect(audit.length).toBe(1)
+    })
+
     it('no-op PATCH (same data twice) does NOT write a duplicate audit row', async () => {
       const subId = uuid()
       const app = createApp()
@@ -817,5 +871,353 @@ describeIfDb('/api/v1/tenant/kyc/drafts router (Item 12)', () => {
       expect(transitions.length).toBe(1)
       expect(vi.mocked(sendKycSubmittedNotice)).toHaveBeenCalledTimes(1)
     })
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════
+// Organisation Tier A — Sprint 2 Day 17 Item 12 Part 2
+//
+// Mirror of the Individual Tier 1 suite above with an organisation-typed
+// tenant. Covers all 6 wizard steps' PATCH + the full submit flow. Day
+// 16's defence-in-depth + idempotency tests don't need org-specific
+// repeats — they're orthogonal to tier — so this block focuses on the
+// per-step PATCH validation + the full-submit happy path.
+// ═══════════════════════════════════════════════════════════════════════
+
+describeIfDb('/api/v1/tenant/kyc/drafts router — Organisation Tier A (Day 17)', () => {
+  const orgFix: { owner?: string; tenantOrg?: string; tokenOrg?: string } = {}
+
+  beforeAll(async () => {
+    process.env['JWT_ACCESS_SECRET'] = 'x'.repeat(64)
+    process.env['JWT_REFRESH_SECRET'] = 'y'.repeat(64)
+    process.env['KYC_BUCKET_NAME'] = 'eventpulse-kyc-test'
+    process.env['KYC_KMS_KEY_ARN'] = 'arn:aws:kms:ap-southeast-1:111111111111:key/test-cmk-id'
+    process.env['KYC_S3_DRY_RUN'] = '1'
+    resetS3Client()
+
+    const ts = Date.now()
+    await withSuperAdmin(async (db) => {
+      const [owner] = await db
+        .insert(users)
+        .values({ email: `org-drafts-owner-${ts}@test.local`, fullName: 'Org Drafts Owner' })
+        .returning({ id: users.id })
+      const [tenantOrg] = await db
+        .insert(tenants)
+        .values({
+          type: 'organisation',
+          name: 'Org Tier A Tenant',
+          slug: `org-drafts-${ts}`,
+          isPersonal: false,
+          ownerUserId: owner!.id,
+          status: 'active',
+        })
+        .returning({ id: tenants.id })
+      await db.insert(tenantUsers).values({
+        tenantId: tenantOrg!.id,
+        userId: owner!.id,
+        role: 'owner',
+        acceptedAt: new Date(),
+      })
+      orgFix.owner = owner!.id
+      orgFix.tenantOrg = tenantOrg!.id
+    })
+
+    orgFix.tokenOrg = (
+      await signTokens({
+        sub: orgFix.owner!,
+        audience: 'tenant',
+        tenantId: orgFix.tenantOrg!,
+        sessionId: 'sess_org_drafts',
+      })
+    ).accessToken
+  })
+
+  afterAll(async () => {
+    if (orgFix.tenantOrg) {
+      await withSuperAdmin(async (db) => {
+        await db.delete(auditLogs).where(eq(auditLogs.tenantId, orgFix.tenantOrg!))
+        await db.delete(kycSubmissions).where(eq(kycSubmissions.tenantId, orgFix.tenantOrg!))
+        await db.delete(tenants).where(eq(tenants.id, orgFix.tenantOrg!))
+        await db.delete(users).where(eq(users.id, orgFix.owner!))
+      })
+    }
+    await resetPool()
+  })
+
+  beforeEach(async () => {
+    if (orgFix.tenantOrg) {
+      await withSuperAdmin(async (db) => {
+        await db.delete(kycSubmissions).where(eq(kycSubmissions.tenantId, orgFix.tenantOrg!))
+        await db.delete(auditLogs).where(eq(auditLogs.tenantId, orgFix.tenantOrg!))
+      })
+    }
+  })
+
+  const uuid = () => crypto.randomUUID()
+
+  const orgInfoPatch = () => ({
+    step: 'org_info' as const,
+    fields: {
+      legalName: 'Acme Bangladesh Ltd',
+      tradeLicenseNumber: 'TL-2024-DHK-0042',
+      // 13-digit e-BIN per NBR's 2019-11-30 mandate (Day 17 /review BLOCKER).
+      bin: '0001234567890',
+      dateOfIncorporation: '2018-03-15',
+    },
+  })
+
+  const signatoryIdentityPatch = () => ({
+    step: 'signatory_identity' as const,
+    fields: { fullName: 'Tanvir Hossain', nidNumber: '9876543210' },
+  })
+
+  const signatoryDocsPatch = () => ({
+    step: 'signatory_docs' as const,
+    documents: {
+      nid_front: { contentType: 'image/jpeg' },
+      nid_back: { contentType: 'image/jpeg' },
+      photograph: { contentType: 'image/jpeg' },
+    },
+  })
+
+  const orgDocsPatch = () => ({
+    step: 'org_docs' as const,
+    documents: {
+      trade_license: { contentType: 'application/pdf' },
+      moa: { contentType: 'application/pdf' },
+      aoa: { contentType: 'application/pdf' },
+    },
+  })
+
+  const orgFinancialPatch = () => ({
+    step: 'financial' as const,
+    fields: {
+      accountType: 'bank' as const,
+      // Per Day 17 /review important issue #4: Tier A's accountName is
+      // soft-checked against the signatory's fullName (not the org
+      // legal name) — bank accounts for SMEs in BD are typically held
+      // in the authorised signatory's capacity. Match signatoryIdentityPatch.
+      accountName: 'Tanvir Hossain',
+      accountNumber: '987654321098',
+      branchName: 'Dhanmondi',
+      etinNumber: '9876543210',
+    },
+  })
+
+  it('POST / creates a draft with submissionType=organisation + tierRequested=org_a', async () => {
+    const subId = uuid()
+    const app = createApp()
+    const res = await app.request('/api/v1/tenant/kyc/drafts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${orgFix.tokenOrg}` },
+      body: JSON.stringify({ submissionId: subId }),
+    })
+    expect(res.status).toBe(201)
+    const body = (await res.json()) as {
+      data: { submissionType: string; tierRequested: string; status: string }
+    }
+    expect(body.data.submissionType).toBe('organisation')
+    expect(body.data.tierRequested).toBe('org_a')
+    expect(body.data.status).toBe('draft')
+  })
+
+  it('PATCH org_info step writes fields.org sub-object (not fields.org_info)', async () => {
+    const subId = uuid()
+    const app = createApp()
+    await app.request('/api/v1/tenant/kyc/drafts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${orgFix.tokenOrg}` },
+      body: JSON.stringify({ submissionId: subId }),
+    })
+    const res = await app.request(`/api/v1/tenant/kyc/drafts/${subId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${orgFix.tokenOrg}` },
+      body: JSON.stringify(orgInfoPatch()),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      data: { fields: Record<string, Record<string, string>> }
+    }
+    expect(body.data.fields.org).toBeDefined()
+    expect(body.data.fields.org?.legalName).toBe('Acme Bangladesh Ltd')
+    expect(body.data.fields.org?.bin).toBe('0001234567890')
+    // Verify the step-name is NOT used as the key — would be a regression
+    // of the fieldsKeyForStep mapping.
+    expect(body.data.fields['org_info']).toBeUndefined()
+  })
+
+  it('PATCH signatory_identity writes fields.signatory sub-object', async () => {
+    const subId = uuid()
+    const app = createApp()
+    await app.request('/api/v1/tenant/kyc/drafts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${orgFix.tokenOrg}` },
+      body: JSON.stringify({ submissionId: subId }),
+    })
+    const res = await app.request(`/api/v1/tenant/kyc/drafts/${subId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${orgFix.tokenOrg}` },
+      body: JSON.stringify(signatoryIdentityPatch()),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      data: { fields: Record<string, Record<string, string>> }
+    }
+    expect(body.data.fields.signatory?.fullName).toBe('Tanvir Hossain')
+    expect(body.data.fields.signatory?.nidNumber).toBe('9876543210')
+  })
+
+  it('PATCH signatory_docs writes documents only (no fields touched)', async () => {
+    const subId = uuid()
+    const app = createApp()
+    await app.request('/api/v1/tenant/kyc/drafts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${orgFix.tokenOrg}` },
+      body: JSON.stringify({ submissionId: subId }),
+    })
+    // Seed signatory identity first so we can confirm the docs PATCH
+    // preserves it (BLOCKER 1 contract still holds for Org Tier A).
+    await app.request(`/api/v1/tenant/kyc/drafts/${subId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${orgFix.tokenOrg}` },
+      body: JSON.stringify(signatoryIdentityPatch()),
+    })
+    const res = await app.request(`/api/v1/tenant/kyc/drafts/${subId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${orgFix.tokenOrg}` },
+      body: JSON.stringify(signatoryDocsPatch()),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      data: {
+        fields: Record<string, Record<string, string>>
+        documents: Record<string, string>
+      }
+    }
+    // Documents are now materialised as S3 URIs.
+    expect(body.data.documents.nid_front).toMatch(
+      new RegExp(
+        `^s3://eventpulse-kyc-test/tenants/${orgFix.tenantOrg}/kyc/${subId}/nid_front\\.jpg$`,
+      ),
+    )
+    // Signatory fields from the prior PATCH MUST survive.
+    expect(body.data.fields.signatory?.fullName).toBe('Tanvir Hossain')
+  })
+
+  it('PATCH org_docs writes the 3 org document URIs', async () => {
+    const subId = uuid()
+    const app = createApp()
+    await app.request('/api/v1/tenant/kyc/drafts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${orgFix.tokenOrg}` },
+      body: JSON.stringify({ submissionId: subId }),
+    })
+    const res = await app.request(`/api/v1/tenant/kyc/drafts/${subId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${orgFix.tokenOrg}` },
+      body: JSON.stringify(orgDocsPatch()),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { data: { documents: Record<string, string> } }
+    expect(body.data.documents.trade_license).toContain('/trade_license.pdf')
+    expect(body.data.documents.moa).toContain('/moa.pdf')
+    expect(body.data.documents.aoa).toContain('/aoa.pdf')
+  })
+
+  it('happy path: 6-step Org Tier A → submit → status=submitted + transition audit + notification', async () => {
+    const subId = uuid()
+    const app = createApp()
+    await app.request('/api/v1/tenant/kyc/drafts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${orgFix.tokenOrg}` },
+      body: JSON.stringify({ submissionId: subId }),
+    })
+    const patches = [
+      orgInfoPatch(),
+      signatoryIdentityPatch(),
+      signatoryDocsPatch(),
+      orgDocsPatch(),
+      orgFinancialPatch(),
+    ]
+    for (const patch of patches) {
+      const r = await app.request(`/api/v1/tenant/kyc/drafts/${subId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${orgFix.tokenOrg}` },
+        body: JSON.stringify(patch),
+      })
+      expect(r.status).toBe(200)
+    }
+    const { sendKycSubmittedNotice } = await import('../../services/notifications/kyc.js')
+    vi.mocked(sendKycSubmittedNotice).mockClear()
+
+    const submit = await app.request(`/api/v1/tenant/kyc/drafts/${subId}/submit`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${orgFix.tokenOrg}` },
+    })
+    expect(submit.status).toBe(200)
+    const body = (await submit.json()) as { data: { status: string } }
+    expect(body.data.status).toBe('submitted')
+
+    const transitions = await withTenant(orgFix.tenantOrg!, (db) =>
+      db
+        .select()
+        .from(auditLogs)
+        .where(
+          and(eq(auditLogs.entityId, subId), eq(auditLogs.action, 'kyc_submission.transition')),
+        ),
+    )
+    expect(transitions.length).toBe(1)
+    expect(vi.mocked(sendKycSubmittedNotice)).toHaveBeenCalledWith({
+      tenantId: orgFix.tenantOrg!,
+      submissionId: subId,
+    })
+  })
+
+  it('submit before all org steps complete returns 400 VALIDATION_ERROR', async () => {
+    const subId = uuid()
+    const app = createApp()
+    await app.request('/api/v1/tenant/kyc/drafts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${orgFix.tokenOrg}` },
+      body: JSON.stringify({ submissionId: subId }),
+    })
+    // Only step 1 — org_info — provided.
+    await app.request(`/api/v1/tenant/kyc/drafts/${subId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${orgFix.tokenOrg}` },
+      body: JSON.stringify(orgInfoPatch()),
+    })
+    const res = await app.request(`/api/v1/tenant/kyc/drafts/${subId}/submit`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${orgFix.tokenOrg}` },
+    })
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: { code: string; details?: unknown } }
+    expect(body.error.code).toBe('VALIDATION_ERROR')
+    expect(Array.isArray(body.error.details)).toBe(true)
+  })
+
+  it('PATCH with Individual Tier 1 step name (identity) on org tenant returns 400', async () => {
+    // The PATCH handler picks the schema by tenantType. An org tenant
+    // sending a Tier-1-shaped body should fail validation cleanly, not
+    // accidentally route through the Tier 1 schema.
+    const subId = uuid()
+    const app = createApp()
+    await app.request('/api/v1/tenant/kyc/drafts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${orgFix.tokenOrg}` },
+      body: JSON.stringify({ submissionId: subId }),
+    })
+    const res = await app.request(`/api/v1/tenant/kyc/drafts/${subId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${orgFix.tokenOrg}` },
+      body: JSON.stringify({
+        step: 'identity',
+        fields: { fullName: 'X', dateOfBirth: '1990-01-01', nidNumber: '1234567890' },
+      }),
+    })
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('VALIDATION_ERROR')
   })
 })

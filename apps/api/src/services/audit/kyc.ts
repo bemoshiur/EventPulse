@@ -215,7 +215,22 @@ export interface KycDraftDiff {
   }
 }
 
-export type KycDraftStep = 'identity' | 'address' | 'financial'
+/**
+ * Wizard step ids the audit helper accepts. The union spans both
+ * Individual Tier 1 (Day 16) and Organisation Tier A (Day 17) per
+ * `.claude/memory/decisions.md` 2026-05-19. Document-only steps
+ * (`signatory_docs`, `org_docs`) DO PATCH the row (they update
+ * `documents` jsonb), so they're valid step values for the audit
+ * `metadata.step` filter even though they never carry `fields`.
+ */
+export type KycDraftStep =
+  | 'identity'
+  | 'address'
+  | 'financial'
+  | 'org_info'
+  | 'signatory_identity'
+  | 'signatory_docs'
+  | 'org_docs'
 
 export interface WriteKycDraftUpdatedInput {
   submissionId: string

@@ -52,10 +52,15 @@ import { logger } from '../../lib/logger.js'
 // KYC schemas live in @eventpulse/shared-types per §3.2 so the
 // frontend wizard (PR 3) can import the same source-of-truth schemas
 // the backend validates against. Moved here from apps/api in PR 3.
+// Day 17 adds Organisation Tier A — both schemas are imported and the
+// PATCH + submit handlers branch on `tenantType` to pick the right one.
 import {
   IndividualTier1PatchSchema,
   IndividualTier1SubmissionSchema,
+  OrganisationTierAPatchSchema,
+  OrganisationTierASubmissionSchema,
   type IndividualTier1Patch,
+  type OrganisationTierAPatch,
 } from '@eventpulse/shared-types'
 import {
   computeFieldDiff,
@@ -154,6 +159,68 @@ class SubmissionIncompleteError extends Error {
  */
 function defaultTierForType(tenantType: 'individual' | 'organisation'): 'tier_1' | 'org_a' {
   return tenantType === 'individual' ? 'tier_1' : 'org_a'
+}
+
+/**
+ * Map a wizard step name to its target jsonb key under `kyc_submissions.
+ * fields`. For Individual Tier 1 the step name IS the key (`identity`,
+ * `address`, `financial`). For Org Tier A the step names are verbose
+ * but jsonb keys are shorter per the 2026-05-19 decision (`fields.org`,
+ * `fields.signatory`).
+ *
+ * Document-only steps (`signatory_docs`, `org_docs`) never PATCH fields
+ * — their schema has `fields: z.never().optional()` — so they don't
+ * route through this function in practice. They're included for
+ * exhaustiveness checking, mapping to the same key as their text-only
+ * sibling step so a future schema change can't accidentally split.
+ */
+function fieldsKeyForStep(
+  step:
+    | 'identity'
+    | 'address'
+    | 'financial'
+    | 'org_info'
+    | 'signatory_identity'
+    | 'signatory_docs'
+    | 'org_docs',
+): string {
+  switch (step) {
+    case 'identity':
+    case 'address':
+    case 'financial':
+      return step
+    case 'org_info':
+    case 'org_docs':
+      return 'org'
+    case 'signatory_identity':
+    case 'signatory_docs':
+      return 'signatory'
+  }
+}
+
+/**
+ * Pick the per-tier PATCH zod schema by tenant type. A switch (not a
+ * ternary) so a future third tenant type (e.g. 'enterprise' in Phase 2)
+ * fails the TypeScript exhaustiveness check at compile time instead of
+ * silently routing to the Org Tier A schema. Per Day 17 PR 1 /review
+ * important issue #2 (confidence 82).
+ */
+function pickPatchSchema(tenantType: 'individual' | 'organisation') {
+  switch (tenantType) {
+    case 'individual':
+      return IndividualTier1PatchSchema
+    case 'organisation':
+      return OrganisationTierAPatchSchema
+  }
+}
+
+function pickSubmissionSchema(tenantType: 'individual' | 'organisation') {
+  switch (tenantType) {
+    case 'individual':
+      return IndividualTier1SubmissionSchema
+    case 'organisation':
+      return OrganisationTierASubmissionSchema
+  }
 }
 
 // ─── POST / — create a draft row ──────────────────────────────────────
@@ -298,16 +365,15 @@ drafts.patch(
     const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null
     const userAgent = c.req.header('user-agent') ?? null
 
-    // Day 16 ships Individual Tier 1 only. Organisation lands Day 17.
-    if (tenantType !== 'individual') {
-      return c.json(
-        errorEnvelope('NOT_IMPLEMENTED', 'Organisation wizard variant lands Day 17', requestId),
-        501,
-      )
-    }
-
+    // Pick the per-tier PATCH schema by tenant type. Day 17 wires the
+    // Org Tier A branch alongside Individual Tier 1 (Day 16). Both
+    // schemas converge on the same `{step, fields?, documents?}` shape;
+    // only the per-step field validators differ. Uses the switch-based
+    // pickPatchSchema helper above for TypeScript exhaustiveness — a
+    // future third tenant type fails the type check.
     const rawBody = c.req.valid('json')
-    const parsed = IndividualTier1PatchSchema.safeParse(rawBody)
+    const patchSchema = pickPatchSchema(tenantType)
+    const parsed = patchSchema.safeParse(rawBody)
     if (!parsed.success) {
       return c.json(
         errorEnvelope(
@@ -319,7 +385,7 @@ drafts.patch(
         400,
       )
     }
-    const patch: IndividualTier1Patch = parsed.data
+    const patch: IndividualTier1Patch | OrganisationTierAPatch = parsed.data
 
     try {
       const row = await withTenant(tenantId, async (tx) => {
@@ -343,16 +409,21 @@ drafts.patch(
         // trigger a fields merge — `||` shallow merge would replace
         // `fields.<step>` with `{}` and wipe the user's typed values.
         // Per Day 16 PR 3 /review BLOCKER 1.
-        const stepKey = patch.step // 'identity' | 'address' | 'financial'
+        //
+        // The jsonb key under `fields` is NOT the step name verbatim
+        // for Org Tier A (see fieldsKeyForStep + decisions.md 2026-05-19).
+        const stepKey = fieldsKeyForStep(patch.step)
         const patchFields = patch.fields as Record<string, unknown> | undefined
         const hasFields = patchFields !== undefined && Object.keys(patchFields).length > 0
 
         // Build the materialised documents map for any document slots
         // this PATCH declares. Server derives the S3 URI from
         // (tenantId, submissionId, documentType, contentType) — client
-        // cannot smuggle in an arbitrary path.
+        // cannot smuggle in an arbitrary path. The check is now
+        // schema-agnostic — `patch.documents` is `z.never().optional()`
+        // on text-only step branches so the loop is a no-op there.
         const mergeDocs: Record<string, string> = {}
-        if (patch.step !== 'financial' && patch.documents) {
+        if (patch.documents) {
           for (const [docTypeKey, decl] of Object.entries(patch.documents)) {
             if (!decl) continue
             const docType = docTypeKey as KycDocumentType
@@ -360,7 +431,8 @@ drafts.patch(
               tenantId,
               submissionId: id,
               documentType: docType,
-              contentType: decl.contentType as keyof typeof ALLOWED_CONTENT_TYPES,
+              contentType: (decl as { contentType: string })
+                .contentType as keyof typeof ALLOWED_CONTENT_TYPES,
             })
           }
         }
@@ -487,13 +559,6 @@ drafts.post('/:id/submit', zValidator('param', idParamSchema), async (c) => {
   const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null
   const userAgent = c.req.header('user-agent') ?? null
 
-  if (tenantType !== 'individual') {
-    return c.json(
-      errorEnvelope('NOT_IMPLEMENTED', 'Organisation wizard variant lands Day 17', requestId),
-      501,
-    )
-  }
-
   try {
     const { row, transitionedNow } = await withTenant(tenantId, async (tx) => {
       const rows = await tx
@@ -514,12 +579,15 @@ drafts.post('/:id/submit', zValidator('param', idParamSchema), async (c) => {
         throw new DraftNotInDraftStateError(id, existing.status)
       }
 
-      // Validate the full accumulated state against the tier schema.
+      // Validate the full accumulated state against the per-tier
+      // submission schema. Day 17 adds the Org Tier A branch alongside
+      // Individual Tier 1.
       const accumulated = {
         fields: existing.fields,
         documents: existing.documents,
       }
-      const parsed = IndividualTier1SubmissionSchema.safeParse(accumulated)
+      const submissionSchema = pickSubmissionSchema(tenantType)
+      const parsed = submissionSchema.safeParse(accumulated)
       if (!parsed.success) {
         throw new SubmissionIncompleteError(parsed.error.issues)
       }

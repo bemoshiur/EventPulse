@@ -288,23 +288,210 @@ export const INDIVIDUAL_TIER1_REQUIRED_DOCUMENTS = [
 export const INDIVIDUAL_TIER1_STEPS = ['identity', 'address', 'financial', 'review'] as const
 export type IndividualTier1WizardStep = (typeof INDIVIDUAL_TIER1_STEPS)[number]
 
-// ─── Wizard kind discriminator (Day 17 will add Organisation Tier A) ──
+// ═══════════════════════════════════════════════════════════════════════
+// Organisation Tier A — Sprint 2 Day 17 Item 12 Part 2
 //
-// Day 16 ships Individual Tier 1 only. The shape below allows the wizard
-// page route to switch on tenants.type and load the appropriate variant.
+// Six-step decomposition per .claude/memory/decisions.md 2026-05-19
+// "Organisation Tier A wizard — 6-step decomposition + reuse Individual
+// Tier 1's financial schema":
+//
+//   1. org_info           — text-only: legal name, trade license, BIN, DOI
+//   2. signatory_identity — text-only: full name, NID number
+//   3. signatory_docs     — uploads only: nid_front, nid_back, photograph
+//   4. org_docs           — uploads only: trade_license, moa, aoa
+//   5. financial          — text-only: reuses IndividualTier1FinancialSchema
+//   6. review             — read-only summary, submit
+//
+// fields jsonb shape for Tier A:
+//   { org: {...}, signatory: {...}, financial: {...} }
+//
+// documents jsonb shape:
+//   { nid_front: 's3://...', nid_back, photograph, trade_license, moa, aoa }
+// ═══════════════════════════════════════════════════════════════════════
 
-export type WizardVariant = { kind: 'individual_tier1' }
-// Day 17: { kind: 'organisation_tier_a' }
+// ─── Organisation Tier A — per-step field schemas ─────────────────────
 
 /**
- * Pick the wizard variant from the tenant's type. Day 16 maps Individual
- * → Tier 1. Day 17 adds Organisation → Tier A.
+ * Bangladesh Business Identification Number (BIN) — VAT registration.
+ *
+ * The e-BIN format has been **13 digits** since 30 November 2019 per
+ * NBR's mandate; the older 9-digit and 11-digit formats are deprecated
+ * and would no longer appear on a current VAT-compliant invoice. Per
+ * Day 17 PR 1 /review BLOCKER (confidence 90): accepting 9–12 digits
+ * would bless formats that NBR explicitly rejects, leaving the
+ * reviewer with no system guard against an outdated document.
+ *
+ * Sources: NBR's "fourteen-digit BIN search" portal + 2019 Bangladesh
+ * Post mandate coverage.
+ */
+const binRegex = /^\d{13}$/
+
+export const OrganisationTierAOrgInfoSchema = z.object({
+  /** Registered legal name as it appears on the trade license. */
+  legalName: z.string().trim().min(2).max(200),
+  /** Trade license number. Format varies by issuing authority; plain capture. */
+  tradeLicenseNumber: z.string().trim().min(3).max(60),
+  /** BIN (Business Identification Number) — e-BIN, 13 digits. NBR mandate since 2019-11-30. */
+  bin: z.string().trim().regex(binRegex, 'BIN must be 13 digits (NBR e-BIN format)'),
+  /** Date of incorporation (ISO YYYY-MM-DD). Must be in the past. */
+  dateOfIncorporation: z
+    .string()
+    .regex(isoDateRegex, 'date of incorporation must be YYYY-MM-DD')
+    .refine((d) => {
+      const [y, m, day] = d.split('-').map(Number)
+      if (!y || !m || !day) return false
+      const incorporationDate = new Date(Date.UTC(y, m - 1, day))
+      return incorporationDate.getTime() < Date.now()
+    }, 'date of incorporation must be in the past'),
+})
+
+export const OrganisationTierASignatorySchema = z.object({
+  /** Authorised signatory full name as on NID. Soft-checked against accountName at submit. */
+  fullName: z.string().trim().min(2).max(120),
+  /** Signatory's NID number. Plain capture (Item 10 deferral). */
+  nidNumber: z.string().trim().min(10).max(20),
+})
+
+// Financial schema is REUSED from Individual Tier 1 — semantically
+// identical fields per the 2026-05-19 decision. Awkward naming
+// (`IndividualTier1FinancialSchema` on an organisation submission)
+// flagged for Sprint 3 rename to `BaseFinancialSchema` or similar.
+//
+// Note: account name soft-check at submit time should compare against
+// the signatory's fullName for Tier A (not against an organisation
+// name — the bank account is held in the signatory's capacity as
+// authorised representative). The reviewer makes the hard call.
+
+// ─── Organisation Tier A — submit-time full schema ────────────────────
+
+const organisationTierADocumentsSchema = z.object({
+  nid_front: z.string().min(1, 'signatory NID front required'),
+  nid_back: z.string().min(1, 'signatory NID back required'),
+  photograph: z.string().min(1, 'signatory photograph (selfie) required'),
+  trade_license: z.string().min(1, 'trade license document required'),
+  moa: z.string().min(1, 'memorandum of association required'),
+  aoa: z.string().min(1, 'articles of association required'),
+})
+
+export const OrganisationTierASubmissionSchema = z.object({
+  fields: z.object({
+    org: OrganisationTierAOrgInfoSchema,
+    signatory: OrganisationTierASignatorySchema,
+    financial: IndividualTier1FinancialSchema,
+  }),
+  documents: organisationTierADocumentsSchema,
+})
+
+// ─── Organisation Tier A — PATCH body schemas (per-step) ──────────────
+
+const orgInfoPatchSchema = z.object({
+  step: z.literal('org_info'),
+  fields: OrganisationTierAOrgInfoSchema.partial().optional(),
+  documents: z.never().optional(),
+})
+
+const signatoryIdentityPatchSchema = z.object({
+  step: z.literal('signatory_identity'),
+  fields: OrganisationTierASignatorySchema.partial().optional(),
+  documents: z.never().optional(),
+})
+
+const signatoryDocsPatchSchema = z.object({
+  step: z.literal('signatory_docs'),
+  fields: z.never().optional(),
+  documents: z
+    .object({
+      nid_front: documentDeclSchema.optional(),
+      nid_back: documentDeclSchema.optional(),
+      photograph: documentDeclSchema.optional(),
+    })
+    .optional(),
+})
+
+const orgDocsPatchSchema = z.object({
+  step: z.literal('org_docs'),
+  fields: z.never().optional(),
+  documents: z
+    .object({
+      trade_license: documentDeclSchema.optional(),
+      moa: documentDeclSchema.optional(),
+      aoa: documentDeclSchema.optional(),
+    })
+    .optional(),
+})
+
+const orgFinancialPatchSchema = z.object({
+  step: z.literal('financial'),
+  // Same shape as the Individual Tier 1 financial PATCH branch
+  // (full schema, not partial — branchName refine doesn't survive
+  // .partial() cleanly per Day 16 PR 1 implementation note).
+  fields: IndividualTier1FinancialSchema,
+  documents: z.never().optional(),
+})
+
+export const OrganisationTierAPatchSchema = z.discriminatedUnion('step', [
+  orgInfoPatchSchema,
+  signatoryIdentityPatchSchema,
+  signatoryDocsPatchSchema,
+  orgDocsPatchSchema,
+  orgFinancialPatchSchema,
+])
+
+// ─── Inferred TS types (Org Tier A) ───────────────────────────────────
+
+export type OrganisationTierAOrgInfo = z.infer<typeof OrganisationTierAOrgInfoSchema>
+export type OrganisationTierASignatory = z.infer<typeof OrganisationTierASignatorySchema>
+export type OrganisationTierASubmission = z.infer<typeof OrganisationTierASubmissionSchema>
+export type OrganisationTierAPatch = z.infer<typeof OrganisationTierAPatchSchema>
+export type OrganisationTierAStep = OrganisationTierAPatch['step']
+
+// ─── Org step → required-documents map ────────────────────────────────
+
+export const ORGANISATION_TIER_A_STEP_DOCUMENTS: Record<
+  OrganisationTierAStep,
+  readonly ('nid_front' | 'nid_back' | 'photograph' | 'trade_license' | 'moa' | 'aoa')[]
+> = {
+  org_info: [],
+  signatory_identity: [],
+  signatory_docs: ['nid_front', 'nid_back', 'photograph'],
+  org_docs: ['trade_license', 'moa', 'aoa'],
+  financial: [],
+}
+
+export const ORGANISATION_TIER_A_REQUIRED_DOCUMENTS = [
+  'nid_front',
+  'nid_back',
+  'photograph',
+  'trade_license',
+  'moa',
+  'aoa',
+] as const
+
+// ─── Org wizard navigation order ──────────────────────────────────────
+
+export const ORGANISATION_TIER_A_STEPS = [
+  'org_info',
+  'signatory_identity',
+  'signatory_docs',
+  'org_docs',
+  'financial',
+  'review',
+] as const
+export type OrganisationTierAWizardStep = (typeof ORGANISATION_TIER_A_STEPS)[number]
+
+// ═══════════════════════════════════════════════════════════════════════
+// Wizard kind discriminator — updated Day 17 to cover both tiers.
+// ═══════════════════════════════════════════════════════════════════════
+
+export type WizardVariant = { kind: 'individual_tier1' } | { kind: 'organisation_tier_a' }
+
+/**
+ * Pick the wizard variant from the tenant's type. Both variants now
+ * supported (Day 16: Individual Tier 1; Day 17: Organisation Tier A).
  */
 export function wizardVariantForTenantType(
   tenantType: 'individual' | 'organisation',
-): WizardVariant | null {
+): WizardVariant {
   if (tenantType === 'individual') return { kind: 'individual_tier1' }
-  // Organisation lands Day 17 — return null in the meantime so the
-  // wizard page can show a "coming soon" placeholder rather than crash.
-  return null
+  return { kind: 'organisation_tier_a' }
 }
