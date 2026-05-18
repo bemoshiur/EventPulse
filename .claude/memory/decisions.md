@@ -4,6 +4,35 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-18 · Tenant account_type is set-once for MVP — change requires support intervention
+
+**Context:** Sprint 2 Day 15 Item 11 introduces the post-login Account-Type modal in the tenant portal (`§1.6`: "Account type chosen on first dashboard load via a friendly modal, not at sign-up"). Once a user picks Individual or Organisation, the rest of the tenant portal unblocks — the KYC wizard variant (Item 12, Days 16-17) renders different required fields per type, the reviewer queue (Item 13, Day 18) surfaces different document checklists, and downstream defaults (fee handling per §14, subdomain provisioning per §2.4, KYC tier eligibility per §13.3) all branch on the type field. The choice is structurally load-bearing; the question is whether tenants should be able to change it themselves.
+
+**Decision:** For MVP, `tenants.type` is **set-once**. Once set, it cannot be changed via tenant UI or tenant API. Changing type after first selection requires support intervention via super admin UI (lands in Phase 2 sprint that includes a 'change tenant type' action with the cascading KYC resubmission + fee re-pin + subdomain re-provision logic).
+
+**Rationale:**
+
+- Changing type after KYC submission would invalidate the wizard variant's required fields. Individual KYC submits NID + photograph + bank statement (+ eTIN at Tier 2); organisation KYC submits trade license + MOA + AOA + authorised signatory NID + BIN. A type change without document change leaves the submission in a structurally inconsistent state that the reviewer queue can't sensibly render.
+- The audit_logs diff semantics break clean. `{type: {from: 'individual', to: 'organisation'}}` records the intent fine, but the downstream cascade (KYC re-review trigger, `tenant_fee_config` re-pin per `§14`, tenant subdomain re-provision if branded under `§12`) is complex rollback logic the MVP doesn't yet have the infrastructure to model.
+- MVP volume (sub-50 submissions/week through Phase 1, per the Porichoy + Item 10 deferrals) doesn't justify the complexity — most users pick correctly on first encounter; the rest are a support escalation, not a product feature.
+- Per-tenant fee config in `tenant_fee_config` was set at tenant creation and is type-correlated (the pass-through default applies regardless, but future per-type overrides surface). Switching type doesn't re-pin the fee. Inconsistency surface widens with each derived setting.
+
+**Consequences:**
+
+- `POST /api/v1/tenant/account-type` returns 409 `TENANT_TYPE_ALREADY_SET` on any attempt to change after first set. Idempotent same-type calls return 200 (no audit duplicate). Only type-change attempts trip the 409.
+- Tenant UI: once the modal is dismissed (= type chosen), there's no "change account type" affordance anywhere in the tenant portal. Settings page omits the field entirely; profile edit forms don't surface it.
+- Support escalation path: tenant emails support → super admin manually updates `tenants.type` via the (Phase 2) super admin UI + triggers KYC resubmission flow + notifies tenant of the change with rationale.
+- Audit trail: every tenant-side type-set writes one `audit_logs` row via `writeTenantTypeSet` (`actor_role='tenant_user'`). Phase 2 super-admin type-change writes a separate audit row with `actor_role='super_admin'` so the forensics trail unambiguously identifies who flipped the bit.
+
+**Cross-references:**
+
+- 2026-05-17 "audit_logs scope at Item 9 — KYC transitions only; auth events + S3 issuance backfill deferred" — same operational pattern (ship the minimum at Item N, queue the related-but-not-strictly-needed work for a dedicated PR rather than expanding scope).
+- §13.4 KYC graduation flow (CLAUDE.md) — KYC revocation auto-unpublishes paid events; similar forward-revocation pattern rather than tenant-side rollback.
+
+**Path back to tenant-controllable type change:** Phase 2 sprint adds a super admin "change tenant type" action with KYC resubmission flow, surfaced as a support-triggered workflow rather than a self-service tenant action. If MVP traffic shows > 5 tenants/month requesting type changes, a Phase 3 self-service option with the explicit rollback complexity becomes worth the implementation cost.
+
+---
+
 ## 2026-05-17 · audit_logs scope at Item 9 — KYC transitions only; auth events + S3 issuance backfill deferred
 
 **Context:** Sprint 2 Day 14 Item 9 is the first feature to write to `audit_logs` (§9.10). Items 5/7+8 didn't create the table because they didn't need auditable state transitions. During the Day 14 plan review, Moshiur surfaced the question explicitly: is the choice to scope `audit_logs` writes to KYC transitions only — and NOT backfill auth events from Day 11 (sign-in success/fail, sign-out, magic-link issued/consumed, OAuth link created) or S3 signed URL issuance from Day 13 (`getKycUploadUrl` calls) — a deliberate decision or an unnoticed gap?
@@ -38,6 +67,8 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
   - Auth events audit backfill — sign-in, sign-out, magic-link issuance + consumption, OAuth link creation. Some rows tenant-scoped, others user-scoped or system-action; the writer per-event-type chooses the right execution context.
 
 **Path-back if either backfill drifts further:** if S3 issuance hasn't landed by end of Sprint 2, this entry becomes a §29 Open Decision asking whether the audit trail's incompleteness is acceptable for the first paying tenant or whether the closeout is gated on backfill completion. Same shape for auth events at Sprint 3 closeout.
+
+**Reaffirmed 2026-05-18 (Day 15 Item 11):** Audit helpers are one-per-domain (`writeKycTransition`, `writeTenantTypeSet`, etc.), **not** a single generic `writeAudit()`. Each helper carries domain-specific TypeScript types on its diff and metadata shapes; a generic helper would lose this type safety. New audit domains create new sibling helpers in `apps/api/src/services/audit/<domain>.ts`. Established Day 14 (Item 9), reaffirmed Day 15 (Item 11) when the tenant-type-set audit writer landed as a sibling rather than a parameterised generic.
 
 ---
 
