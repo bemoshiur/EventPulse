@@ -43,9 +43,14 @@
 
 import { z } from 'zod'
 
-import { BD_DIVISIONS } from '@eventpulse/shared-types'
-
-import { ALLOWED_CONTENT_TYPES, KYC_DOCUMENT_TYPES } from '../infra/s3/client.js'
+// All imports here MUST stay frontend-safe — this module is consumed
+// by both `apps/api/src/routes/tenant/kyc-drafts.ts` (server) and
+// `apps/web/src/components/kyc-wizard/...` (browser, via PR 3). Pulling
+// in a Node-only module (DB client, AWS SDK, fs) would break the
+// frontend bundle. The KYC document-type enum + allowed-content-type
+// map live in `packages/shared-types/src/kyc.ts` for this exact reason
+// (Day 16 /review #1, confidence 92).
+import { ALLOWED_CONTENT_TYPES, BD_DIVISIONS } from '@eventpulse/shared-types'
 
 // ─── document declaration shape ───────────────────────────────────────
 //

@@ -13,3 +13,10 @@ export {
   BD_DIVISION_LABELS_EN,
   type BdDivision,
 } from './bd.js'
+
+export {
+  ALLOWED_CONTENT_TYPES,
+  KYC_DOCUMENT_TYPES,
+  type AllowedContentType,
+  type KycDocumentType,
+} from './kyc.js'

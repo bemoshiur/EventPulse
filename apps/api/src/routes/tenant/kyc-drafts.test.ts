@@ -648,6 +648,91 @@ describeIfDb('/api/v1/tenant/kyc/drafts router (Item 12)', () => {
       expect(Array.isArray(body.error.details)).toBe(true)
     })
 
+    it('submit-400 details contain no PII substrings (sanitised ZodIssues)', async () => {
+      // Per Day 16 /review #2 (medium, confidence 88): the submit
+      // endpoint's 400 response runs ZodIssues through
+      // sanitiseZodIssues() before echoing. Verify the sanitised
+      // payload contains no NID, eTIN, or account-number substrings
+      // from the input — even though the current refines don't
+      // interpolate values, the test is the regression target for any
+      // future refine that might leak values.
+      const subId = uuid()
+      const app = createApp()
+      await app.request('/api/v1/tenant/kyc/drafts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${fix.tokenA}` },
+        body: JSON.stringify({ submissionId: subId }),
+      })
+      // Fill all three steps with distinctive PII strings so we can grep
+      // the response body for any leak.
+      const sentinelNid = '9999987654321'
+      const sentinelEtin = '8888877777'
+      const sentinelAccount = '7777766655544'
+      const identityWithSentinel = {
+        ...validIdentityPatch(),
+        fields: { ...validIdentityPatch().fields, nidNumber: sentinelNid },
+      }
+      const financialWithSentinel = {
+        ...validFinancialPatch(),
+        fields: {
+          ...validFinancialPatch().fields,
+          etinNumber: sentinelEtin,
+          accountNumber: sentinelAccount,
+        },
+      }
+      for (const patch of [identityWithSentinel, validAddressPatch(), financialWithSentinel]) {
+        await app.request(`/api/v1/tenant/kyc/drafts/${subId}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${fix.tokenA}` },
+          body: JSON.stringify(patch),
+        })
+      }
+      // Force a validation failure by directly clobbering the row's
+      // accumulated fields back to an invalid state via withSuperAdmin.
+      // (The wizard endpoints don't let the tenant submit a row that
+      // would have been valid then PATCH it back to invalid; this is a
+      // narrow test fixture to exercise the submit-400 path with PII
+      // already in the row.)
+      await withSuperAdmin((db) =>
+        db
+          .update(kycSubmissions)
+          .set({
+            // Remove address.line1 to force a tier-schema failure while
+            // keeping the sentinel NID/eTIN/account values populated.
+            fields: {
+              identity: {
+                fullName: 'Mohammad Rahman',
+                dateOfBirth: '1990-05-12',
+                nidNumber: sentinelNid,
+              },
+              address: { city: 'Dhaka', division: 'dhaka', postalCode: '1213' },
+              financial: {
+                accountType: 'bank',
+                accountName: 'Mohammad Rahman',
+                accountNumber: sentinelAccount,
+                branchName: 'Banani',
+                etinNumber: sentinelEtin,
+              },
+            },
+          })
+          .where(eq(kycSubmissions.id, subId)),
+      )
+      const res = await app.request(`/api/v1/tenant/kyc/drafts/${subId}/submit`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${fix.tokenA}` },
+      })
+      expect(res.status).toBe(400)
+      const body = (await res.json()) as { error: { details?: unknown } }
+      const serialised = JSON.stringify(body)
+      expect(serialised).not.toContain(sentinelNid)
+      expect(serialised).not.toContain(sentinelEtin)
+      expect(serialised).not.toContain(sentinelAccount)
+      // The sanitised details array still tells the wizard which step
+      // is broken via the `path` field — exactly what the wizard needs
+      // to navigate back. Just no values.
+      expect(Array.isArray(body.error.details)).toBe(true)
+    })
+
     it('happy path: complete draft → submitted, transition audit row, notification fires', async () => {
       const subId = uuid()
       const app = createApp()

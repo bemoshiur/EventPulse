@@ -84,6 +84,34 @@ function errorEnvelope(code: string, message: string, requestId: string | null, 
   }
 }
 
+/**
+ * Sanitise a `z.ZodIssue[]` before echoing to the client in a 400
+ * response. Strips to `{ code, path, message }` only — the `received`,
+ * `unionErrors`, and other Zod-internal fields can carry the rejected
+ * input value, which is a §1.3 R5 PII risk on the KYC surface (NID
+ * number, eTIN, bank account number would all land in the response
+ * body and in any request-logging middleware that captures 400 bodies).
+ *
+ * Custom `.refine()` messages in `apps/api/src/schemas/kyc.ts` are
+ * also vetted to never interpolate input values into the message
+ * string; if a future refine ever does, this sanitiser caps the blast
+ * radius to whatever ends up in `message` (which is already the
+ * minimal field that a client genuinely needs to render an error).
+ *
+ * Per Day 16 /review #2 (medium, confidence 88).
+ */
+function sanitiseZodIssues(issues: z.ZodIssue[]): Array<{
+  code: string
+  path: (string | number)[]
+  message: string
+}> {
+  return issues.map((issue) => ({
+    code: issue.code,
+    path: issue.path,
+    message: issue.message,
+  }))
+}
+
 class DraftNotFoundError extends Error {
   constructor(public readonly submissionId: string) {
     super(`Draft submission ${submissionId} not found in tenant context`)
@@ -279,7 +307,12 @@ drafts.patch(
     const parsed = IndividualTier1PatchSchema.safeParse(rawBody)
     if (!parsed.success) {
       return c.json(
-        errorEnvelope('VALIDATION_ERROR', 'invalid PATCH body', requestId, parsed.error.issues),
+        errorEnvelope(
+          'VALIDATION_ERROR',
+          'invalid PATCH body',
+          requestId,
+          sanitiseZodIssues(parsed.error.issues),
+        ),
         400,
       )
     }
@@ -521,7 +554,11 @@ drafts.post('/:id/submit', zValidator('param', idParamSchema), async (c) => {
       )
     }
 
-    return c.json(envelope(row), transitionedNow ? 200 : 200)
+    // Both first-submit and idempotent re-submit return 200; REST
+    // convention for "row already exists" semantics. The
+    // `transitionedNow` flag's only effect is whether the notification
+    // fires (above) and an extra audit row is written (inside the tx).
+    return c.json(envelope(row))
   } catch (err) {
     if (err instanceof DraftNotFoundError) {
       return c.json(errorEnvelope('NOT_FOUND', 'draft not found', requestId), 404)
@@ -542,7 +579,7 @@ drafts.post('/:id/submit', zValidator('param', idParamSchema), async (c) => {
           'VALIDATION_ERROR',
           'submission is incomplete or invalid; complete all required steps and re-submit',
           requestId,
-          err.issues,
+          sanitiseZodIssues(err.issues),
         ),
         400,
       )

@@ -29,45 +29,25 @@
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
+import {
+  ALLOWED_CONTENT_TYPES,
+  KYC_DOCUMENT_TYPES,
+  type AllowedContentType,
+  type KycDocumentType,
+} from '@eventpulse/shared-types'
+
 import { logger } from '../../lib/logger.js'
 
-// ─── content-type → extension whitelist ──────────────────────────────
-// Whitelist is enforced at the route layer (zod) AND echoed here as the
-// single source of truth for the extension mapping the signed URL key
-// uses. Adding a type means BOTH the zod enum AND this map need updating.
-
-export const ALLOWED_CONTENT_TYPES = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-  'application/pdf': 'pdf',
-} as const
-
-export type AllowedContentType = keyof typeof ALLOWED_CONTENT_TYPES
-
-// ─── document type enum (Sprint 2 minimal set) ────────────────────────
-// Tier 1 individual: nid_front, nid_back, photograph, address_proof
-//   (bank_statement is captured as a text-only set of fields per the
-//    Day 16 wizard spec; reviewer can request bank_statement upload
-//    out-of-band at the Item 13 review queue if needed)
-// Tier 2+ individual: + etin_certificate, + bank_statement
-// Org Tier A/B/C: trade_license, moa, aoa, + above
-// `address_proof` added in Sprint 2 Day 16 Item 12 for the Tier 1
-// wizard's Step 2 (Address); doc-type-agnostic from an S3 perspective.
-
-export const KYC_DOCUMENT_TYPES = [
-  'nid_front',
-  'nid_back',
-  'photograph',
-  'address_proof',
-  'etin_certificate',
-  'bank_statement',
-  'trade_license',
-  'moa',
-  'aoa',
-] as const
-
-export type KycDocumentType = (typeof KYC_DOCUMENT_TYPES)[number]
+// ALLOWED_CONTENT_TYPES + KYC_DOCUMENT_TYPES live in
+// `packages/shared-types/src/kyc.ts` so the per-tier zod schemas in
+// `apps/api/src/schemas/kyc.ts` (used by both server route handlers AND
+// the frontend wizard form via PR 3) can reference them without
+// transitively pulling the AWS SDK into the browser bundle.
+//
+// Re-exported here so call sites importing from `../infra/s3/client.js`
+// keep working (Day 13's upload-url route + the drafts router both
+// already import these names from this module).
+export { ALLOWED_CONTENT_TYPES, KYC_DOCUMENT_TYPES, type AllowedContentType, type KycDocumentType }
 
 // ─── client factory + env helpers ─────────────────────────────────────
 
