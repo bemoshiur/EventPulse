@@ -4,6 +4,83 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## Next.js webpack doesn't resolve `.js → .ts` for ESM-typed workspace packages without `extensionAlias`
+
+**Status:** RESOLVED 2026-05-18 during Sprint 2 Day 16 PR 3 (PR #80, commit `7520b07`).
+
+**Symptom:** Production build failed with `Module not found: Can't resolve './kyc-schemas.js'` (and `./bd.js` + `./kyc.js` after a deeper repro). The same import worked at typecheck time and in vitest tests because `tsconfig.json` has `moduleResolution: "Bundler"`, which natively rewrites `.js` imports to `.ts` source files. Next.js' webpack resolver does NOT.
+
+**Why it happens:** `packages/shared-types/package.json` has `"type": "module"` (ESM). TS5+ NodeNext convention has source files import each other via `.js` extensions that map to `.ts` on disk. Both `tsc --noEmit` and the Vitest transformer handle the rewrite; webpack's default ESM resolver looks for the literal `.js` file. `transpilePackages` covers the JSX/TSX transform but NOT the extension resolution.
+
+PR 2 (TanStack Query infra) didn't fail because no frontend code transitively imported through `shared-types/src/index.ts`'s `.js` re-exports — `QueryProvider` only imports from `@tanstack/react-query`. PR 3 was the first frontend code to import a shared schema, which surfaced the resolution gap immediately.
+
+**Fix:** Add `webpack.resolve.extensionAlias` to `next.config.mjs`:
+
+```js
+webpack: (config) => {
+  config.resolve.extensionAlias = {
+    '.js': ['.ts', '.tsx', '.js'],
+    '.mjs': ['.mts', '.mjs'],
+  }
+  return config
+}
+```
+
+**How to avoid:** Any new ESM-typed workspace package (`"type": "module"`) that re-exports sibling files via `.js` imports needs the same alias. The fix lives in `next.config.mjs` as the one place to maintain. Adding `@eventpulse/<new-pkg>` to `transpilePackages` is necessary but not sufficient; the alias is the missing piece.
+
+---
+
+## jsonb `||` shallow merge with `{step: {}}` SILENTLY wipes the step's sub-object
+
+**Status:** RESOLVED 2026-05-18 during Sprint 2 Day 16 PR 3 /review (PR #80 BLOCKER 1, commit `268f2e0`).
+
+**Symptom:** Wizard's `handleDocumentUploaded` PATCHed with `fields: {}`. Server-side merge `fields || '{"identity":{}}'::jsonb` ran successfully and returned status 200 — but every typed value the user had entered for that step (fullName, dateOfBirth, nidNumber, …) was now gone. Next call to submit fails because the tier schema rejects the empty identity sub-object.
+
+**Why it happens:** Postgres' `||` jsonb concatenation operator does shallow merge at the TOP level. When you merge `{"identity": {"fullName": "X", "nidNumber": "Y"}}` with `{"identity": {}}`, the result is `{"identity": {}}` — the top-level key `identity` is REPLACED, not deep-merged. This is correct per spec but easy to miss when you assume "merging" means "deep merge".
+
+The bug was masked because:
+- The PATCH validated (`.partial()` allows empty objects)
+- The SQL ran (no constraint violation)
+- The response was 200
+- Failure only surfaced at submit-time, several steps later
+
+**Fix (architectural):** PATCH schemas now mark `fields` as **optional** on identity + address branches. Server detects `hasFields = patchFields !== undefined && Object.keys(patchFields).length > 0` and skips the fields merge entirely when false. Document-only PATCH (e.g. from `handleDocumentUploaded`) omits `fields` and the server preserves prior typed values.
+
+**How to avoid for future jsonb merge work:**
+
+1. Treat `jsonb || jsonb` as **top-level replace**, not deep merge. Always reason at the top-level-key granularity.
+2. If you need deep-merge semantics, use `jsonb_set` per leaf path, or compute the merged jsonb in JS and pass it whole.
+3. For any "PATCH with optional content" endpoint, the server MUST guard against the empty-payload-wipes-prior-state case explicitly — don't rely on schema partial-ness to imply intent.
+4. Add a `<load-bearing>`-class test that PATCHes a step with `fields: undefined` (or empty) and asserts the prior step's fields survive. The Day 16 PR 1 test "Step 2 PATCH preserves Step 1 fields" covers the cross-step case but missed this within-step case.
+
+---
+
+## `aria-invalid` / `aria-busy` JSX expressions trigger jsx-a11y warnings even when the runtime value is valid
+
+**Status:** RESOLVED 2026-05-18 across Sprint 2 Day 15 (Item 11) + Day 16 PR 3 (multiple wizard files).
+
+**Symptom:** Even with TypeScript-valid expressions like `aria-invalid={errors.foo ? true : undefined}`, the jsx-a11y ESLint rule reports `ARIA attributes must conform to valid values: Invalid ARIA attribute value: aria-invalid="{expression}"`. The rule reads the JSX AST literally and rejects ALL expression forms — it only accepts string or boolean literals.
+
+**Fix:** Always use the string-form `aria-invalid={errors.foo ? 'true' : 'false'}` and `aria-busy={busy ? 'true' : 'false'}`. The string values are the canonical ARIA spec values; the boolean shorthand isn't worth fighting the lint rule for.
+
+**How to avoid:** When adding any aria-* attribute that's conditionally set, default to the explicit string literals. Don't try `as const`, ternaries returning boolean, or spread-conditional patterns — all trip the rule.
+
+---
+
+## axe rejects `role="progressbar"` on a `<nav>` element
+
+**Status:** RESOLVED 2026-05-18 during Sprint 2 Day 16 PR 3 wizard-frame test (commit `7520b07`).
+
+**Symptom:** vitest-axe's wizard-frame test failed with `ARIA role progressbar is not allowed for given element`. The wizard's progress indicator was originally a `<nav aria-label="…" role="progressbar" aria-valuenow="…">` — semantically it's both a navigation landmark AND a progressbar, and the test rendered it via React with all the right attributes.
+
+**Why it happens:** axe's `aria-allowed-role` rule enforces the WAI-ARIA spec's allowed-role list per HTML element. `<nav>` is a landmark; assigning `role="progressbar"` overrides the implicit landmark role with an incompatible explicit one. The rule rejects the combination because a progressbar inside a nav can't both BE a nav and BE a progressbar.
+
+**Fix:** Use a `<div role="progressbar">` instead. The progressbar role itself is a meaningful announcement; the `<nav>` landmark adds little to a wizard's progress UI. Bilingual `aria-label` + `aria-valuenow/max/text` carry the semantics.
+
+**How to avoid:** When picking an element for `role=X`, check whether the element's implicit role conflicts. For atomic progress / status / alert / dialog roles, a plain `<div>` is almost always the right call — leave landmarks (`<nav>`, `<main>`, `<aside>`) to their implicit roles.
+
+---
+
 ## Postgres auto-names inline `CHECK (...)` constraints `<table>_<column>_check`, not what Drizzle generates
 
 **Status:** RESOLVED 2026-05-18 during Sprint 2 Day 15 Item 11 (PR #75, follow-up commit `b54f8cd`).
