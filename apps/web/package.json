@@ -15,6 +15,7 @@
   "dependencies": {
     "@eventpulse/shared-types": "workspace:*",
     "@eventpulse/shared-utils": "workspace:*",
+    "@tanstack/react-query": "^5.100.10",
     "clsx": "^2.1.1",
     "framer-motion": "^11.13.5",
     "geist": "^1.3.1",
@@ -29,6 +30,7 @@
     "@eventpulse/tsconfig": "workspace:*",
     "@playwright/test": "^1.49.1",
     "@tailwindcss/postcss": "^4.0.0-beta.7",
+    "@tanstack/react-query-devtools": "^5.100.10",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

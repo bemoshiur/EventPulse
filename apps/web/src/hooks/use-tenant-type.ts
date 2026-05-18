@@ -6,28 +6,28 @@
  * (Item 11) and any downstream UI that branches on individual vs
  * organisation (KYC wizard variant, reviewer queue, fee surfaces).
  *
- * State machine:
+ * Sprint 2 Day 16 PR 2: migrated from native fetch + useEffect to
+ * TanStack Query's `useQuery`. Interface shape is preserved so existing
+ * consumers (`TenantTypeGate`, `AccountTypeModal`) don't change.
+ *
+ * Decision: .claude/memory/decisions.md 2026-05-18 "TanStack Query
+ * lands at Item 12; useTenantType migrated for consistency."
+ *
+ * State machine (unchanged from Item 11):
  *   isLoading: true  → initial fetch in flight
  *   isLoading: false + type: null    → modal must show
  *   isLoading: false + type: <value> → modal hides
- *   error: <value>   → modal can show an inline error + retry path;
- *                       NOT a retry loop (we surface to the user
- *                       rather than hide failures behind transparent
- *                       retries).
+ *   error: <value>   → modal can show an inline error + retry path
  *
- * Why native fetch + useEffect, not TanStack Query: TanStack is the
- * planned stack per CLAUDE.md §1.2 but is not yet installed in
- * apps/web/package.json. Adding the dep mid-Item-11 is a §1.4
- * "ask-before-acting" item; Item 12 (KYC wizard) is the natural place
- * to introduce it because that surface needs caching + invalidation +
- * mutations far more than a single read. Until then the hook stays
- * tiny + dep-free.
+ * The account-type setter at `POST /api/v1/tenant/account-type` calls
+ * `useInvalidateTenantType()` on success so the modal closes
+ * immediately on the next render (no waiting for the 30s stale time
+ * to elapse).
  *
  * Endpoint envelope: { data: { tenant: { type: 'individual' | 'organisation' | null, ... } } }
- * matches the GET /tenant/me response shape from Item 11's backend.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 export type TenantType = 'individual' | 'organisation'
 
@@ -35,7 +35,7 @@ export interface UseTenantTypeResult {
   type: TenantType | null
   isLoading: boolean
   error: Error | null
-  /** Re-fetch the tenant; the modal calls this after a successful POST. */
+  /** Re-fetch the tenant; consumers call this after a successful POST. */
   refetch: () => Promise<void>
 }
 
@@ -53,61 +53,73 @@ interface TenantMeError {
 }
 
 /**
- * Resolve the API base URL. Defaults to same-origin so local dev works
- * without env config; staging/prod set NEXT_PUBLIC_API_BASE_URL to the
- * api.<env>.eventpulse.com.bd host since Nginx routes web + api on
- * different vhosts (§17.4).
+ * Canonical query key for the current tenant context. Exported so
+ * mutation hooks (account-type setter) can invalidate by key without
+ * re-typing the string array.
  */
+export const TENANT_ME_QUERY_KEY = ['tenant', 'me'] as const
+
 function apiBase(): string {
   const fromEnv = process.env['NEXT_PUBLIC_API_BASE_URL']
   return fromEnv && fromEnv.length > 0 ? fromEnv.replace(/\/$/, '') : ''
 }
 
-export function useTenantType(): UseTenantTypeResult {
-  const [type, setType] = useState<TenantType | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
-  // mountedRef avoids state updates after unmount (React strict-mode
-  // double-mount in dev would otherwise log a setState-after-unmount warning).
-  const mountedRef = useRef(true)
-
-  const fetchTenant = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
+async function fetchTenantMe(): Promise<TenantType | null> {
+  const res = await fetch(`${apiBase()}/api/v1/tenant/me`, {
+    method: 'GET',
+    credentials: 'include',
+    headers: { accept: 'application/json' },
+  })
+  if (!res.ok) {
+    let code = `HTTP_${res.status}`
     try {
-      const res = await fetch(`${apiBase()}/api/v1/tenant/me`, {
-        method: 'GET',
-        credentials: 'include',
-        headers: { accept: 'application/json' },
-      })
-      if (!res.ok) {
-        let code = `HTTP_${res.status}`
-        try {
-          const body = (await res.json()) as TenantMeError
-          code = body.error?.code ?? code
-        } catch {
-          // Body not JSON — surface the status-based code only.
-        }
-        throw new Error(`tenant /me failed: ${code}`)
-      }
-      const body = (await res.json()) as TenantMeResponse
-      if (!mountedRef.current) return
-      setType(body.data?.tenant?.type ?? null)
-    } catch (err) {
-      if (!mountedRef.current) return
-      setError(err instanceof Error ? err : new Error('tenant /me failed'))
-    } finally {
-      if (mountedRef.current) setIsLoading(false)
+      const body = (await res.json()) as TenantMeError
+      code = body.error?.code ?? code
+    } catch {
+      // Body not JSON — surface the status-based code only.
     }
-  }, [])
+    throw new Error(`tenant /me failed: ${code}`)
+  }
+  const body = (await res.json()) as TenantMeResponse
+  return body.data?.tenant?.type ?? null
+}
 
-  useEffect(() => {
-    mountedRef.current = true
-    void fetchTenant()
-    return () => {
-      mountedRef.current = false
-    }
-  }, [fetchTenant])
+export function useTenantType(): UseTenantTypeResult {
+  const query = useQuery({
+    queryKey: TENANT_ME_QUERY_KEY,
+    queryFn: fetchTenantMe,
+  })
 
-  return { type, isLoading, error, refetch: fetchTenant }
+  // Normalise TanStack's distinction (`isLoading` is only true on the
+  // first fetch; `isFetching` includes background refetches). The
+  // modal needs the first-load signal — `isLoading` is correct.
+  return {
+    type: query.data ?? null,
+    isLoading: query.isLoading,
+    error: query.error,
+    refetch: async () => {
+      await query.refetch()
+    },
+  }
+}
+
+/**
+ * Returns a function that invalidates the cached `['tenant', 'me']`
+ * query, forcing the next read to refetch.
+ *
+ * Use case (Sprint 2 Day 15 Item 11): the account-type setter modal
+ * POSTs to `/tenant/account-type` and, on success, calls
+ * `invalidateTenantType()` so the gate's `useTenantType` hook
+ * re-resolves immediately instead of waiting for the 30s stale time.
+ *
+ * Returning the function (rather than the invalidation call itself)
+ * is the standard TanStack Query pattern — it lets the consumer call
+ * it inside a mutation's `onSuccess` callback without re-rendering on
+ * every parent state change.
+ */
+export function useInvalidateTenantType(): () => Promise<void> {
+  const queryClient = useQueryClient()
+  return async () => {
+    await queryClient.invalidateQueries({ queryKey: TENANT_ME_QUERY_KEY })
+  }
 }
