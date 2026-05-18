@@ -4,6 +4,81 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## Postgres auto-names inline `CHECK (...)` constraints `<table>_<column>_check`, not what Drizzle generates
+
+**Status:** RESOLVED 2026-05-18 during Sprint 2 Day 15 Item 11 (PR #75, follow-up commit `b54f8cd`).
+
+**Symptom:** Migration 0006 errored in CI's Integration + RLS tests job with `error: constraint "tenants_type_chk" of relation "tenants" does not exist`. The migration ran cleanly through `pnpm typecheck` + `pnpm lint` + local tests because the local laptop's DB happened to be a re-deployed state where the constraint had been re-created under the Drizzle-generated name. CI starts from a clean migration replay, so the original auto-named constraint from migration 0001 was the only one present.
+
+**Why it happens:** Migration 0001 declared the constraint inline on the column without a `CONSTRAINT <name>` clause:
+
+```sql
+CREATE TABLE tenants (
+  ...
+  type text NOT NULL CHECK (type IN ('organisation','individual')),
+  ...
+);
+```
+
+Postgres auto-generates a name in the form `<table>_<column>_check` — so `tenants_type_check` (note: `_check` suffix, not `_chk`). Drizzle's `check()` helper (which takes a name plus a raw SQL expression) produces the explicit `tenants_type_chk` name when the table is freshly created from the schema. The two names co-exist in different deployment paths: replay-from-migrations produces `tenants_type_check`; fresh-from-Drizzle produces `tenants_type_chk`. Migrations referencing the constraint by name need to handle both.
+
+**Fix (per follow-up commit `b54f8cd`):**
+
+```sql
+ALTER TABLE tenants DROP CONSTRAINT IF EXISTS tenants_type_check;
+ALTER TABLE tenants DROP CONSTRAINT IF EXISTS tenants_type_chk;
+ALTER TABLE tenants ADD CONSTRAINT tenants_type_chk CHECK (...);
+```
+
+Drop under both names with `IF EXISTS`, then re-add under the explicit `tenants_type_chk` name. Subsequent migrations can reference `tenants_type_chk` directly because the explicit `ADD CONSTRAINT` clause pins the name.
+
+**How to avoid:** Any future migration that needs to modify a constraint declared in migration 0001 (or any other inline-CHECK migration) MUST use `DROP CONSTRAINT IF EXISTS` against the Postgres auto-name AND the Drizzle name. Going forward, every new constraint declaration in a migration SHOULD use the explicit `CONSTRAINT <table>_<column>_chk CHECK (...)` form so the name is stable from day one. The Drizzle `check()` helper already does this; the pre-Drizzle inline `CHECK` declarations from Sprint 1 are the ones that leak auto-generated names. A grep for `CHECK (` (with a space before the paren) in any migration file is a good code-review marker for "this constraint will get an auto-generated name" — if the migration is brand-new, add an explicit `CONSTRAINT` clause.
+
+---
+
+## `vitest-axe`'s shipped type augmentation targets only `Vi.Assertion`, missing `Chai.Assertion` (Vitest 2.x)
+
+**Status:** RESOLVED 2026-05-18 during Sprint 2 Day 15 Item 11 (PR #75 `d0df904`) via local `apps/web/src/vitest-axe.d.ts` augmentation file.
+
+**Symptom:** After installing `vitest-axe@0.1.0` + `@testing-library/react` as part of the Item 11 frontend test rig, the first test using `expect(await axe(container)).toHaveNoViolations()` failed tsc with:
+
+```text
+Property 'toHaveNoViolations' does not exist on type 'Assertion<AxeResults>'.
+```
+
+The matcher works fine at runtime (registered via `expect.extend(axeMatchers)` in `src/test-setup.ts`), but TypeScript doesn't see it. Importing `vitest-axe/extend-expect` for the side-effect type augmentation doesn't help because the package's shipped augmentation only targets `namespace Vi.Assertion`, while Vitest 2.x derives `expect(...)` from `namespace Chai.Assertion`.
+
+**Why it happens:** Vitest 2.x's `expect()` returns a `Chai.Assertion<T>` (Chai is the underlying assertion library). The `Vi.Assertion` namespace exists for some derived APIs (`expect.poll`, `expect.soft`) but not for the bare `expect(...).xxx` call site. `vitest-axe@0.1.0` was authored against an earlier Vitest API where `Vi.Assertion` was the canonical extension surface. The package needs an upstream fix; until it ships, downstream projects need a local declaration-merging file.
+
+**Fix:** create `apps/web/src/vitest-axe.d.ts`:
+
+```ts
+import type { AxeMatchers } from 'vitest-axe/matchers'
+
+declare global {
+  namespace Chai {
+    /* eslint-disable @typescript-eslint/no-empty-object-type */
+    interface Assertion extends AxeMatchers {}
+    interface AsymmetricMatchersContaining extends AxeMatchers {}
+    /* eslint-enable @typescript-eslint/no-empty-object-type */
+  }
+  namespace Vi {
+    /* eslint-disable @typescript-eslint/no-empty-object-type */
+    interface Assertion extends AxeMatchers {}
+    interface AsymmetricMatchersContaining extends AxeMatchers {}
+    /* eslint-enable @typescript-eslint/no-empty-object-type */
+  }
+}
+
+export {}
+```
+
+The `export {}` is mandatory — without it the file isn't a module and the `declare global` is interpreted as ambient declarations only. The ESLint disable comments suppress the `no-empty-object-type` rule which is the standard declaration-merging-extends-supertype pattern.
+
+**How to avoid:** Any new vitest extension matcher package added to apps/web should be smoke-tested with one `expect(...).newMatcher()` call before the rig is declared complete. If tsc errors, check whether the package augments the right Vitest 2.x namespace (`Chai.Assertion`); if not, mirror this `.d.ts` pattern. Item 12's KYC wizard will likely add more matchers via testing-library extensions — keep an eye on the type-check pass when adding them.
+
+---
+
 ## `ON CONFLICT DO NOTHING` under FORCE ROW LEVEL SECURITY silently hides cross-tenant ownership
 
 **Status:** RESOLVED 2026-05-17 by route-handler design in `apps/api/src/routes/tenant/kyc.ts` (Sprint 2 Day 14 Item 9, PR #70 `d9d765f`).
