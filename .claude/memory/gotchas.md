@@ -4,6 +4,37 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## BIN 13-digit fact is reviewer-documentation, not server-side enforcement
+
+**Status:** REFRAMED 2026-05-19 — Day 18 platform-wide policy "manual verification only for MVP" (decisions.md). Day 17 PR 1 BLOCKER fix that tightened `binRegex` from `^\d{9,13}$` to `^\d{13}$` remains in code as a passing-test guard against the original specific regression, but the broader principle the BLOCKER originally implied ("add regex for all BD format fields") does NOT generalise.
+
+**Symptom:** Day 17 PR 1 /review flagged a high-confidence BLOCKER: the OrganisationTierAOrgInfoSchema BIN regex accepted deprecated 9-12 digit formats; NBR's 2019-11-30 e-BIN mandate specifies 13 digits only (post-2019 BINs; legacy 9-digit BINs persist in pre-2019 documents). Fixed in-PR by tightening the regex to `^\d{13}$`.
+
+**Reframe — what the fact IS useful for at MVP:**
+
+1. **Tenant-facing wizard helper text** — Org Tier A wizard step 1 displays "BIN is typically 13 digits" adjacent to the input as UX guidance.
+2. **Reviewer documentation in the Item 13 KYC review queue** — display the same 13-digit format reference adjacent to the surfaced BIN value with a "verify against NBR VAT portal at vat.gov.bd" pointer for the reviewer's manual check.
+3. **Phase 3 automation if/when BIN validation is added** — the format reference informs the validator's expected-shape check at the same time the validator is wired to NBR's VAT portal API (if/when that API becomes available); validator emits an advisory flag for reviewer attention, never auto-rejects.
+
+**Reframe — what the fact is NOT:**
+
+- **Not a generalisable principle.** Day 17's BLOCKER fix tightened the regex for one specific field; this does NOT mean every BD format field (eTIN, NID number, RJSC certificate number, MFS account number, routing number, postcode) gets a regex. Per the 2026-05-19 platform-wide manual-verification policy, format validation across all KYC fields is reviewer judgment, not code.
+- **Not server-side rejection logic to add elsewhere.** Future PRs that introduce new BD format fields (e.g. RJSC certificate number in Tier B Org KYC) MUST NOT add format regex on the strength of "we did it for BIN." The BIN regex is grandfathered as the one exception; new format fields default to plain-string structural validation only (non-empty, max length, no embedded null bytes — basic injection protection).
+
+**How to avoid:**
+
+- When a /review BLOCKER on a format field surfaces and the obvious fix is "add/tighten the regex," **STOP** before applying it. Check whether the field belongs to the manual-verification surface (KYC, payouts, signatory) — if yes, the BLOCKER is a documentation gap (the value entered by the tenant needs review attention in the queue), not a code-enforcement gap. The legitimate fix for the documentation gap is helper text + reviewer documentation, not a stricter regex.
+- The Day 17 BIN regex tightening was the right call **for that specific test fixture's expected behaviour at that specific moment**, but it should not have set a precedent. Treat the existing 13-digit BIN regex as a frozen exception until the platform-wide policy revisits format validation (Phase 3 trigger per decisions.md 2026-05-19).
+- Code review checklist for new schemas in `packages/shared-types/src/kyc-schemas.ts`: any new format regex on a tenant-submitted field needs explicit cross-reference to a `.claude/memory/decisions.md` entry justifying departure from the manual-verification policy. No reference → reject.
+
+**Cross-references:**
+
+- decisions.md 2026-05-19 "Platform-wide policy — manual verification only for MVP" (the consolidating policy this entry serves).
+- decisions.md 2026-05-19 "Organisation Tier A wizard — 6-step decomposition" (the work that surfaced the original BLOCKER).
+- handoff.md hard guardrail "BIN is 13 digits only per NBR 2019-11-30 mandate" — updated alongside this gotcha to clarify the fact's scope is reviewer-documentation, not future-format-validation directive.
+
+---
+
 ## Next.js webpack doesn't resolve `.js → .ts` for ESM-typed workspace packages without `extensionAlias`
 
 **Status:** RESOLVED 2026-05-18 during Sprint 2 Day 16 PR 3 (PR #80, commit `7520b07`).

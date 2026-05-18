@@ -4,6 +4,69 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-19 · Platform-wide policy — manual verification only for MVP (consolidates prior per-item deferrals)
+
+**Supersedes:** 2026-05-17 "Sprint 2 Item 10 scope amendment — third-party verification deferred to manual review" + 2026-05-17 "Porichoy deferred — manual NID review for MVP". Both remain in the log for archaeology, each marked `Superseded by` this entry.
+
+**Context:** Through Sprint 2 multiple per-item KYC-verification deferrals accumulated as procurement and operational reality bit: Porichoy unreachable (2026-05-17), eTIN regex + BFIU sanctions matcher deferred (2026-05-17), and Day 17's BIN-format BLOCKER surfaced a third "we have a regex that rejects valid data" near-miss. Each deferral was logged in isolation against its triggering item. The shape they collectively form is a single platform-wide stance, not three separate accommodations. Day 18 is the natural moment to consolidate before Item 13 (super admin review queue) starts — the queue is where every one of these manual checks lives, and Item 13's scope shifts materially depending on whether the platform expects to surface validator-emitted flags or only raw reviewer-facing data.
+
+The KYC + onboarding pipeline involves many fields that could be partially or fully automated: NID validation via Porichoy; eTIN format checks; BIN format checks; RJSC certificate lookups; BFIU sanctions matching; name-match algorithms across NID / bank statement / signatory selfie; MFS account verification; address proof verification; board-resolution authenticity. The accumulated lesson from Sprint 2's three near-misses (Porichoy, eTIN/sanctions, BIN-format BLOCKER): validators that occasionally reject valid data — because the regex is wrong, the third-party API is stale, the sanctions list is outdated, the format mandate shifted (NBR's 2019-11-30 BIN-format change is exactly this shape) — are operationally worse than no validator. They create false confidence and silently reject legitimate tenants, which is the failure mode the §21 hosting-space doctrine is least equipped to recover from at MVP scale.
+
+**Decision:** At MVP, the platform performs **zero automated verification of any submitted KYC data**. All data — every field, every document, every claim — is reviewed by a human super admin via the KYC review queue (Item 13, Day 18). Server-side schema validation continues unchanged (Zod schemas enforce field types, required fields, structural shapes, max lengths, no embedded null bytes — that's input validation / injection protection, not data verification). Anything semantic — does this NID number correspond to a real person; is this BIN format current; is this eTIN active; is this RJSC certificate real; is this signatory authorised; does this bank account holder name match the NID; etc. — is reviewer judgment, not code.
+
+This explicitly extends to: BIN format validation, RJSC certificate validation, eTIN format validation (full, not just regex), address proof verification, bank account name-match-to-NID, MFS account verification, sanctions matching, NID validation, signatory verification, board resolution authenticity. **Everything.** The platform captures data and surfaces it cleanly to reviewers. Reviewers exercise judgment.
+
+**Rationale:**
+
+- **MVP volume is operationally fine for manual review.** Sub-50 KYC submissions per week realistically through Phase 1-2 (already accepted by the Porichoy deferral; reaffirmed here). At ~10 minutes per submission × ~48 submissions/day per reviewer × 1 super-admin reviewer (per 2026-05-17 "KYC reviewer role for MVP — super-admin-only") = ~48/day cap. We do not approach this cap at MVP scale.
+- **Half-built automation is worse than no automation.** Day 17's BIN BLOCKER (regex `^\d{9,13}$` accepted deprecated pre-2019 formats; NBR mandated 13-digit only since 2019-11-30) caught a regression-shaped bug at /review time. A regex shipped as MVP would have silently rejected post-2019 BINs entered with the wrong digit count, or accepted obviously-stale 9-digit pre-2019 BINs without operator awareness. The reviewer reading the actual BIN and cross-checking against NBR's VAT portal in seconds avoids both failure modes.
+- **Third-party automation has procurement-risk that does not justify MVP-stage benefit.** Porichoy (credentials unreachable), BIN registry (no public API), RJSC (no public API), sanctions feeds (BFIU's public notice is PDF; commercial feeds require contracts) — each path adds complexity that the MVP queue solves at zero cost.
+- **The reviewer queue is already where humans look at every submission.** Surfacing the raw data is more flexible than binding the system to a specific validation algorithm. When automation eventually lands (Phase 3 trigger below), it augments reviewer judgment rather than replacing it.
+- **Manual review at MVP means the platform's policies and reviewer training can evolve based on real cases without code changes.** Cheaper iteration loop for a problem space that's still being learned operationally.
+
+**Consequences for Sprint 2 remaining work:**
+
+- **Item 13 (KYC review queue, Day 18 PM):** every PII field, every document, every claim surfaces clearly in the detail view. **No validation badges, no "auto-flagged" indicators** (no automation is happening; nothing to badge). Reviewer sees raw data and exercises judgment. Helper text adjacent to each field describes the expected format as reviewer documentation ("BIN should be 13 digits per NBR 2019-11-30; verify against NBR VAT portal at vat.gov.bd") but does not enforce server-side rejection. **Reviewer notes free-text field per submission** (captured in audit_log on save) for the reviewer to record their verification process — the audit trail of WHY this submission was approved or rejected. **Approve action requires modal confirmation** that the reviewer has reviewed all required fields and documents. **Reject action requires typed reason** that goes to the tenant in the rejection email and persists in audit_log. **No `kyc_submissions.flags` jsonb column** (was speculative for sanctions hits in Item 10's original scope; not needed under this policy — when Phase 3 automation lands, the flag column lands in the same migration as the validator code).
+- **Day 17's BIN 13-digit fact:** reframe from "validation rule" to "displayed-format reference." The 13-digit fact remains useful as (a) tenant-facing wizard helper text ("BIN is typically 13 digits"), (b) reviewer documentation showing expected format adjacent to the field, (c) Phase 3 automation if/when BIN validation is added. **Does not enforce server-side rejection.** A separate gotcha entry on the same date reframes this; the Day 17 PR 1 BLOCKER fix remains in code as a passing-test guard against the original specific regression, but the broader principle does not generalise to "add regex for all BD format fields."
+- **All eTIN, BIN, NID, RJSC, MFS account fields** captured as plain strings in `kyc_submissions.fields` with no format regex beyond structural sanity (max length, no embedded null bytes — basic injection protection, not format validation).
+- **Notification copy for rejected submissions** must surface the human reviewer's reason verbatim, not a templated "automated check failed" message.
+
+**Consequences for already-shipped surfaces:**
+
+- **Item 8 signed-URL upload (Day 13):** no change. File type and size validation continues — that's storage policy, not data verification.
+- **Item 9 state machine + submit endpoint (Day 14):** no change. State transitions are workflow, not verification. The Day 14 scope-reduction (no eTIN regex, no BFIU matcher in the submit endpoint) was already a deferral; this entry promotes it from per-item deferral to platform-wide policy.
+- **Items 11-12 wizard (Days 15-17):** tenant-facing inline helper text can describe expected formats ("BIN should be 13 digits") as UX guidance, but client-side validation only enforces structural shape (non-empty, reasonable length), not semantic correctness. The Day 17 PR 1 13-digit BIN regex in the schema remains in place as a passing-test guard, but its existence is now an exception (the one BD format check the platform enforces); future format additions explicitly require a §29-style decision before joining it.
+- **Items 14-15 Trust Center (Day 19):** no change.
+- **Item 16 Porichoy adapter scaffold (Day 20):** no change. The scaffold-only shape was already locked by the 2026-05-17 Porichoy deferral; this entry reframes that scaffold as the **canonical pattern** for all future automation integrations — interface + env + secrets entry + TODO stub, with the live wiring landing as a focused PR alongside the operational decision to flip from manual-only to manual-plus-flag.
+
+**Path to automation — Phase 2 trigger and Phase 3 plan:**
+
+- **Phase 2 trigger (re-evaluation gate):** when verified KYC submission volume crosses 50 per week sustained (calculated as a 4-week trailing average), reassess. **The decision criterion is reviewer capacity, not feature ambition** — the question is "are reviewers spending more than 4 hours per business day on KYC backlog?" not "do we want automation." If the answer to the capacity question is yes, automation gets scoped; if no, the manual-only policy continues regardless of validator availability.
+- **Phase 3 plan (when triggered):** add automated checks **alongside manual review** (never replacing it for MVP-pattern tenants). Each automation arrives as an advisory flag the reviewer sees alongside the raw data, never as a hard reject:
+  - Porichoy NID API integration once credentials and procurement complete — flag mismatches for reviewer, do not auto-reject
+  - eTIN active-status check against NBR e-filing portal if API available — flag inactive eTINs for reviewer, do not auto-reject
+  - BIN format + active-status check against NBR VAT portal if API available — flag for reviewer
+  - BFIU sanctions matching against canonical list (procurement path established) — flag hits for reviewer
+  - RJSC certificate active-status check if API available — flag for reviewer
+  - Address geocoding + division/postal-code consistency check — flag inconsistencies
+  - Bank account name verification via partner bank APIs if available — flag mismatches
+- All automation is augmentation of reviewer judgment, not replacement. Even at Phase 3 volume, every KYC submission still has reviewer attention. Automation reduces per-submission review time by surfacing flags; it does not eliminate the reviewer role. **The `kyc_submissions.flags jsonb` column lands in the same migration as the first validator** — no schema migration to the data the validators validate, only addition of the flag artefacts. Historical manual-only submissions remain `flags=null`, audit-trail clear.
+
+**Consequences for Day 18 plan:**
+
+- **Day 18 AM v2.3 CLAUDE.md playbook bump grows from 8 to 9 §-section amendments.** New amendment: §13.0 replaced by the manual-verification platform-wide policy text (old §13.0 Porichoy-specific deferral block is fully superseded by the new policy block). The other 8 amendments (§17 OIDC, §13.3 draft state, §13.3 Org Tier A decomposition, §9.1 `tenants.type` nullable, §4.2.1 append-only audit, §3.2 extensionAlias) unchanged in scope; only §13.0 expands.
+- **Day 18 PM Item 13 scope adjusts as detailed above** — the review queue work is cleaner because the requirements are simpler (no automation surface to design around, no flag-column migration, no auto-flag UI affordances). The scope reduction does not change the day-budget; the saved complexity converts into stronger reviewer UX (per-field helper text + explicit confirm-modal + reviewer-notes free-text field + audit row carrying the reviewer-notes payload).
+
+**Cross-references:**
+
+- Supersedes "Sprint 2 Item 10 scope amendment — third-party verification deferred to manual review" (2026-05-17) — promotes per-item deferral to platform-wide policy.
+- Supersedes "Porichoy deferred — manual NID review for MVP" (2026-05-17) — promotes per-vendor deferral to platform-wide policy. Porichoy scaffold-only shape (interface + env + secrets entry + TODO) becomes the **canonical pattern** for all future automation integrations.
+- Reframes the Day 17 BIN 13-digit gotcha — see same-date gotchas.md entry "BIN 13-digit fact is reviewer-documentation, not server-side enforcement".
+- Reaffirms "KYC reviewer role for MVP — super-admin-only" (2026-05-17) — single reviewer cap stays the operational constraint that drives the Phase 2 trigger.
+- Reaffirms §1.3 R5 "no PII in logs" — manual review notes go to audit_log diff column with structural sanitisation, never raw PII into pino structured logs.
+
+---
+
 ## 2026-05-19 · Organisation Tier A wizard — 6-step decomposition + reuse Individual Tier 1's financial schema
 
 **Context:** Sprint 2 Day 17 (Item 12 Part 2) ships the Organisation Tier A wizard variant. §13.3 specifies the required documents (trade license, MOA, AOA, authorised-signatory NID + selfie, BIN) and financial details (bank/MFS account + eTIN). Day 16 PR 3 left the page route + drafts router with `501 NOT_IMPLEMENTED` placeholders for organisation tenants. Day 17 wires the real flow.
@@ -374,6 +437,8 @@ This nested-array convention matches TanStack's official recommendation for cach
 
 ## 2026-05-17 · Sprint 2 Item 10 scope amendment — third-party verification deferred to manual review
 
+**Superseded by:** 2026-05-19 "Platform-wide policy — manual verification only for MVP (consolidates prior per-item deferrals)". This entry remains for archaeology — it was the second of three per-item deferrals that the platform-wide policy generalises. Specific consequences below (eTIN regex deferred, BFIU matcher deferred, `flags` column deferred, Item 10 residual absorbs into Item 13) all remain accurate; the difference is that they are now policy-driven rather than per-item.
+
 **Context:** Sprint 2's original Item 10 (Day 14, alongside Item 9) shipped two automated local validators inside the submit endpoint: an eTIN format regex and a BFIU sanctions-list matcher (against `infra/compliance/sanctions.json` seeded from BFIU's public notice — Checkpoint #5 in the Sprint 2 kick-off). At Day 14 kick-off, after Day 13's KYC pipeline foundations landed and verified end-to-end (PRs #66, #67, #68), Moshiur reduced Item 10's scope materially — the same operational pattern as the Porichoy deferral two days earlier. Two automated validators that occasionally reject valid eTINs or miss real sanctions are worse than no validator at all (false confidence). MVP submission volume is sub-50/week through Phase 1, the reviewer is already looking at every submission anyway, and binding the system to a specific regex / sanctions-source algorithm at this stage commits us to maintenance cost without a corresponding fraud-prevention payoff.
 
 **Decision:** Item 10's automated validation work is **deferred to Phase 2**. For MVP, eTIN and NID number are captured as plain data fields on the submission (already supported by the loose `kyc_submissions.fields jsonb` column from Items 7+8), surfaced clearly in the reviewer queue UI (Item 13, Day 18), and validated manually by the reviewer against whatever sources they hold operationally.
@@ -743,6 +808,8 @@ The **`is_private_email` gate** is the load-bearing piece. Without it, Apple cou
 ---
 
 ## 2026-05-17 · Porichoy deferred — manual NID review for MVP
+
+**Superseded by:** 2026-05-19 "Platform-wide policy — manual verification only for MVP (consolidates prior per-item deferrals)". This entry remains for archaeology — it was the first of three per-item deferrals that the platform-wide policy generalises. The Porichoy adapter scaffold-only shape (interface + env vars + Secrets Manager entry + TODO stub) is promoted to the **canonical pattern** for all future automation integrations; the eTIN/sanctions "keep local regex / keep static JSON list" sub-decisions in this entry are themselves now manual-only per the consolidating policy.
 
 **Context:** Porichoy (`api.porichoy.gov.bd`) is the NID validation service that CLAUDE.md §13 treats as the primary automated check in the KYC flow. At Sprint 2 kick-off, Moshiur reports Porichoy is unreachable and the procurement path for API credentials is unclear; service availability itself is uncertain. The playbook's automated NID validation can't ship as designed.
 
