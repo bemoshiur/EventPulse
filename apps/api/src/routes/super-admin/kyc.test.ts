@@ -177,7 +177,9 @@ describeIfDb('/api/v1/admin/kyc router (Item 13)', () => {
         .values({ email: `admin-kyc-conflict-${ts}@test.local`, fullName: 'Conflicted Admin' })
         .returning({ id: users.id })
 
-      await db.insert(superAdmins).values([{ userId: admin!.id }, { userId: admin2!.id }, { userId: conflictedAdmin!.id }])
+      await db
+        .insert(superAdmins)
+        .values([{ userId: admin!.id }, { userId: admin2!.id }, { userId: conflictedAdmin!.id }])
 
       const [tA] = await db
         .insert(tenants)
@@ -459,9 +461,7 @@ describeIfDb('/api/v1/admin/kyc router (Item 13)', () => {
         db
           .select()
           .from(auditLogs)
-          .where(
-            and(eq(auditLogs.entityId, id), eq(auditLogs.action, 'kyc_submission.viewed')),
-          ),
+          .where(and(eq(auditLogs.entityId, id), eq(auditLogs.action, 'kyc_submission.viewed'))),
       )
       expect(audit.length).toBe(1)
       expect(audit[0]!.actorType).toBe('super_admin')
@@ -480,9 +480,7 @@ describeIfDb('/api/v1/admin/kyc router (Item 13)', () => {
         db
           .select()
           .from(auditLogs)
-          .where(
-            and(eq(auditLogs.entityId, id), eq(auditLogs.action, 'kyc_submission.viewed')),
-          ),
+          .where(and(eq(auditLogs.entityId, id), eq(auditLogs.action, 'kyc_submission.viewed'))),
       )
       expect(audit.length).toBe(2)
     })
@@ -601,10 +599,7 @@ describeIfDb('/api/v1/admin/kyc router (Item 13)', () => {
           .select()
           .from(auditLogs)
           .where(
-            and(
-              eq(auditLogs.entityId, id),
-              eq(auditLogs.action, 'kyc_submission.notes_updated'),
-            ),
+            and(eq(auditLogs.entityId, id), eq(auditLogs.action, 'kyc_submission.notes_updated')),
           ),
       )
       expect(audit.length).toBe(1)
@@ -871,8 +866,16 @@ describeIfDb('/api/v1/admin/kyc router (Item 13)', () => {
 
   describe('cross-tenant', () => {
     it('super admin can read across tenants (queue surfaces both)', async () => {
-      await seedSubmission(fix.tenantA!, { status: 'submitted', submissionType: 'individual', tier: 'tier_1' })
-      await seedSubmission(fix.tenantB!, { status: 'submitted', submissionType: 'organisation', tier: 'org_a' })
+      await seedSubmission(fix.tenantA!, {
+        status: 'submitted',
+        submissionType: 'individual',
+        tier: 'tier_1',
+      })
+      await seedSubmission(fix.tenantB!, {
+        status: 'submitted',
+        submissionType: 'organisation',
+        tier: 'org_a',
+      })
 
       const res = await app.fetch(
         new Request('http://localhost/api/v1/admin/kyc/submissions', {

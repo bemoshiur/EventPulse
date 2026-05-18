@@ -79,10 +79,7 @@ import {
   writeKycSubmissionViewed,
   writeKycTransition,
 } from '../../services/audit/kyc.js'
-import {
-  sendKycApprovedNotice,
-  sendKycRejectedNotice,
-} from '../../services/notifications/kyc.js'
+import { sendKycApprovedNotice, sendKycRejectedNotice } from '../../services/notifications/kyc.js'
 
 const admin = new Hono()
 
@@ -94,12 +91,7 @@ function envelope<T>(data: T, meta?: Record<string, unknown>) {
   return meta !== undefined ? { data, meta } : { data }
 }
 
-function errorEnvelope(
-  code: string,
-  message: string,
-  requestId: string | null,
-  details?: unknown,
-) {
+function errorEnvelope(code: string, message: string, requestId: string | null, details?: unknown) {
   return {
     error: {
       code,
@@ -625,8 +617,7 @@ admin.post(
           tenantId: existing.tenantId,
           decision: decision.action,
           reason: decision.action === 'reject' ? decision.reason : null,
-          category:
-            decision.action === 'reject' ? decision.category ?? null : null,
+          category: decision.action === 'reject' ? (decision.category ?? null) : null,
           checklistSnapshot: (existing.reviewerChecklist ?? {}) as ReviewerChecklist,
           actorUserId: auth.sub,
           ip,
@@ -692,12 +683,9 @@ admin.post(
       }
       if (err instanceof ChecklistIncompleteError) {
         return c.json(
-          errorEnvelope(
-            'CHECKLIST_INCOMPLETE',
-            'required checklist keys are missing',
-            requestId,
-            { missingKeys: err.missingKeys },
-          ),
+          errorEnvelope('CHECKLIST_INCOMPLETE', 'required checklist keys are missing', requestId, {
+            missingKeys: err.missingKeys,
+          }),
           409,
         )
       }
