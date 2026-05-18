@@ -78,7 +78,13 @@ export const tenants = pgTable(
     id: uuid()
       .primaryKey()
       .default(sql`gen_random_uuid()`),
-    type: text().notNull(),
+    // Nullable per migration 0006 (Sprint 2 Day 15 Item 11). Post-login
+    // Account-Type modal sets this on first dashboard load; until then,
+    // `requireTenantType` middleware returns 409 on every tenant route
+    // except the setter (`POST /tenant/account-type`) and the read
+    // endpoint (`GET /tenant/me`). Set-once at the application layer
+    // (decisions.md 2026-05-18); only NULL → value is legal.
+    type: text(),
     name: text().notNull(),
     slug: citext().notNull().unique(),
     isPersonal: boolean('is_personal').notNull().default(false),
@@ -96,7 +102,14 @@ export const tenants = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (t) => [
-    check('tenants_type_chk', sql`${t.type} IN ('organisation','individual')`),
+    check(
+      'tenants_type_chk',
+      // NULL accepted explicitly (migration 0006) so the post-login Account-
+      // Type modal can land with no type until the user chooses. NULL IN (...)
+      // is UNKNOWN, not TRUE, so without the explicit IS NULL branch the CHECK
+      // would reject every INSERT/UPDATE that left type unset.
+      sql`${t.type} IS NULL OR ${t.type} IN ('organisation','individual')`,
+    ),
     check(
       'tenants_status_chk',
       sql`${t.status} IN ('pending_kyc','active','suspended','terminated')`,

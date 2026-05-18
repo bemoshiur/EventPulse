@@ -37,12 +37,21 @@ vi.mock('../../services/notifications/kyc.js', async (importOriginal) => {
   }
 })
 
+// Upload-url tests use a fixed-UUID tenant + user fixture seeded into the
+// real DB. Sprint 2 Day 15 Item 11 added requireTenantType to the /kyc/*
+// routes; that middleware reads `tenants.type` from DB on every request,
+// so even the zod-validation cases need a real tenant row with type set.
+// Pre-Day-15 these tests ran without DB; now they're gated on DATABASE_URL
+// like the Day 14 submit tests below.
 const TENANT_ID = '00000000-0000-4000-8000-000000000001'
 const USER_ID = '00000000-0000-4000-8000-000000000002'
 const SESSION_ID = 'sess_test_kyc_route'
 const SUBMISSION_ID = '11111111-2222-4333-8444-555555555555'
 
 let accessToken: string
+
+const HAS_DB_UPLOAD = Boolean(process.env['DATABASE_URL'])
+const describeIfDbUpload = HAS_DB_UPLOAD ? describe : describe.skip
 
 beforeAll(async () => {
   process.env['JWT_ACCESS_SECRET'] = 'x'.repeat(64)
@@ -59,6 +68,55 @@ beforeAll(async () => {
     sessionId: SESSION_ID,
   })
   accessToken = tokens.accessToken
+
+  // Seed the upload-url fixture tenant if DB is available. Type set to
+  // 'individual' so requireTenantType passes; the tests don't care which
+  // type, only that the gate doesn't 409.
+  if (HAS_DB_UPLOAD) {
+    await withSuperAdmin(async (db) => {
+      await db
+        .insert(users)
+        .values({
+          id: USER_ID,
+          email: `upload-test-${Date.now()}@test.local`,
+          fullName: 'Upload Test User',
+        })
+        .onConflictDoNothing({ target: users.id })
+
+      await db
+        .insert(tenants)
+        .values({
+          id: TENANT_ID,
+          type: 'individual',
+          name: 'Upload Test Tenant',
+          slug: `upload-test-${Date.now()}`,
+          isPersonal: true,
+          ownerUserId: USER_ID,
+          status: 'active',
+        })
+        .onConflictDoNothing({ target: tenants.id })
+
+      await db
+        .insert(tenantUsers)
+        .values({
+          tenantId: TENANT_ID,
+          userId: USER_ID,
+          role: 'owner',
+          acceptedAt: new Date(),
+        })
+        .onConflictDoNothing()
+    })
+  }
+})
+
+afterAll(async () => {
+  if (HAS_DB_UPLOAD) {
+    await withSuperAdmin(async (db) => {
+      await db.delete(auditLogs).where(eq(auditLogs.tenantId, TENANT_ID))
+      await db.delete(tenants).where(eq(tenants.id, TENANT_ID))
+      await db.delete(users).where(eq(users.id, USER_ID))
+    })
+  }
 })
 
 const validBody = () => ({
@@ -67,7 +125,7 @@ const validBody = () => ({
   contentType: 'image/jpeg' as const,
 })
 
-describe('POST /api/v1/tenant/kyc/upload-url', () => {
+describeIfDbUpload('POST /api/v1/tenant/kyc/upload-url', () => {
   it('rejects unauthenticated requests with 401', async () => {
     const app = createApp()
     const res = await app.request('/api/v1/tenant/kyc/upload-url', {
