@@ -58,3 +58,29 @@ export {
   type OrganisationTierAWizardStep,
   type WizardVariant,
 } from './kyc-schemas.js'
+
+// KYC reviewer-side schemas — Sprint 2 Day 18 Item 13. Shared between
+// server (apps/api enforces approve-completeness + decision validation)
+// and frontend (apps/web disables approve button until required keys
+// are checked + reads vocabulary for checklist UI).
+export {
+  INDIVIDUAL_TIER_1_REQUIRED_CHECKLIST_KEYS,
+  ORGANISATION_TIER_A_REQUIRED_CHECKLIST_KEYS,
+  KycSubmissionListFilterSchema,
+  REJECTION_CATEGORIES,
+  ReviewerChecklistEntrySchema,
+  ReviewerChecklistSchema,
+  ReviewerChecklistTogglePatchSchema,
+  ReviewerDecisionSchema,
+  ReviewerNotesPatchSchema,
+  requiredChecklistKeysFor,
+  type IndividualTier1ChecklistKey,
+  type KycSubmissionListFilter,
+  type OrganisationTierAChecklistKey,
+  type RejectionCategory,
+  type ReviewerChecklist,
+  type ReviewerChecklistEntry,
+  type ReviewerChecklistTogglePatch,
+  type ReviewerDecision,
+  type ReviewerNotesPatch,
+} from './kyc-reviewer-schemas.js'
