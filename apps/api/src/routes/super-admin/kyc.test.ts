@@ -571,6 +571,41 @@ describeIfDb('/api/v1/admin/kyc router (Item 13)', () => {
       const body = (await res.json()) as { error: { code: string } }
       expect(body.error.code).toBe('VALIDATION_ERROR')
     })
+
+    it('terminal-state guard (/review finding #1): PATCH on approved returns 409', async () => {
+      const id = await seedSubmission(fix.tenantA!, { status: 'approved' })
+
+      const res = await app.fetch(
+        new Request(`http://localhost/api/v1/admin/kyc/submissions/${id}/checklist`, {
+          method: 'PATCH',
+          headers: {
+            authorization: `Bearer ${fix.adminToken!}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ key: 'nid_front', checked: true }),
+        }),
+      )
+      expect(res.status).toBe(409)
+      const body = (await res.json()) as { error: { code: string; message: string } }
+      expect(body.error.code).toBe('CONFLICT')
+      expect(body.error.message).toContain('terminal submission')
+    })
+
+    it('terminal-state guard (/review finding #1): PATCH on rejected returns 409', async () => {
+      const id = await seedSubmission(fix.tenantA!, { status: 'rejected' })
+
+      const res = await app.fetch(
+        new Request(`http://localhost/api/v1/admin/kyc/submissions/${id}/checklist`, {
+          method: 'PATCH',
+          headers: {
+            authorization: `Bearer ${fix.adminToken!}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ key: 'nid_front', checked: true }),
+        }),
+      )
+      expect(res.status).toBe(409)
+    })
   })
 
   // ─── Notes PATCH (Decision I) ─────────────────────────────────────────
@@ -610,6 +645,21 @@ describeIfDb('/api/v1/admin/kyc router (Item 13)', () => {
       // Truncated to 500 chars (+ trailing ellipsis)
       expect(diff.to_truncated.length).toBeLessThan(600)
       expect(diff.to_length).toBe(600)
+    })
+
+    it('terminal-state guard (/review finding #1): PATCH notes on approved returns 409', async () => {
+      const id = await seedSubmission(fix.tenantA!, { status: 'approved' })
+      const res = await app.fetch(
+        new Request(`http://localhost/api/v1/admin/kyc/submissions/${id}/notes`, {
+          method: 'PATCH',
+          headers: {
+            authorization: `Bearer ${fix.adminToken!}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ notes: 'a post-decision note' }),
+        }),
+      )
+      expect(res.status).toBe(409)
     })
   })
 
@@ -834,6 +884,40 @@ describeIfDb('/api/v1/admin/kyc router (Item 13)', () => {
         }),
       )
       expect(res.status).toBe(200)
+    })
+
+    it('conflict-of-interest also applies to reject (/review finding #2)', async () => {
+      const id = await seedSubmission(fix.tenantA!, { status: 'under_review' })
+      // Seed a prior tenant_user audit row by the conflicted admin.
+      await withSuperAdmin(async (db) => {
+        await db.insert(auditLogs).values({
+          tenantId: fix.tenantA!,
+          actorType: 'tenant_user',
+          actorId: fix.conflictedAdminUser!,
+          action: 'kyc_submission.draft_updated',
+          entityType: 'kyc_submission',
+          entityId: id,
+          diff: { fields: { added: [], updated: [], removed: [] } },
+          metadata: {},
+        })
+      })
+
+      const res = await app.fetch(
+        new Request(`http://localhost/api/v1/admin/kyc/submissions/${id}/decide`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${fix.conflictedAdminToken!}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'reject',
+            reason: 'Should be blocked by conflict-of-interest before this reason matters.',
+          }),
+        }),
+      )
+      expect(res.status).toBe(409)
+      const body = (await res.json()) as { error: { code: string } }
+      expect(body.error.code).toBe('CONFLICT_OF_INTEREST')
     })
 
     it('idempotent on already-rejected', async () => {

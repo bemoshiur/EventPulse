@@ -341,6 +341,19 @@ admin.get('/submissions/:id', zValidator('param', idParamSchema), async (c) => {
       return {} as Record<string, never>
     })
 
+    // PII envelope (super-admin-only): `detail` carries the full
+    // kyc_submissions row including `fields` (NID numbers, DOB,
+    // addresses, bank account names) and `reviewerNotes`. This
+    // verbatim spread is INTENTIONAL — the reviewer needs the raw
+    // data per the platform-wide manual-verification policy. Two
+    // load-bearing constraints downstream of this return:
+    //   1. The list view MUST strip PII (see /submissions list above);
+    //      it returns a curated row shape via .select(...).
+    //   2. Future error-handler additions that log `{ err, ... }` for
+    //      this route MUST NOT include `detail` in the log call —
+    //      the pino redact config in lib/logger.ts is shallow-path
+    //      and would not cover `fields.identity.nidNumber` etc.
+    //      (per /review finding #3, conf 80).
     return c.json(
       envelope({
         ...detail,
@@ -380,6 +393,14 @@ admin.patch(
           .limit(1)
         if (rows.length === 0) throw new SubmissionNotFoundError(id)
         const row = rows[0]!
+
+        // Terminal-state guard (/review finding #1, conf 85): writes to
+        // reviewer_checklist after a decision would post-date the
+        // kyc_submission.decided audit row's checklistSnapshot and
+        // muddy the regulator-facing timeline. Reject 409 instead.
+        if (row.status === 'approved' || row.status === 'rejected') {
+          throw new SubmissionNotDecidableError(id, row.status)
+        }
 
         // Validate key against the submission's tier vocabulary.
         const validKeys = requiredChecklistKeysFor(
@@ -427,6 +448,16 @@ admin.patch(
       if (err instanceof SubmissionNotFoundError) {
         return c.json(errorEnvelope('NOT_FOUND', 'submission not found', requestId), 404)
       }
+      if (err instanceof SubmissionNotDecidableError) {
+        return c.json(
+          errorEnvelope(
+            'CONFLICT',
+            `cannot modify reviewer state on a terminal submission (status='${err.currentStatus}')`,
+            requestId,
+          ),
+          409,
+        )
+      }
       if (err instanceof UnknownChecklistKeyError) {
         return c.json(
           errorEnvelope('VALIDATION_ERROR', `unknown checklist key: ${err.key}`, requestId),
@@ -464,6 +495,13 @@ admin.patch(
         if (rows.length === 0) throw new SubmissionNotFoundError(id)
         const row = rows[0]!
 
+        // Terminal-state guard (/review finding #1, conf 85): same
+        // rationale as the checklist PATCH — post-decision notes
+        // updates muddy the regulator-facing timeline.
+        if (row.status === 'approved' || row.status === 'rejected') {
+          throw new SubmissionNotDecidableError(id, row.status)
+        }
+
         const priorNotes = row.reviewerNotes
         const updated = await tx
           .update(kycSubmissions)
@@ -490,6 +528,16 @@ admin.patch(
     } catch (err) {
       if (err instanceof SubmissionNotFoundError) {
         return c.json(errorEnvelope('NOT_FOUND', 'submission not found', requestId), 404)
+      }
+      if (err instanceof SubmissionNotDecidableError) {
+        return c.json(
+          errorEnvelope(
+            'CONFLICT',
+            `cannot modify reviewer notes on a terminal submission (status='${err.currentStatus}')`,
+            requestId,
+          ),
+          409,
+        )
       }
       logger.error({ err, submissionId: id }, 'admin kyc notes patch failed')
       return c.json(errorEnvelope('INTERNAL_ERROR', 'failed to update notes', requestId), 500)
@@ -542,23 +590,24 @@ admin.post(
         // Conflict-of-interest check: did this reviewer write a
         // tenant_user audit row for this submission previously? Backed
         // by the composite index on audit_logs(entity_type, entity_id,
-        // actor_id) added in migration 0007.
-        if (decision.action === 'approve') {
-          const conflict = await tx
-            .select({ id: auditLogs.id })
-            .from(auditLogs)
-            .where(
-              and(
-                eq(auditLogs.entityType, 'kyc_submission'),
-                eq(auditLogs.entityId, id),
-                eq(auditLogs.actorType, 'tenant_user'),
-                eq(auditLogs.actorId, auth.sub),
-              ),
-            )
-            .limit(1)
-          if (conflict.length > 0) {
-            throw new ConflictOfInterestError(id)
-          }
+        // actor_id) added in migration 0007. Runs for BOTH approve and
+        // reject per /review finding #2 (conf 82) — a biased rejection
+        // is as audit-problematic as a biased approval. A reviewer who
+        // helped prepare the submission cannot also rule on it.
+        const conflict = await tx
+          .select({ id: auditLogs.id })
+          .from(auditLogs)
+          .where(
+            and(
+              eq(auditLogs.entityType, 'kyc_submission'),
+              eq(auditLogs.entityId, id),
+              eq(auditLogs.actorType, 'tenant_user'),
+              eq(auditLogs.actorId, auth.sub),
+            ),
+          )
+          .limit(1)
+        if (conflict.length > 0) {
+          throw new ConflictOfInterestError(id)
         }
 
         // Server-enforced checklist completeness on approve (Decision I).
