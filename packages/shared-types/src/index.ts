@@ -20,3 +20,27 @@ export {
   type AllowedContentType,
   type KycDocumentType,
 } from './kyc.js'
+
+// KYC zod schemas — Sprint 2 Day 16 PR 3. Shared between server
+// route validation (apps/api/src/routes/tenant/kyc-drafts.ts) and
+// frontend react-hook-form resolvers (apps/web/src/components/
+// kyc-wizard/...). Single source of truth.
+export {
+  IndividualTier1AddressSchema,
+  IndividualTier1FinancialSchema,
+  IndividualTier1IdentitySchema,
+  IndividualTier1PatchSchema,
+  IndividualTier1SubmissionSchema,
+  INDIVIDUAL_TIER1_REQUIRED_DOCUMENTS,
+  INDIVIDUAL_TIER1_STEP_DOCUMENTS,
+  INDIVIDUAL_TIER1_STEPS,
+  wizardVariantForTenantType,
+  type IndividualTier1Address,
+  type IndividualTier1Financial,
+  type IndividualTier1Identity,
+  type IndividualTier1Patch,
+  type IndividualTier1Step,
+  type IndividualTier1Submission,
+  type IndividualTier1WizardStep,
+  type WizardVariant,
+} from './kyc-schemas.js'

@@ -49,11 +49,14 @@ import {
   type KycDocumentType,
 } from '../../infra/s3/client.js'
 import { logger } from '../../lib/logger.js'
+// KYC schemas live in @eventpulse/shared-types per §3.2 so the
+// frontend wizard (PR 3) can import the same source-of-truth schemas
+// the backend validates against. Moved here from apps/api in PR 3.
 import {
   IndividualTier1PatchSchema,
   IndividualTier1SubmissionSchema,
   type IndividualTier1Patch,
-} from '../../schemas/kyc.js'
+} from '@eventpulse/shared-types'
 import {
   computeFieldDiff,
   writeKycDraftCreated,

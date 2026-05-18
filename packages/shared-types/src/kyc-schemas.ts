@@ -50,7 +50,14 @@ import { z } from 'zod'
 // frontend bundle. The KYC document-type enum + allowed-content-type
 // map live in `packages/shared-types/src/kyc.ts` for this exact reason
 // (Day 16 /review #1, confidence 92).
-import { ALLOWED_CONTENT_TYPES, BD_DIVISIONS } from '@eventpulse/shared-types'
+//
+// Same-package imports use relative paths (./bd.js + ./kyc.js) to
+// avoid the self-import cycle. Day 16 PR 3 moved this file from
+// apps/api into packages/shared-types so the frontend can import the
+// same schemas the backend validates against — single source of
+// truth, no duplication.
+import { BD_DIVISIONS } from './bd.js'
+import { ALLOWED_CONTENT_TYPES } from './kyc.js'
 
 // ─── document declaration shape ───────────────────────────────────────
 //
