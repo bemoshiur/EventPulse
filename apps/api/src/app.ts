@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { authRoutes } from './routes/auth.js'
 import { oauthRoutes } from './routes/oauth-routes.js'
 import { accountTypeRoutes } from './routes/tenant/account-type.js'
+import { kycDraftRoutes } from './routes/tenant/kyc-drafts.js'
 import { kycRoutes } from './routes/tenant/kyc.js'
 import { meRoutes } from './routes/tenant/me.js'
 
@@ -34,6 +35,11 @@ export function createApp() {
   app.route('/api/v1/tenant/me', meRoutes)
   app.route('/api/v1/tenant/account-type', accountTypeRoutes)
   app.route('/api/v1/tenant/kyc', kycRoutes)
+  // Drafts router is mounted at /api/v1/tenant/kyc/drafts (not nested
+  // under kycRoutes) so the requireTenantType middleware applies to it
+  // independently — kycRoutes' middleware doesn't compose down into a
+  // child route group in Hono's current routing model.
+  app.route('/api/v1/tenant/kyc/drafts', kycDraftRoutes)
 
   return app
 }

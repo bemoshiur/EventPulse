@@ -2,8 +2,21 @@
  * Shared zod schemas + inferred types used by both apps/web and apps/api.
  * Per §3.2: if a type is used by both frontend and backend, it lives here.
  *
- * This file is intentionally a stub for Sprint 1 Day 1-2; populated as
- * routes and domain entities land.
+ * Populated as routes and domain entities land. First inhabitant is the
+ * Bangladesh division enum (Sprint 2 Day 16 Item 12 — shared by KYC
+ * address forms, future tenant profile forms, future event venue forms).
  */
 
-export {}
+export {
+  BD_DIVISIONS,
+  BD_DIVISION_LABELS_BN,
+  BD_DIVISION_LABELS_EN,
+  type BdDivision,
+} from './bd.js'
+
+export {
+  ALLOWED_CONTENT_TYPES,
+  KYC_DOCUMENT_TYPES,
+  type AllowedContentType,
+  type KycDocumentType,
+} from './kyc.js'
