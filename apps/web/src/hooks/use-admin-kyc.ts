@@ -21,9 +21,32 @@
  * When the reviewer navigates away, PII evaporates from client state
  * immediately. List view keeps default caching (no PII).
  *
- * Mutations invalidate the detail query on success so post-decision
- * state surfaces immediately. The invalidation triggers a fresh fetch
- * + another audit row per Decision G — by design.
+ * Decision G audit note — mutations DO NOT all share the same audit
+ * behaviour. Be precise here:
+ *
+ *   useDecideSubmission   → invalidateQueries on success → detail
+ *                           re-fetch → server writes a SECOND audit
+ *                           row (a kyc_submission.viewed for the
+ *                           post-decision read). By design — the
+ *                           decision is the most important moment to
+ *                           re-affirm "the reviewer looked at this
+ *                           after deciding."
+ *
+ *   useToggleChecklistItem → setQueryData on success (NO re-fetch,
+ *                           NO second GET audit row). The server
+ *                           writes a kyc_submission.checklist_toggled
+ *                           audit row during the PATCH itself; the
+ *                           PATCH response is the canonical row.
+ *
+ *   useUpdateReviewerNotes → setQueryData on success (NO re-fetch,
+ *                           NO second GET audit row). Server writes a
+ *                           kyc_submission.notes_updated audit row
+ *                           during the PATCH itself.
+ *
+ * The asymmetric calibration is intentional: toggles + notes are
+ * frequent (one PATCH per click); one audit row per PATCH is the
+ * right granularity. Decisions are rare; the extra view-after-decide
+ * audit row strengthens the regulator-facing trail.
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'

@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { axe } from 'vitest-axe'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 
 import { DocumentViewer } from './document-viewer'
+import type { KycSubmissionDetailRow } from '@/hooks/use-admin-kyc'
 
 function wrapper() {
   const client = new QueryClient({
@@ -119,5 +120,63 @@ describe('DocumentViewer', () => {
       { wrapper: wrapper() },
     )
     expect(await axe(container)).toHaveNoViolations()
+  })
+
+  it('clicking a checkbox fires PATCH to the checklist endpoint', async () => {
+    const stubRow: KycSubmissionDetailRow = {
+      id: 'sub-toggle',
+      tenantId: 't',
+      submissionType: 'individual',
+      tierRequested: 'tier_1',
+      status: 'under_review',
+      fields: {},
+      documents: { nid_front: 's3://eventpulse-kyc-test/tenants/t/x/nid_front.jpg' },
+      reviewerChecklist: {
+        nid_front: { checked: true, checkedAt: new Date().toISOString(), checkedBy: 'u' },
+      },
+      reviewerNotes: null,
+      reviewerId: null,
+      decisionReason: null,
+      decidedAt: null,
+      createdAt: '',
+      updatedAt: '',
+      signedDocuments: {},
+    }
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: stubRow }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    )
+
+    render(
+      <DocumentViewer
+        documents={{ nid_front: 's3://eventpulse-kyc-test/tenants/t/x/nid_front.jpg' }}
+        signedDocuments={{
+          nid_front: {
+            url: 'https://dry-run.invalid/.../nid_front.jpg',
+            key: 'tenants/t/x/nid_front.jpg',
+            expiresIn: 900,
+            dryRun: true,
+          },
+        }}
+        submissionId="sub-toggle"
+        submissionType="individual"
+        checklist={{}}
+      />,
+      { wrapper: wrapper() },
+    )
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /verified: nid front/i }))
+
+    await waitFor(() => {
+      expect(vi.mocked(global.fetch)).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/admin/kyc/submissions/sub-toggle/checklist'),
+        expect.objectContaining({
+          method: 'PATCH',
+          body: JSON.stringify({ key: 'nid_front', checked: true }),
+        }),
+      )
+    })
   })
 })

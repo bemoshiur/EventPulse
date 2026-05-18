@@ -21,7 +21,7 @@
  * version as a Sprint 2 closeout polish item).
  */
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   REJECTION_CATEGORIES,
@@ -51,6 +51,17 @@ function ApproveModal({
 }) {
   const [typed, setTyped] = useState('')
   const canSubmit = typed === 'APPROVE' && !isPending
+
+  // ESC closes the dialog per WCAG 2.1 SC 2.1.2 + user brief §2.3
+  // ("admin modals are dismissable"). Without this a keyboard-only
+  // reviewer would be trapped in the modal.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   return (
     <div
@@ -123,6 +134,15 @@ function RejectModal({
   const [reason, setReason] = useState('')
   const [category, setCategory] = useState<RejectionCategory | ''>('')
   const canSubmit = reason.trim().length >= 10 && reason.length <= 1000 && !isPending
+
+  // ESC closes the dialog (same rationale as ApproveModal).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   return (
     <div
@@ -208,6 +228,12 @@ export function DecisionActions({ submissionId, submissionType, status, checklis
   const [openModal, setOpenModal] = useState<'approve' | 'reject' | null>(null)
   const mutation = useDecideSubmission(submissionId)
 
+  // Refs on the trigger buttons so closeModal can restore focus per
+  // WCAG 2.1 SC 2.4.3 — without this a keyboard-only reviewer loses
+  // their position on the page when a modal closes.
+  const approveBtnRef = useRef<HTMLButtonElement>(null)
+  const rejectBtnRef = useRef<HTMLButtonElement>(null)
+
   const requiredKeys = requiredChecklistKeysFor(submissionType)
   const missingKeys = requiredKeys.filter((k) => !checklist[k]?.checked)
   const isApproveDisabled = missingKeys.length > 0 || status === 'approved' || status === 'rejected'
@@ -222,11 +248,22 @@ export function DecisionActions({ submissionId, submissionType, status, checklis
         ? 'Some required checklist items are not yet ticked. Please complete them.'
         : ((mutation.error as Error | null)?.message ?? null)
 
+  function closeAndRestoreFocus(which: 'approve' | 'reject') {
+    mutation.reset()
+    setOpenModal(null)
+    // Restore focus to the trigger button per WCAG 2.1 SC 2.4.3.
+    // Defer to next tick so the modal unmounts first.
+    setTimeout(() => {
+      if (which === 'approve') approveBtnRef.current?.focus()
+      else rejectBtnRef.current?.focus()
+    }, 0)
+  }
+
   function handleApprove() {
     mutation.mutate(
       { action: 'approve' },
       {
-        onSuccess: () => setOpenModal(null),
+        onSuccess: () => closeAndRestoreFocus('approve'),
       },
     )
   }
@@ -235,7 +272,7 @@ export function DecisionActions({ submissionId, submissionType, status, checklis
     mutation.mutate(
       { action: 'reject', reason, ...(category ? { category } : {}) },
       {
-        onSuccess: () => setOpenModal(null),
+        onSuccess: () => closeAndRestoreFocus('reject'),
       },
     )
   }
@@ -269,6 +306,7 @@ export function DecisionActions({ submissionId, submissionType, status, checklis
           </p>
           <div className="mt-4 flex gap-3">
             <button
+              ref={approveBtnRef}
               type="button"
               disabled={isApproveDisabled}
               onClick={() => setOpenModal('approve')}
@@ -277,6 +315,7 @@ export function DecisionActions({ submissionId, submissionType, status, checklis
               Approve
             </button>
             <button
+              ref={rejectBtnRef}
               type="button"
               disabled={isRejectDisabled}
               onClick={() => setOpenModal('reject')}
@@ -295,10 +334,7 @@ export function DecisionActions({ submissionId, submissionType, status, checklis
 
       {openModal === 'approve' ? (
         <ApproveModal
-          onClose={() => {
-            mutation.reset()
-            setOpenModal(null)
-          }}
+          onClose={() => closeAndRestoreFocus('approve')}
           onSubmit={handleApprove}
           isPending={mutation.isPending}
           errorMessage={errMessage}
@@ -306,10 +342,7 @@ export function DecisionActions({ submissionId, submissionType, status, checklis
       ) : null}
       {openModal === 'reject' ? (
         <RejectModal
-          onClose={() => {
-            mutation.reset()
-            setOpenModal(null)
-          }}
+          onClose={() => closeAndRestoreFocus('reject')}
           onSubmit={handleReject}
           isPending={mutation.isPending}
           errorMessage={errMessage}

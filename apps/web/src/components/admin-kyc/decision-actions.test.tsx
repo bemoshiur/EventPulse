@@ -176,4 +176,53 @@ describe('DecisionActions', () => {
     )
     expect(await axe(container)).toHaveNoViolations()
   })
+
+  it('a11y: no axe violations when approve modal is open', async () => {
+    const checklist = makeChecklist('user-1', INDIVIDUAL_TIER_1_REQUIRED_CHECKLIST_KEYS)
+    render(
+      <DecisionActions
+        submissionId="88888888-8888-4888-8888-888888888888"
+        submissionType="individual"
+        status="under_review"
+        checklist={checklist}
+      />,
+      { wrapper: wrapper() },
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    await screen.findByRole('dialog')
+    // Scan document.body to capture the fixed-position modal overlay.
+    expect(await axe(document.body)).toHaveNoViolations()
+  })
+
+  it('a11y: no axe violations when reject modal is open', async () => {
+    render(
+      <DecisionActions
+        submissionId="99999999-9999-4999-8999-999999999999"
+        submissionType="individual"
+        status="under_review"
+        checklist={{}}
+      />,
+      { wrapper: wrapper() },
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
+    await screen.findByRole('dialog')
+    expect(await axe(document.body)).toHaveNoViolations()
+  })
+
+  it('ESC closes the approve modal (B1 /review fix)', async () => {
+    const checklist = makeChecklist('user-1', INDIVIDUAL_TIER_1_REQUIRED_CHECKLIST_KEYS)
+    render(
+      <DecisionActions
+        submissionId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        submissionType="individual"
+        status="under_review"
+        checklist={checklist}
+      />,
+      { wrapper: wrapper() },
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
 })
