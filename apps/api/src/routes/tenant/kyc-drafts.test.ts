@@ -1040,7 +1040,7 @@ describeIfDb('/api/v1/tenant/kyc/drafts router — Organisation Tier A (Day 17)'
     }
     expect(body.data.fields.org).toBeDefined()
     expect(body.data.fields.org?.legalName).toBe('Acme Bangladesh Ltd')
-    expect(body.data.fields.org?.bin).toBe('123456789')
+    expect(body.data.fields.org?.bin).toBe('0001234567890')
     // Verify the step-name is NOT used as the key — would be a regression
     // of the fieldsKeyForStep mapping.
     expect(body.data.fields['org_info']).toBeUndefined()
