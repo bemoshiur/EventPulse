@@ -4,6 +4,154 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-19 · Organisation Tier A wizard — 6-step decomposition + reuse Individual Tier 1's financial schema
+
+**Context:** Sprint 2 Day 17 (Item 12 Part 2) ships the Organisation Tier A wizard variant. §13.3 specifies the required documents (trade license, MOA, AOA, authorised-signatory NID + selfie, BIN) and financial details (bank/MFS account + eTIN). Day 16 PR 3 left the page route + drafts router with `501 NOT_IMPLEMENTED` placeholders for organisation tenants. Day 17 wires the real flow.
+
+The question at plan time: how should the 6+ data points decompose into wizard steps?
+
+**Decision:** 6 steps, organised by "who owns this data" rather than "what document is this":
+
+1. **Org info** — text-only: legal name, trade license number, BIN (VAT registration), date of incorporation
+2. **Signatory identity** — text-only: signatory full name (as on NID), NID number
+3. **Signatory docs** — uploads only: nid_front, nid_back, photograph (signatory's NID images + selfie)
+4. **Org docs** — uploads only: trade_license PDF, moa, aoa
+5. **Financial** — text-only: account type (bank/MFS), account name, account number, branch name (if bank), eTIN. **Schema-equivalent to Individual Tier 1 Step 3 — see schema-reuse note below.**
+6. **Review** — read-only summary, submit
+
+**Why 6 steps (vs 4 or 5):**
+
+- **Splitting Org info from Signatory identity** matches the legal/ops model: the legal entity (trade license, BIN) is distinct from the human who signs on its behalf. Future Phase 2 work where multiple signatories are added (board members, dual-signatory accounts) extends the signatory model without disrupting the org model.
+- **Splitting Signatory docs from Org docs** mirrors what the reviewer actually compares: the signatory's face + ID match each other (one decision); the org's docs match the trade license + BIN field (a separate decision). Step boundaries that match the reviewer's mental decomposition reduce reviewer error.
+- **Splitting documents from their text fields** (Signatory identity → Signatory docs; Org info → Org docs) gives the user clear progress: they fill the text fields fast, then upload + wait. Combining would have the upload's progress bar competing with the user typing in the same step.
+- **Trade-off accepted:** 6 steps is more clicks. The user research consideration (a few extra Save & Continue presses on mobile) is outweighed by the cognitive load reduction of "one thing per step". MVP volume is sub-50/month per §13.0 manual-review status; if Phase 2 traffic shows step-abandonment patterns in the analytics, recombine.
+
+**Schema reuse — Financial step uses `IndividualTier1FinancialSchema` directly:**
+
+The financial fields for organisations (account type, name, number, branch, eTIN) are semantically identical to Individual Tier 1's. Re-defining `OrganisationTierAFinancialSchema` as a separate-but-identical zod object would (a) duplicate code, (b) create drift risk (a future tightening of one wouldn't propagate to the other), (c) confuse the reviewer queue (two near-identical jsonb shapes to handle).
+
+Org Tier A's submission + PATCH schemas import `IndividualTier1FinancialSchema` directly. The naming is mildly awkward (the "Individual Tier 1" prefix lives on shared content) but unblocks Day 17 cleanly; Sprint 3 can rename to `BaseFinancialSchema` or similar if the awkwardness compounds.
+
+**Document type additions to `KYC_DOCUMENT_TYPES`:**
+
+Already present from Day 16 PR 1: `nid_front, nid_back, photograph, address_proof, etin_certificate, bank_statement, trade_license, moa, aoa`. No new document types needed for Tier A; existing enum is sufficient.
+
+**Tier-A submission shape** (`kyc_submissions.fields` jsonb for Org tenants):
+
+```json
+{
+  "org": { "legalName": "...", "tradeLicenseNumber": "...", "bin": "...", "dateOfIncorporation": "YYYY-MM-DD" },
+  "signatory": { "fullName": "...", "nidNumber": "..." },
+  "financial": { "accountType": "bank", "accountName": "...", "accountNumber": "...", "branchName": "...", "etinNumber": "..." }
+}
+```
+
+And `documents` jsonb:
+
+```json
+{
+  "nid_front": "s3://...",
+  "nid_back": "s3://...",
+  "photograph": "s3://...",
+  "trade_license": "s3://...",
+  "moa": "s3://...",
+  "aoa": "s3://..."
+}
+```
+
+Note the step-id → jsonb-key mapping is intentional and lets the PATCH handler's `{[step]: patch.fields}` shallow-merge naturally:
+
+| Wizard step id | `fields[step]` key | Documents added |
+|---|---|---|
+| `org_info` | `fields.org` | — |
+| `signatory_identity` | `fields.signatory` | — |
+| `signatory_docs` | (no fields PATCH) | `nid_front, nid_back, photograph` |
+| `org_docs` | (no fields PATCH) | `trade_license, moa, aoa` |
+| `financial` | `fields.financial` | — |
+| `review` | (no PATCH; submit) | — |
+
+Step ids in TypeScript / zod use `snake_case` consistent with the existing `tenant.type` enum convention.
+
+**Consequences:**
+
+- `packages/shared-types/src/kyc-schemas.ts` extends the `KycSubmissionSchema` discriminated union with the org branch. `OrganisationTierA{OrgInfo,Signatory,SubmissionSchema}` + `OrganisationTierAPatchSchema` (a 5-branch discriminated union: `org_info | signatory_identity | signatory_docs | org_docs | financial` — the review step has no PATCH).
+- Two of the 5 PATCH branches (`signatory_docs`, `org_docs`) carry only `documents`, no `fields`. The PATCH schema marks `fields` as `z.never().optional()` on these branches and the existing server-side empty-fields-skip logic from Day 16 PR 3 BLOCKER 1 handles them without further change.
+- Drafts router removes the `501 NOT_IMPLEMENTED` branches in PATCH + submit handlers. Both now branch on `tenantType` to pick the right tier schema (Individual Tier 1 vs Org Tier A) for validation.
+- `wizardVariantForTenantType()` updated to return `{ kind: 'organisation_tier_a' }` for organisation tenants (currently returns `null`).
+- New `OrganisationTierAWizard` variant root in `apps/web/src/components/kyc-wizard/organisation-tier-a/index.tsx` orchestrates the 6 steps. Mirror of `IndividualTier1Wizard` shape; both share `WizardFrame` + `ProgressIndicator` + `DocumentUpload`.
+- `apps/web/src/app/(tenant)/kyc/page.tsx` removes the "coming Day 17" placeholder; renders `OrganisationTierAWizard` when `tenant.type === 'organisation'`.
+
+**Cross-references:**
+
+- 2026-05-18 "KYC wizard uses server-side drafts" — same draft/PATCH/submit lifecycle applies; the org variant only adds new schemas + step components, not new infrastructure.
+- 2026-05-18 "Per-tier KYC schemas are discriminated unions" — this entry extends the discriminated union with the org branch. Single source of truth maintained.
+- §13.3 CLAUDE.md — Tier A required artefacts. v2.3 playbook bump (Day 18 AM) will note the 6-step decomposition + financial-schema reuse alongside the existing Tier 1 4-step description.
+
+**Path back if 6 steps proves too many:** Recombine `signatory_identity` + `signatory_docs` (or `org_info` + `org_docs`) into 5 steps via a Phase 2 PR if MVP analytics show step-abandonment between those pairs. The schema reorganisation would need a migration only if `fields` jsonb keys change (currently `fields.signatory` is a single key regardless of step decomposition).
+
+---
+
+## 2026-05-19 · KYC wizard e2e Playwright test ships local-only on Day 17; staging cutover deferred to Day 18 Sprint 2 closeout
+
+**Context:** Day 17 includes an end-to-end happy-path Playwright test for the Individual Tier 1 wizard (was a Day 16 deferral). The test exercises the full lifecycle: sign in → land on /kyc → fill all 4 steps → submit → see success page. The handoff from Day 16 surfaced an open question: does CI's runner have outbound connectivity to `staging.eventpulse.com.bd` + the KYC bucket?
+
+**Decision:** Day 17's Playwright test runs **local-only** — local Postgres (CI service container), Hono API + Next.js web servers spun up by Playwright's `webServer` config, and `KYC_S3_DRY_RUN=1` set on the API so signed-URL issuance returns synthetic URLs without an actual AWS call. This validates the full request/response/state-machine chain without depending on staging connectivity. Staging-real e2e cutover is queued as a **Sprint 2 closeout candidate** (v0.2.0-sprint-2 bundle).
+
+**Rationale:**
+
+- **Connectivity verification is its own piece of work.** Confirming CI outbound to staging needs an IAM trust update (CI's OIDC role may need staging-resource read permissions), Cloudflare for SaaS's edge IP allowlist for the test runner, and a staging fixture tenant. Bundling this with Day 17's feature work risks Day 17 stalling on connectivity yak-shaving.
+- **Local-only catches the right bugs.** The Day 16 PR 3 BLOCKER 1 (document PATCH wipes step fields) was a frontend↔backend contract violation that any local e2e would have caught — the bug lived in the data shape passed between components, not in any network-layer behaviour. The race conditions and state-machine transitions the e2e is most valuable for are environment-agnostic.
+- **Staging-real adds two things local doesn't catch:** (a) real S3 PUT mechanics (KMS headers, bucket policy enforcement, signed URL TTL), (b) Cloudflare for SaaS routing to a real tenant subdomain. Both are real bugs to hunt; both are isolable into a Sprint 2 closeout PR.
+- **Day 17's day-budget already heavy.** Org Tier A wizard variant + 6 step components + polish pass + 2 carry tests + e2e test infra is ambitious; spending half the day on staging connectivity would force one of the four deliverables to slip. Local-only e2e fits the budget; staging-real e2e is a focused 1-2 hour task that lands as its own PR.
+
+**Consequences:**
+
+- New `apps/web/e2e/individual-tier1-happy-path.spec.ts` (or similar) — Playwright test that:
+  - Mints a tenant-context JWT via `signTokens()` in setup (no real OAuth flow)
+  - Injects the access cookie before navigating to `/kyc`
+  - Walks through all 4 Individual Tier 1 steps, uploading 4 dummy files
+  - Asserts the "Submission received" success state
+- New `apps/web/playwright.config.ts` (or extension of existing) — `webServer` array spinning up apps/api + apps/web. Sets `KYC_S3_DRY_RUN=1`, `DATABASE_URL=...` to the CI Postgres service.
+- CI `.github/workflows/ci.yml` E2E job's `if` gate flips from `needs.detect-scope.outputs.has_e2e == 'true'` once the spec file lands (existing gate already detects `apps/web/e2e/**/*.spec.ts`).
+- **Sprint 2 closeout PR** picks up: staging-fixture tenant seed, CI IAM/Cloudflare access verification, Playwright `STAGING_URL` env-driven config, real S3 PUT teardown to keep the bucket clean. Estimated 1-2 hours focused work.
+
+**Path back if local e2e proves insufficient:** if a real-S3-only bug ships to staging undetected (e.g. KMS header mismatch, bucket policy regression), the staging-real e2e gets pulled forward into Sprint 3's first session as a P0. The local e2e stays as the fast-feedback layer.
+
+---
+
+## 2026-05-19 · Individual Tier 1 polish scope — inline-on-blur error UX only
+
+**Context:** Day 16 PR 3 shipped Individual Tier 1 with errors rendered only after form-submit (react-hook-form default mode). The handoff from Day 16 listed four polish candidates: (a) inline-on-blur errors, (b) loading/saving indicators near the progress bar, (c) framer-motion step transitions respecting prefers-reduced-motion, (d) mobile responsive audit @ 360px width. Day 17 needs to pick scope.
+
+**Decision:** Day 17 ships polish item (a) only — `mode: 'onBlur'` on each step's `useForm` so per-field validation fires on blur, not just on submit. The other three (loading indicator, step transitions, mobile audit) are deferred to **Sprint 2 closeout** or **Sprint 3 polish PR**.
+
+**Rationale:**
+
+- **Inline-on-blur fixes a real UX failure mode.** A user fills 5 fields, clicks Save & Continue, and gets 5 inline errors at once — they have to scroll back, fix each, click again. Blur-mode shows each error as they leave the field; corrections happen in flow, not after.
+- **The fix is small.** One config change per `useForm` call in the 4 step components: `mode: 'onBlur'`. Adds zero bundle weight; existing tests still pass (the validation pipeline is unchanged, only its trigger timing changes).
+- **The other three items are real but lower-leverage:**
+  - **Loading/saving indicators:** the CTA button already shows "Saving…" with `aria-busy` (Day 16 PR 3). A separate near-the-progress-bar indicator is nicer but not load-bearing.
+  - **Step transitions:** ~3 KB framer-motion overhead + meaningful AnimatePresence wiring + a `useReducedMotion` integration. Nice-to-have, not Day-17-critical.
+  - **Mobile audit:** a real walkthrough at 360px width. Requires the dev server + actual time spent in a mobile viewport. Best done as its own focused session, not bolted onto a day already shipping a new wizard variant.
+
+**Consequences:**
+
+- Edit 4 files: `step-1-identity.tsx`, `step-2-address.tsx`, `step-3-financial.tsx` (skip step-4-review — no form). Each `useForm({ resolver: zodResolver(...), defaultValues: {...} })` becomes `useForm({ mode: 'onBlur', resolver: zodResolver(...), defaultValues: {...} })`.
+- Org Tier A's step components (built today in PR 2) ship with `mode: 'onBlur'` from the start.
+- **Sprint 2 closeout candidates** (v0.2.0-sprint-2 bundle) gain:
+  - Loading/saving indicator near the progress bar (small)
+  - Framer-motion step transitions with prefers-reduced-motion fallback (~3 KB bundle increase)
+- **Sprint 3 polish PR** picks up mobile responsive audit @ 360px (own session; needs ground-truth viewport testing).
+
+**Cross-references:**
+
+- 2026-05-18 "KYC wizard uses server-side drafts" — the wizard's UX surface is the highest-trafficked tenant-facing screen for the Phase 1 onboarding flow; polish iterations here have outsized impact.
+- §19.4 CLAUDE.md (Loading States, design system) — both deferred items align with the playbook's design discipline; deferral is about timing, not abandoning the principles.
+
+**Path back if blur-only mode proves insufficient:** if MVP analytics show users still submit-without-typing-then-see-errors (i.e. they don't blur, they tab → enter → submit), `mode: 'onTouched'` (validates on blur OR after first valid submit attempt) is a one-line follow-up. Don't over-engineer the first iteration.
+
+---
+
 ## 2026-05-18 · KYC wizard uses server-side drafts (activates the `draft` status added in migration 0005) — not localStorage
 
 **Context:** Sprint 2 Day 16-17 Item 12 ships the KYC wizard. Tier 1 Individual decomposes into 4 steps (identity → address → financial → review); the forthcoming Organisation Tier A variant (Day 17) decomposes into ~5–6 steps. With document uploads and form fields measured in dozens per submission, a tenant who closes the tab mid-flow must not lose work — that's a hostile experience for a payment platform where the very gate is verifying who can take money. The question at plan time is **where** the partial state lives: client-side (localStorage) vs server-side (a `kyc_submissions` row that progresses through `draft → submitted`).
