@@ -4,6 +4,210 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-19 · Item 13 super admin KYC review queue — pre-code architecture (Decisions G, H, I)
+
+**Context:** Day 18 PM ships Item 13 — the super admin KYC review queue + decision API + reviewer checklist. This is the **highest-PII-sensitivity UI in the entire project**: super admin sees NID images, NID numbers, DOB, full names, addresses, bank accounts, eTINs, selfies, BINs, RJSC certificates for every tenant going through KYC. Per the platform-wide manual-verification policy (`Platform-wide policy — manual verification only for MVP`, 2026-05-19) this is also the **operational engine** of the policy — every check the platform doesn't automate, the reviewer does here.
+
+Three architecture decisions need to land before Item 13 code starts so the backend + frontend are built against a single shared shape. All three were proposed in Moshiur's Day 18 brief §2.1 and are accepted verbatim here as canonical project decisions.
+
+---
+
+### Decision G — Audit every read of a submission detail, not just decisions
+
+Every super admin view of a `kyc_submissions` row's detail page writes an `audit_log` row. The audit shape:
+
+```typescript
+{
+  actor_type: 'super_admin',
+  actor_id: reviewerUserId,
+  action: 'kyc.submission.viewed',
+  entity_type: 'kyc_submission',
+  entity_id: submissionId,
+  metadata: { reviewer_user_id, viewed_at },
+  // diff: null  — pure read, no state change
+  tenant_id: submissionTenantId,  // denormalised from the submission row for the audit row's RLS scope
+}
+```
+
+**Triggered by:** the detail-view GET endpoint (`GET /api/v1/admin/kyc/submissions/:id`). Every call writes an audit row. No deduplication — two consecutive detail-view opens by the same reviewer write two audit rows. Tracking "how many times did reviewer X look at submission Y" is part of the regulatory audit trail.
+
+**The asymmetric calibration: list view does NOT audit per row.** The queue list (`GET /api/v1/admin/kyc/submissions`) surfaces tenant names + submission IDs + tier + status + submitted_at + checklist progress count — **no PII fields**. A super admin scanning the queue to triage work is fundamentally different from opening a specific tenant's detail page with full NID images surfacing. The list view writes one operational audit row per request at most (e.g. for SLA telemetry) but does **not** write per-row "viewed" rows for each submission in the response.
+
+**Rationale:**
+
+- **Regulatory review of "who looked at this tenant's NID" must be answerable.** BFIU + Bangladesh PDPA (forthcoming) + GDPR (for any EU tenant) all require demonstrable access audit trails for PII surfaces. Without per-detail-view auditing, the answer is "we don't know" — which is the wrong answer.
+- **Cost is one DB write per detail-view page load — trivial.** Even if a reviewer opens 200 submissions in a day, that's 200 audit rows added to a table that already grows with every state transition. The audit_logs table is partition-ready when volume requires (Sprint 4+ candidate).
+- **The list-view exception is a calibrated reduction**, not a gap. Per `Platform-wide policy — manual verification only for MVP` (2026-05-19) the queue exposes tenant names + statuses + ages — operational metadata, not PII. Auditing each list-row-row would 50× the audit_log volume (one detail view = 50 list views during a day's triage) while adding zero regulatory value. The audit story remains complete because every PII-exposing surface (detail view) still writes its row.
+
+**Cross-references:**
+
+- `audit_logs` schema: §9.10 / `.claude/memory/decisions.md` "audit_logs scope at Item 9 — KYC transitions only; auth events + S3 issuance backfill deferred" (2026-05-17, reaffirmed 2026-05-18).
+- One-per-domain audit helper pattern: same entry above + 2026-05-18 reaffirmation. Item 13's view-audit writer is `writeKycSubmissionViewed` in `apps/api/src/services/audit/kyc.ts` (sibling to the existing `writeKycTransition` + `writeKycDraftCreated` + `writeKycDraftUpdated` helpers — same domain, same file).
+- Item 13 surface scope: `Platform-wide policy — manual verification only for MVP (consolidates prior per-item deferrals)` (2026-05-19) — defines what Item 13 surfaces (raw data + reviewer notes) and what it does NOT (validation badges, flags column, auto-flag UI).
+
+**Consequences:**
+
+- Backend writes a new helper `writeKycSubmissionViewed(tx, {actorId, submissionId, tenantId})` next to the existing audit helpers. Helper writes inside the `withSuperAdmin()` transaction since super-admin context is required (BYPASSRLS to read the submission row + INSERT to audit_logs with the denormalised tenant_id).
+- Audit-row payload contains NO PII. `metadata.reviewer_user_id` is the actor (already in `actor_id`); `viewed_at` defaults to `now()`. The diff column stays NULL — there's nothing changing.
+- Tenant-side queries against `audit_logs` (`GET /api/v1/tenant/kyc/submissions/:id/audit-trail` — Phase 3 candidate, not Item 13 scope) will surface reviewer access events to the tenant per BFIU/PDPA transparency requirements. The audit data is already correctly tenant-scoped via `tenant_id` denormalisation.
+- Tests required: (a) two consecutive detail-view GETs write two audit rows (no dedup); (b) detail view audit row has `actor_type: 'super_admin'` (NOT `tenant_user`); (c) list view does NOT write per-row audit rows.
+
+---
+
+### Decision H — No client-side caching of PII fields beyond the current detail view
+
+TanStack Query defaults (`staleTime: 30s`, `gcTime: 5min`, `refetchOnWindowFocus: true`, `refetchOnReconnect: true`) are wrong for super admin KYC detail views. The hook that fetches a submission's full detail row **overrides** these defaults per-query:
+
+```typescript
+useQuery({
+  queryKey: ['admin', 'kyc', 'submissions', submissionId, 'detail'],
+  queryFn: () => fetchSubmissionDetail(submissionId),
+  staleTime: 0,
+  gcTime: 0,
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
+})
+```
+
+**The behaviour this produces:** when the reviewer navigates away from the detail view, the data evaporates from client state immediately (gcTime: 0). The next time the reviewer opens any detail page, a fresh fetch hits the server — which also re-triggers Decision G's audit write. The client never carries stale PII between sessions, and the audit trail captures every access.
+
+**Trade-off accepted:** re-fetch on every navigation back to a detail page. At ~50 KYC submissions/day per reviewer per the platform-wide policy's volume model, the per-fetch overhead is operationally invisible. The benefit — PII evaporating from client state immediately — is worth far more than the milliseconds saved by client cache.
+
+**The list view CAN use default caching.** Per Decision G's asymmetric calibration, list-view data is lower-sensitivity (tenant names + status + age + checklist progress count — no PII). The list-view hook uses the project default `staleTime: 30s` so rapid filter/sort interactions feel snappy.
+
+**Why `refetchOnWindowFocus: false` + `refetchOnReconnect: false`:** the defaults would refetch the detail row when the reviewer switches tabs or briefly loses network. Each refetch writes another audit row per Decision G. The reviewer's intent (focus this tab again after answering a Slack message) isn't a "I want to re-verify this submission" intent and shouldn't trigger an audit event. Explicit reviewer navigation back to the detail page DOES trigger a fresh fetch (and audit row) because that's a deliberate access; tab focus is not.
+
+**Rationale:**
+
+- **PII discipline carries to the client.** §1.3 R5 ("no PII in logs") + the §1.3 R4 KYC encryption rule together imply PII should not persist beyond the moment the user is actively viewing it. Server-side this is enforced by RLS + role-switching; client-side this is enforced by cache TTL = 0.
+- **Decision G + H are reinforcing.** Each detail-view open writes an audit row AND re-fetches fresh data. The two together make "who looked at what when" trivially answerable.
+- **Per-query override is the right granularity, not a global cache config change.** Other tenant-portal queries (e.g. `useTenantType`, event lists) benefit from the default 30s staleTime. Only super admin PII-surface queries override.
+
+**Cross-references:**
+
+- TanStack Query landing decision: `.claude/memory/decisions.md` "TanStack Query lands at Item 12; `useTenantType` migrated for consistency" (2026-05-18). Per-query override pattern foreshadowed in that entry.
+- §5.3 documents the per-query override convention.
+- §1.3 R5 + R4 (no PII in logs + KYC docs encrypted) — Decision H extends the discipline to client-side cache lifetimes.
+
+**Consequences:**
+
+- New hook `useKycSubmissionDetail(submissionId)` in `apps/web/src/hooks/use-admin-kyc.ts` carries the four-key override above.
+- Decision modal mutations (`useDecideMutation`, `useChecklistMutation`, `useNotesMutation`) **invalidate the detail query on success** so the post-decision state surfaces immediately. Invalidation triggers a fresh fetch + another audit row — by design.
+- Tests required: (a) detail-view hook config asserts `staleTime: 0` + `gcTime: 0` (assert via `useQuery`'s `meta` or by inspecting the QueryClient state); (b) navigation-away clears the cached data within one tick (jsdom test); (c) list-view hook does NOT carry the override (default caching applies).
+
+---
+
+### Decision I — Reviewer checklist as structured tracking, not free text
+
+Per-submission checklist with checkboxes for each verifiable item. Schema lives in a new `kyc_submissions.reviewer_checklist jsonb` column (migration 0007). Per-tier required keys are server-enforced via the same Zod discriminated union pattern as Item 12 (Day 16 Decision B).
+
+**Checklist schema:**
+
+```typescript
+type ChecklistEntry = {
+  checked: boolean
+  checked_at: string  // ISO timestamp
+  checked_by: string  // user_id (uuid)
+}
+
+type ReviewerChecklist = Record<string, ChecklistEntry>
+```
+
+**Per-tier required keys** (exported from `apps/api/src/schemas/kyc-reviewer.ts` as canonical const arrays — single source of truth, consumed by both server validation and the frontend's approve-button-disabled gate):
+
+```typescript
+export const INDIVIDUAL_TIER_1_REQUIRED_CHECKLIST_KEYS = [
+  'nid_front', 'nid_back', 'selfie',           // documents
+  'dob_matches_nid', 'full_name_matches_nid',  // identity cross-checks
+  'address', 'address_proof',                  // address
+  'bank_account_name_match', 'etin',           // financial
+] as const
+
+export const ORGANISATION_TIER_A_REQUIRED_CHECKLIST_KEYS = [
+  'trade_license', 'moa', 'aoa',                                  // documents
+  'bin_format', 'rjsc_certificate',                               // org identity
+  'signatory_nid_front', 'signatory_nid_back', 'signatory_selfie', // signatory
+  'signatory_designation', 'board_resolution',                    // authority
+  'bank_account_name_match', 'etin',                              // financial
+] as const
+```
+
+**Approve action server-enforces all required keys are checked.** Returns `409 CHECKLIST_INCOMPLETE` with a list of missing keys if any required-for-tier key has `checked === false` or is absent from the checklist jsonb. **Defence against client-bypass:** the frontend's "approve" button is disabled until all required-for-tier keys are checked (client-side enforcement); the server re-validates on `POST /decide` because the client check is convenience, not security.
+
+**Reject action does NOT require completeness.** A reviewer can reject after seeing one disqualifying item — there's no need to walk through the entire checklist when the answer is "no" early.
+
+**Each check/uncheck writes an audit_log row.** Shape:
+
+```typescript
+{
+  actor_type: 'super_admin',
+  actor_id: reviewerUserId,
+  action: 'kyc.submission.checklist_toggled',
+  entity_type: 'kyc_submission',
+  entity_id: submissionId,
+  metadata: { key, checked, prior_state },
+  tenant_id: submissionTenantId,
+}
+```
+
+**Plus free-text reviewer notes — separate column.** `kyc_submissions.reviewer_notes text nullable` for unstructured observations that don't fit the checklist (e.g. "trade license shows registration in 2018 but BIN format is post-2019 — odd; let me verify with NBR"). Notes are **NOT shown to the tenant** — internal review state only. Updates to notes write `kyc.submission.notes_updated` audit rows with diffs truncated to first 500 chars (full text stays in the column).
+
+**Schema choice — why a single `reviewer_checklist` jsonb instead of a separate `reviewer_checklist_items` table:**
+
+- The checklist is **per-submission**, not per-tenant or per-event. It's a 1:1 with `kyc_submissions`. A separate table would add a join for every detail view + invent foreign-key semantics that don't earn their keep.
+- The per-tier required-keys list is fixed at the application layer (`INDIVIDUAL_TIER_1_REQUIRED_CHECKLIST_KEYS` const) — not data. The jsonb stores the runtime state; the schema lives in code where it can be reviewed.
+- Audit trail of every check/uncheck lives in `audit_logs` (already partitioned-ready), not in the checklist itself. The checklist captures CURRENT state; the audit_log captures HISTORICAL state. Standard event-sourcing pattern within the KYC domain.
+
+**Storage shape on `kyc_submissions`:**
+
+```sql
+ALTER TABLE kyc_submissions
+  ADD COLUMN reviewer_checklist jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN reviewer_notes text;
+```
+
+**Schema is intentionally NOT including `kyc_submissions.flags`.** Per `Platform-wide policy — manual verification only for MVP (consolidates prior per-item deferrals)` (2026-05-19): "**No `kyc_submissions.flags` jsonb column** (was speculative for sanctions hits in Item 10's original scope; not needed under this policy — when Phase 3 automation lands, the flag column lands in the same migration as the validator code)." Item 13's reviewer-notes free-text is the entire concern-surfacing surface for MVP.
+
+**Rationale:**
+
+- **Structured tracking gives the regulator + the platform answerable questions.** "Was the NID front verified?" → query `reviewer_checklist->'nid_front'->>'checked'`. With free-text notes alone, the answer is "let me grep through 200 free-text fields hoping the reviewer used consistent vocabulary."
+- **Server-enforced approve gate prevents the lazy-reviewer failure mode.** Without server enforcement, a tired reviewer could click "approve" with zero checks ticked. The 409 forces a complete (per-tier) checklist before approval.
+- **Per-tier required-keys live in shared-types schema, not in the DB.** Adding a new required key for Tier 2 individual KYC = update the const array + write a backfill migration. No table changes; no data migrations.
+- **Free-text notes handle the long-tail observations the checklist can't enumerate.** Reviewer judgment-calls live here. Notes drive future training of any Phase 3 advisory-flag automation by giving the team a corpus of "things that mattered enough to flag" examples.
+
+**Cross-references:**
+
+- Per-tier discriminated union pattern: `.claude/memory/decisions.md` "Per-tier KYC schemas are discriminated unions, exported from `apps/api/src/schemas/kyc.ts` — single source of truth shared between server validation and client form schema" (2026-05-18). The `RequiredChecklistKeys` consts above follow the same single-source-of-truth pattern.
+- Schema home: new file `apps/api/src/schemas/kyc-reviewer.ts` (sibling to the existing wizard schemas). Re-exported from `packages/shared-types/src/index.ts` so the frontend approve-button-disabled gate consumes the same canonical list as the server enforcement.
+- One-per-domain audit helper pattern: each new action (`viewed`, `checklist_toggled`, `notes_updated`, `decided`) gets its own helper in `apps/api/src/services/audit/kyc.ts` — sibling to existing helpers, NOT a generic `writeAudit()`.
+
+**Consequences:**
+
+- Migration 0007 adds `reviewer_checklist jsonb NOT NULL DEFAULT '{}'::jsonb` + `reviewer_notes text` to `kyc_submissions`. Standard grants block applies (no REVOKE needed — this is mutable per-submission reviewer state, not append-only history).
+- `apps/api/src/schemas/kyc-reviewer.ts` exports the per-tier required-keys consts + the `ReviewerChecklistEntrySchema` + `ReviewerDecisionSchema` (discriminated union: `{action: 'approve'}` requires all required keys checked; `{action: 'reject', reason: string}` requires reason).
+- POST `/api/v1/admin/kyc/submissions/:id/decide` does the server-side completeness check on approve actions; returns `409 CHECKLIST_INCOMPLETE` with `missingKeys: string[]` in the error envelope if any required key is unchecked.
+- Frontend `DecisionActions` component reads the same const arrays to compute `isApproveDisabled` client-side; approve modal shows "Missing: nid_front, address" if attempted before completion.
+- Tests required: (a) approve with all required keys checked → 200 + state transition; (b) approve with one missing required key → 409 with the missing key surfaced; (c) reject with reason → 200 regardless of checklist completeness; (d) per-tier required-keys arrays exist + are non-empty + cover the §13.3 KYC requirements; (e) checklist toggle PATCH writes audit row with correct shape.
+
+---
+
+### Cross-cutting consequences for Item 13's blast radius
+
+- **First reviewer-facing surface** = first super-admin authentication path in production. `requireSuperAdmin` middleware must be the correctness gate (NOT the tenant-context middleware). Per §5.1 the super-admin audience is separate. The audit row's `actor_type` is `'super_admin'`, never `'tenant_user'` (Decisions G + I both depend on this).
+- **Conflict-of-interest check** per the Day 18 brief §2.3 — approve disabled if `audit_log` shows the same user_id previously acted as the tenant for this submission. Implementation queries `audit_logs WHERE entity_id = submissionId AND actor_type = 'tenant_user' AND actor_id = currentReviewerUserId LIMIT 1`. If any row, frontend disables approve with tooltip + server returns 409 `CONFLICT_OF_INTEREST` on attempt.
+- **Subdomain provisioning on approve = TODO-stubbed in Item 13's scope.** The approve action writes the field + fires the notification stub but does NOT call SSM for Nginx vhost generation (Item 16's scope per Day 20 plan).
+- **Audit_logs append-only invariant (§4.2.1.1)** — all four new actions (`viewed`, `checklist_toggled`, `notes_updated`, `decided`) write through `eventpulse_admin` via `withSuperAdmin()` since that's the role with INSERT grant on audit_logs (BYPASSRLS lets it write tenant_id-denormalised rows that the requesting reviewer's session role couldn't normally write). `eventpulse_app` cannot UPDATE/DELETE audit rows even from a super-admin's session per the REVOKE pattern.
+
+**STOP-ASK conditions reaffirmed for Item 13:**
+
+- Schema change beyond migration 0007's two columns (e.g. a `flags` jsonb if the reviewer convention proves insufficient) → halt, surface to Moshiur. The platform-wide manual-verification policy is load-bearing.
+- Any automated check on submission detail (format regex on a field, sanctions matcher, validator stub) → halt, surface. Same load-bearing policy.
+- New dep for the document viewer (e.g. a PDF.js wrapper, image viewer library) → halt, surface. The Day 18 brief says "no third-party image viewer dep" — browser-native zoom only.
+- The conflict-of-interest query against audit_logs must be efficient — composite index on `audit_logs(entity_id, actor_user_id)` may already exist from Day 14; if not, migration 0007 adds it alongside the new columns.
+- Reviewer-notes free-text containing PII (tenant might paste a name in a note) is tolerated — the column is NOT joined to pino structured logs; PII discipline applies at the log boundary, not the DB column boundary. Notes ARE diffed to audit_log on update with truncation to 500 chars per Decision I — diff lives in `metadata.diff_truncated`, not the structured log.
+
+---
+
 ## 2026-05-19 · Platform-wide policy — manual verification only for MVP (consolidates prior per-item deferrals)
 
 **Supersedes:** 2026-05-17 "Sprint 2 Item 10 scope amendment — third-party verification deferred to manual review" + 2026-05-17 "Porichoy deferred — manual NID review for MVP". Both remain in the log for archaeology, each marked `Superseded by` this entry.
