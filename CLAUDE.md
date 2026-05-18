@@ -1,17 +1,27 @@
 # Event Pulse — Claude Code Mega Playbook
 
 > **One prompt. Bootstrap to production.**
-> Version 2.2 · 17 May 2026
+> Version 2.3 · 19 May 2026
 > Author: Moshiur Rahman / Public Pulse Agency / TiCON System Limited
 
 ---
 
 ## §-1 — Changelog
 
+**v2.3 — 19 May 2026 (minor)**
+- **§13.0 KYC Status block REPLACED — platform-wide manual verification policy for MVP.** Old Porichoy-specific deferral block fully superseded. New policy: zero automated verification of any submitted KYC data for MVP; all data reviewed by human super admin via the KYC review queue. Server-side schema validation (zod) continues unchanged — that's input validation, not data verification. Phase 2 trigger documented (50 verified submissions/week sustained, 4-week trailing average, reviewer-capacity criterion) + Phase 3 plan (seven advisory-flag integrations, never auto-reject). Reflects `.claude/memory/decisions.md` "Platform-wide policy — manual verification only for MVP (consolidates prior per-item deferrals)" (2026-05-19) which supersedes 2026-05-17 "Sprint 2 Item 10 scope amendment" + 2026-05-17 "Porichoy deferred — manual NID review for MVP".
+- **§17.9 extended — canonical GitHub Actions → AWS OIDC trust pattern.** Three-claim shape (aud + sub environment-scoped + job_workflow_ref workflow-file-pinned) codified as project standard, alongside the SSM-based-deploy dual-ARN convention (both `ec2:instance/i-X` AND `ssm:managed-instance/i-X` ARN forms). First application: `eventpulse-deploy-staging` (Sprint 2 Day 13). Next: `eventpulse-deploy-prod` (Sprint 4) follows this exact pattern. Reflects `.claude/memory/decisions.md` "Canonical GitHub Actions → AWS OIDC trust pattern (project standard)" (2026-05-17).
+- **§4.2.1 extended — append-only table invariant + REVOKE pattern.** Any table designated append-only (`audit_logs` is the first) requires explicit `REVOKE UPDATE, DELETE, TRUNCATE` from `eventpulse_app` in its migration. `ALTER DEFAULT PRIVILEGES` over-grants UPDATE/DELETE on new tables and is not sufficient on its own. `eventpulse_admin` retains full mutation grants for retention sweeps. Pattern established Day 14 (PR #70, `audit_logs`); applies to any future append-only table. Reflects `.claude/memory/gotchas.md` "`ALTER DEFAULT PRIVILEGES` over-grants UPDATE/DELETE on new append-only tables — REVOKE explicitly".
+- **§9.1 amended — `tenants.type` nullable.** Schema now allows `type IS NULL` until the post-login Account-Type modal sets it. Nullability is **load-bearing** for the first-load Account-Type gate (Item 11, Day 15); a tenant row exists from sign-up but the type is chosen on first dashboard load, not at sign-up. Set-once for MVP: once set, change requires support intervention. Reflects `.claude/memory/decisions.md` "Tenant account_type is set-once for MVP — change requires support intervention" (2026-05-18) + migration 0006.
+- **§5.3 extended — `useTenantType` hook + TanStack Query provider.** Tenant-context read pattern added: TanStack Query lands as project infrastructure at Item 12 (Day 16); `useTenantType` hook reads `GET /tenant/me` and underpins the wizard variant routing + post-login modal gate. Reflects `.claude/memory/decisions.md` "TanStack Query lands at Item 12; `useTenantType` migrated for consistency" (2026-05-18).
+- **§26.1 amended — Sprint 2 sprint plan annotated with shipped-as deltas.** Original Sprint 2 plan ("KYC submission API + Porichoy NID validation + eTIN format checks") shipped differently: Item 10's automated validators deferred to Phase 2 per the manual-verification policy; Porichoy integration scaffolded but not wired (Day 20 Sprint 2 closeout). Annotations added per item where reality diverged from plan; the original plan text is preserved as historical record.
+- **§17.6 verified — five staging A records re-verified against Route 53 reality** on 2026-05-19. No drift. Date stamp added to the staging block so future bumps know the verification last ran.
+- **§29 Open Decisions** — Items resolved between v2.2 and v2.3 marked closed with date + decision pointer: tenant.type nullability (resolved 2026-05-18, set-once via post-login Account-Type modal), audit helper pattern (resolved 2026-05-17, one-per-domain), platform-wide manual verification policy (resolved 2026-05-19, consolidates three prior per-item deferrals). Items #9 (AIT withholding classification) and #10 (VAT/Mushak registration model) explicitly **remain open** — both still require legal opinion before MVP launch.
+
 **v2.2 — 17 May 2026 (minor)**
 - **Auth library locked to rolled-our-own** — Lucia (in maintenance mode as of 2026) replaced by an in-repo composition of `@noble/hashes` (argon2id), `jose` (JWT), `arctic` (OAuth providers), and a custom Postgres session adapter. Decision rationale in `.claude/memory/decisions.md` "Auth foundation library choice" (2026-05-17). Tech-stack table updated (§1.2). Auth section rewritten (§5).
 - **Role hierarchy codified into §4** — `eventpulse_app` (non-superuser, RLS engages) ← `eventpulse_admin` (BYPASSRLS + table grants) as the canonical Postgres role pair. Surfaces the gotcha that superusers always bypass RLS regardless of `FORCE ROW LEVEL SECURITY`; BYPASSRLS alone is not enough without table grants. (§4.2.1)
-- **§13.0 KYC Status block** — Porichoy NID validation deferred to a dedicated PR once credentials arrive. MVP ships KYC validation as manual review (eTIN regex + bank-name match + sanctions list). Reflects `.claude/memory/decisions.md` "Porichoy deferred — manual NID review for MVP" (2026-05-17).
+- **§13.0 KYC Status block** — Porichoy NID validation deferred to a dedicated PR once credentials arrive. MVP ships KYC validation as manual review (eTIN regex + bank-name match + sanctions list). Reflects `.claude/memory/decisions.md` "Porichoy deferred — manual NID review for MVP" (2026-05-17). _(v2.2 plan; the eTIN regex + bank-name match + sanctions-list components never shipped — superseded by v2.3 platform-wide manual-verification policy. See current §13.0 + `.claude/memory/decisions.md` "Platform-wide policy — manual verification only for MVP" 2026-05-19.)_
 - **§17 clarifications** — SSM-only shell access pattern (no SSH keys, no port 22) explicit in §17.2 + §17.7; staging EBS sized at 30 GB explicitly (§17.2); five explicit staging DNS A records enumerated (§17.6); KYC bucket gets its own per-purpose CMK per `.claude/memory/decisions.md` "Dedicated KMS CMK for KYC bucket" (2026-05-17) — pattern documented in §17.9.
 - **§29 Open Decisions** — Items resolved during Sprint 1 and the Sprint 2 kick-off marked closed with date + decision pointer: auth library (resolved 2026-05-17, rolled-our-own), GitHub plan branch protection (resolved 2026-05-16, pre-push hook + CI gates), KYC reviewer role for MVP (resolved 2026-05-17, super-admin-only), Porichoy deferral path (resolved 2026-05-17, manual review + scaffold-only adapter).
 
@@ -733,6 +743,30 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 
 **Gotcha trail:** `.claude/memory/gotchas.md` "Postgres superusers ALWAYS bypass RLS" + "BYPASSRLS roles need explicit table grants — they're not implicit". Treat both as immutable rules for the lifetime of the multi-tenant model.
 
+#### 4.2.1.1 Append-only tables (load-bearing — extends the role hierarchy above)
+
+A subset of tables is designated **append-only**: rows are INSERTed and SELECTed, never UPDATEd or DELETEd from application code. `audit_logs` is the first (per §1.3 R8 "audit everything that changes state" + §9.10), and the pattern applies to any future append-only table (event sourcing trails, signed legal-document consent receipts, regulator-disclosed reports).
+
+For these tables the migration **MUST** include explicit `REVOKE` statements for `eventpulse_app` after the standard grants land:
+
+```sql
+-- Standard grants block from §4.2.1 above runs first, then:
+REVOKE UPDATE, DELETE, TRUNCATE ON audit_logs FROM eventpulse_app;
+```
+
+**Why explicit REVOKE is required:** `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE, ...` (the canonical block from §4.2.1) **over-grants** UPDATE + DELETE on every newly-created table — including append-only ones. Without the explicit REVOKE, an application-context bug could mutate or wipe audit history through `eventpulse_app`, defeating the §1.3 R8 immutability guarantee at the layer where it matters most. RLS policies that omit UPDATE/DELETE policies are **not sufficient** — RLS only filters the rows a policy applies to; the missing DELETE policy returns "no rows affected" silently, not "permission denied." The REVOKE moves the denial up to the GRANT layer where Postgres throws a hard error.
+
+`eventpulse_admin` retains full mutation grants for legitimate operations (retention sweeps, manual incident remediation under audit-of-the-audit logging). This is intentional — there must be a path to physically delete data when regulators require it (BFIU 5-year retention ceiling, GDPR right-to-erasure narrow exceptions), but that path runs only through the BYPASSRLS super-admin role and only via tooling that itself logs the operation.
+
+**Pattern checklist for any new append-only table:**
+
+1. Standard grants block from §4.2.1 runs (idempotent).
+2. RLS enabled + policies for SELECT + INSERT only (no UPDATE / DELETE policies).
+3. Explicit `REVOKE UPDATE, DELETE, TRUNCATE ON <table> FROM eventpulse_app;` at the end of the migration.
+4. Integration test: open a `withTenant()` transaction, attempt UPDATE + DELETE + TRUNCATE — each must raise `permission denied`, not silently affect zero rows.
+
+**Codified by:** Day 14 (PR #70, `audit_logs`). `.claude/memory/gotchas.md` "`ALTER DEFAULT PRIVILEGES` over-grants UPDATE/DELETE on new append-only tables — REVOKE explicitly".
+
 ### 4.3 RLS Policy Template
 
 For every domain table:
@@ -836,6 +870,15 @@ CREATE TABLE sessions (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 ```
+
+**Tenant-context read pattern (frontend) — `useTenantType` hook + TanStack Query.** Tenant portal screens that need the current tenant's `type` (organisation vs individual, nullable per §9.1 until the post-login Account-Type modal sets it) read it via the `useTenantType()` hook in `apps/web/src/hooks/use-tenant-type.ts`. The hook is a thin `useQuery` wrapper around `GET /api/v1/tenant/me` (which returns `{ data: { tenant: {...} } }` per §10.2). Key conventions:
+
+- **TanStack Query is the project's server-state cache** (landed at Item 12 / Day 16). Provider wired into `apps/web/src/app/(tenant)/layout.tsx`; default options: `staleTime: 30s`, `gcTime: 5min`, `retry: 1`. Per-query overrides allowed (e.g. KYC reviewer detail view sets `staleTime: 0` + `gcTime: 0` so PII evaporates on navigation — see Item 13).
+- **Mutations invalidate by tag.** `useInvalidateTenantType()` is exported alongside `useTenantType` and is the canonical way to refetch tenant context after the Account-Type modal sets the type — never `queryClient.refetchQueries(...)` ad-hoc.
+- **`useTenantType` underpins two surfaces:** (a) the `TenantTypeGate` component (`apps/web/src/components/tenant-type-gate.tsx`) which shows the Account-Type modal when `tenant.type === null`; (b) the KYC wizard variant router which branches on `tenant.type` to render the Individual Tier 1 wizard vs the Organisation Tier A wizard (Item 12 Days 16–17).
+- **No client-side caching of PII fields beyond default tenant data.** The hook deliberately reads only the tenant's `type` + `id` + `slug` + `kyc_status` (low-sensitivity). KYC submission detail data (NID images, financial accounts) uses dedicated per-query cache overrides (`staleTime: 0`, `gcTime: 0`) so the data evaporates on navigation away — see Item 13.
+
+Decision rationale: `.claude/memory/decisions.md` "TanStack Query lands at Item 12; `useTenantType` migrated for consistency" (2026-05-18) + "Tenant account_type is set-once for MVP — change requires support intervention" (2026-05-18).
 
 ### 5.4 RBAC Permissions Matrix (Tenant Context)
 
@@ -1055,7 +1098,14 @@ CREATE EXTENSION IF NOT EXISTS citext;
 
 CREATE TABLE tenants (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  type text NOT NULL CHECK (type IN ('organisation','individual')),
+  -- type is NULLABLE per migration 0006 (Item 11, Day 15). The row exists from sign-up
+  -- but the type is chosen via the post-login Account-Type modal on first dashboard load.
+  -- Set-once for MVP per decisions.md 2026-05-18: once a non-NULL value is written, the
+  -- transition to a different non-NULL value is rejected at the application layer
+  -- (POST /api/v1/tenant/account-type returns 409 TENANT_TYPE_ALREADY_SET); change
+  -- requires support intervention. The CHECK constraint accepts NULL precisely to allow
+  -- this gated-modal flow without writing a placeholder value.
+  type text CHECK (type IS NULL OR type IN ('organisation','individual')),
   name text NOT NULL,
   slug citext NOT NULL UNIQUE,                -- shares namespace with users.handle
   is_personal boolean NOT NULL DEFAULT false, -- true for self-service auto-provisioned tenants
@@ -2074,26 +2124,44 @@ Toggle in `white_label_settings`. Affects:
 
 ## §13 — KYC Engine
 
-### 13.0 Status (v2.2) — Porichoy deferred, MVP uses manual review
+### 13.0 Status (v2.3) — Platform-wide manual verification only for MVP
 
-> **Read this before §13.1.** Porichoy (`api.porichoy.gov.bd`) is treated throughout §13 as the **primary automated NID validation source**. At Sprint 2 kick-off (2026-05-17), Moshiur reported Porichoy is unreachable and procurement of API credentials is unclear. Per `.claude/memory/decisions.md` "Porichoy deferred — manual NID review for MVP" (2026-05-17), the MVP ships KYC validation as a **manual reviewer flow**, with the Porichoy integration **scaffolded but not wired**.
+> **Read this before §13.1.** Through Sprint 2 multiple per-item KYC-verification deferrals accumulated as procurement and operational reality bit: Porichoy unreachable (2026-05-17), eTIN regex + BFIU sanctions matcher deferred (2026-05-17), and Day 17's BIN-format BLOCKER surfaced a third "we have a regex that rejects valid data" near-miss. Per `.claude/memory/decisions.md` "Platform-wide policy — manual verification only for MVP (consolidates prior per-item deferrals)" (2026-05-19), these are consolidated into a single platform-wide stance — `§13.1–§13.3` describe the engine, this block describes how it actually runs at MVP.
 >
-> **What ships in MVP (Sprint 2):**
+> **The policy (verbatim from the canonical decisions.md entry):** At MVP, the platform performs **zero automated verification of any submitted KYC data**. All data — every field, every document, every claim — is reviewed by a human super admin via the KYC review queue (Item 13, Day 18). Server-side schema validation continues unchanged (Zod schemas enforce field types, required fields, structural shapes, max lengths, no embedded null bytes — that's input validation / injection protection, not data verification). Anything semantic — does this NID number correspond to a real person; is this BIN format current; is this eTIN active; is this RJSC certificate real; is this signatory authorised; does this bank account holder name match the NID; etc. — is reviewer judgment, not code.
 >
-> - NID validation: **manual.** Super admin review queue displays the uploaded NID image inline; reviewer enters the NID number from the image into a dedicated field for audit; system performs no automated check against Porichoy.
-> - eTIN format check: **local regex** (no external call).
-> - Bank/MFS name match against NID name: **manual** checkbox on the review form.
-> - BFIU sanctions screening: **manual list-check** against `infra/compliance/sanctions.json` (seeded from BFIU's public sanctions notice, manual monthly refresh).
-> - SIM-NID match: **deferred** until Porichoy lands (the operator API was always called via Porichoy in the original design).
-> - Porichoy adapter: **scaffold only.** Interface `PorichoyClient`, env vars `POROCHOY_API_KEY` + `POROCHOY_BASE_URL`, Secrets Manager entry placeholder, TODO-stub for `nidVerify()`.
+> **Coverage is total.** This explicitly extends to: BIN format validation, RJSC certificate validation, eTIN format validation (full, not just regex), address proof verification, bank account name-match-to-NID, MFS account verification, sanctions matching, NID validation, signatory verification, board resolution authenticity. **Everything.** The platform captures data and surfaces it cleanly to reviewers. Reviewers exercise judgment.
 >
-> **Behaviour of §13.1–§13.3 under the deferral:** the flow description in §13.1 still reads accurately, but the bullet "Run automated checks: NID format / eTIN format / Bank/MFS name match / SIM-NID match / BFIU sanctions / Porichoy NID validation" applies only to **automated** sub-items that can run today (NID format + eTIN format). All other sub-items become **manual reviewer steps** that the super admin completes in the review queue. The `kyc_submissions.nid_verified` boolean is set to true by reviewer action rather than by API call; `kyc_submissions.porichoy_verification_id` stays nullable. When Porichoy lands, new submissions populate the column from the API; historical manual submissions remain null (and audit-trail clear).
+> **Why this consolidation (rationale, paraphrased):**
 >
-> **Throughput ceiling under manual review:** ~10 minutes per submission × ~48 submissions/day per reviewer × 1 reviewer (super-admin-only per `.claude/memory/decisions.md` "KYC reviewer role for MVP — super-admin-only" 2026-05-17) = ~48/day cap. Sprint 3 trigger to revisit: > 30 submissions/day sustained, OR before any third party gets KYC-reviewer responsibility, whichever first.
+> - **MVP volume is operationally fine for manual review.** Sub-50 KYC submissions per week realistically through Phase 1-2. At ~10 minutes per submission × ~48 submissions/day per reviewer × 1 super-admin reviewer (per `.claude/memory/decisions.md` "KYC reviewer role for MVP — super-admin-only" 2026-05-17) = ~48/day cap. We do not approach this cap at MVP scale.
+> - **Half-built automation is worse than no automation.** Validators that occasionally reject valid data — because the regex is wrong, the third-party API is stale, the sanctions list is outdated, the format mandate shifted (NBR's 2019-11-30 BIN-format change is exactly this shape) — are operationally worse than no validator. They create false confidence and silently reject legitimate tenants.
+> - **Third-party automation has procurement-risk that does not justify MVP-stage benefit.** Porichoy (credentials unreachable), BIN registry (no public API), RJSC (no public API), sanctions feeds (BFIU's public notice is PDF; commercial feeds require contracts) — each path adds complexity that the MVP queue solves at zero cost.
+> - **The reviewer queue is already where humans look at every submission.** Surfacing the raw data is more flexible than binding the system to a specific validation algorithm.
 >
-> **When credentials arrive:** one focused PR wires `nidVerify()` + integration tests against a recorded fixture; no business-logic changes needed because the manual flow already produces the same `nid_verified` column shape the live integration would write. The Porichoy scaffold landed during Sprint 2 Day 20 is structured specifically to make that PR small.
+> **Behaviour of §13.1–§13.3 under the policy.** The flow description in §13.1 still reads accurately for the *engine* (validate → store → reviewer-acts → transition). The "Run automated checks" bullet within it applies only to checks that survive the policy — currently `NID format` (length/charset) only. All other sub-items become **manual reviewer steps**. The `kyc_submissions.nid_verified` boolean is set to true by reviewer action rather than by API call; `kyc_submissions.porichoy_verification_id` stays nullable. The §13.0 v2.2 block enumerated "eTIN format check: local regex" + "BFIU sanctions screening: manual list-check against `infra/compliance/sanctions.json`" — both are dissolved by this policy (no regex shipped, no sanctions.json shipped). The Day 17 PR 1 13-digit BIN regex in the schema remains as a passing-test guard against the specific regression that surfaced it, but is grandfathered as the one exception; new format fields default to plain-string structural validation only (see `.claude/memory/gotchas.md` "BIN 13-digit fact is reviewer-documentation, not server-side enforcement").
 >
-> **Sub-50-submissions/day operational assumption:** Phase 1 will not exceed this; Phase 2 expansion (attendee accounts + self-service hosting at `my.eventpulse.com.bd` per §2.1) is the trigger to reassess. If Porichoy remains unreachable through Phase 2, the entry in §29 (resolved 2026-05-17 with this deferral) reopens as a §29 Open Decision asking for an alternative NID validation source.
+> **Item 13 review queue behaviour (Day 18 PM consequence):** every PII field, every document, every claim surfaces clearly in the detail view. **No validation badges, no "auto-flagged" indicators.** Helper text adjacent to each field describes the expected format as reviewer documentation ("BIN should be 13 digits per NBR 2019-11-30; verify against NBR VAT portal at vat.gov.bd") but does not enforce server-side rejection. **Reviewer notes free-text field per submission** (captured in audit_log on save) for the reviewer to record their verification process. **Approve action requires modal confirmation** that the reviewer has reviewed all required fields and documents. **Reject action requires typed reason** that goes to the tenant in the rejection email and persists in audit_log. **No `kyc_submissions.flags` jsonb column** — when Phase 3 automation lands, the flag column lands in the same migration as the validator code.
+>
+> **Porichoy adapter stays scaffold-only** (interface `PorichoyClient`, env vars `POROCHOY_API_KEY` + `POROCHOY_BASE_URL`, Secrets Manager entry placeholder, TODO-stub for `nidVerify()`). This shape is now the **canonical pattern** for all future automation integrations — interface + env + secrets entry + TODO stub, with the live wiring landing as a focused PR alongside the operational decision to flip from manual-only to manual-plus-flag.
+>
+> **Phase 2 trigger (re-evaluation gate):** when verified KYC submission volume crosses **50 per week sustained (calculated as a 4-week trailing average)**, reassess. **The decision criterion is reviewer capacity, not feature ambition** — the question is "are reviewers spending more than 4 hours per business day on KYC backlog?" not "do we want automation." If the capacity answer is yes, automation gets scoped; if no, the manual-only policy continues regardless of validator availability.
+>
+> **Phase 3 plan (when triggered):** add automated checks **alongside manual review** (never replacing it for MVP-pattern tenants). Each automation arrives as an advisory flag the reviewer sees alongside the raw data, **never as a hard reject**:
+>
+> 1. Porichoy NID API integration once credentials and procurement complete — flag mismatches for reviewer, do not auto-reject
+> 2. eTIN active-status check against NBR e-filing portal if API available — flag inactive eTINs for reviewer, do not auto-reject
+> 3. BIN format + active-status check against NBR VAT portal if API available — flag for reviewer
+> 4. BFIU sanctions matching against canonical list (procurement path established) — flag hits for reviewer
+> 5. RJSC certificate active-status check if API available — flag for reviewer
+> 6. Address geocoding + division/postal-code consistency check — flag inconsistencies
+> 7. Bank account name verification via partner bank APIs if available — flag mismatches
+>
+> All automation is augmentation of reviewer judgment, not replacement. Even at Phase 3 volume, every KYC submission still has reviewer attention. The `kyc_submissions.flags jsonb` column lands in the **same migration** as the first validator — historical manual-only submissions remain `flags=null`, audit-trail clear.
+>
+> **§29 trigger if the policy persists past Phase 2:** if KYC automation is still not implemented at Phase 3 kick-off (≈Sprint 13), file a §29 Open Decision asking whether the manual-review pattern is acceptable in perpetuity or whether at-scale automation must land before Phase 4 marketplace volume.
+>
+> **Cross-references:** `.claude/memory/decisions.md` "Platform-wide policy — manual verification only for MVP (consolidates prior per-item deferrals)" (2026-05-19, canonical source) — supersedes 2026-05-17 "Sprint 2 Item 10 scope amendment — third-party verification deferred to manual review" + 2026-05-17 "Porichoy deferred — manual NID review for MVP" (both retained in the log for archaeology). `.claude/memory/gotchas.md` "BIN 13-digit fact is reviewer-documentation, not server-side enforcement" (2026-05-19 reframe).
 
 ### 13.1 Tier Flow
 
@@ -2727,7 +2795,7 @@ TXT    <SES DKIM CNAMEs>             ...                         3600
 TXT    eventpulse.com.bd             v=spf1 include:amazonses.com -all   3600
 ```
 
-**Staging — actual MVP records** (in hosted zone `Z003493917KJX7VCR8ZMR`, pointing at Elastic IP `18.141.7.246`). Note: staging deliberately does **NOT** use a wildcard; five explicit A records are enumerated instead so each subdomain is auditable and Let's Encrypt issues a SAN cert covering exactly that list (no surprises from an over-broad wildcard during dev):
+**Staging — actual MVP records** (in hosted zone `Z003493917KJX7VCR8ZMR`, pointing at Elastic IP `18.141.7.246`; **re-verified 2026-05-19 against `aws route53 list-resource-record-sets` — no drift since Sprint 1 Day 3-4 provisioning**). Note: staging deliberately does **NOT** use a wildcard; five explicit A records are enumerated instead so each subdomain is auditable and Let's Encrypt issues a SAN cert covering exactly that list (no surprises from an over-broad wildcard during dev):
 
 ```
 Type   Name                              Value          TTL
@@ -2827,6 +2895,60 @@ JWT signing key rotated quarterly with overlap; DB master semi-annually.
 Cost is trivial ($1/month per CMK). The pattern is enforced by code review (`/review` flags any new bucket/log group encrypted with a CMK that doesn't match the data's sensitivity tier).
 
 Rotation is on for every CMK. Rotation cycle interval defaults to one year; high-PII CMKs may rotate more aggressively if a compromise scenario surfaces.
+
+#### 17.9.1 GitHub Actions → AWS OIDC trust pattern (canonical project standard)
+
+All GitHub Actions → AWS role-assumption trust policies in this project follow the **three-claim shape**. No exceptions; no `StringLike`; no wildcards; no `StringEqualsIfExists`. Each claim narrows a different dimension and the combination defines exactly "this workflow file, from this branch, declaring this environment, in this repo, can assume this role."
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": { "Federated": "arn:aws:iam::739275468267:oidc-provider/token.actions.githubusercontent.com" },
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": {
+      "StringEquals": {
+        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+        "token.actions.githubusercontent.com:sub": "repo:publicpulseagency/EventPulse:environment:staging",
+        "token.actions.githubusercontent.com:job_workflow_ref": "publicpulseagency/EventPulse/.github/workflows/deploy-staging.yml@refs/heads/main"
+      }
+    }
+  }]
+}
+```
+
+Each claim's role:
+
+1. **`aud = sts.amazonaws.com`** defends against accidental cross-audience token reuse.
+2. **`sub = repo:OWNER/REPO:environment:ENV_NAME`** pins to a specific GitHub deployment environment in this repo. The environment-format is **mandatory** when the workflow uses `environment:` — GitHub overrides the ref-format `sub` to the environment-format when an environment is declared (see `.claude/memory/gotchas.md` "GitHub Environments override the OIDC `sub` claim from `ref:refs/heads/X` to `environment:Y`").
+3. **`job_workflow_ref = OWNER/REPO/.github/workflows/WORKFLOW_FILE@refs/heads/BRANCH`** pins to the specific workflow file + branch combination. A malicious PR that copies the workflow file under a different name, or a new workflow declaring the same environment, fails this check cleanly. This is the compensating guardrail that recovers the "only main can deploy" intent when the environment-format `sub` doesn't directly carry branch information.
+
+**SSM-based deploy convention — dual-ARN inline policy.** Inline IAM policies for assumable roles that issue `ssm:SendCommand` MUST include both ARN forms for the same instance in the resource list:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": "ssm:SendCommand",
+  "Resource": [
+    "arn:aws:ec2:ap-southeast-1:739275468267:instance/i-02e4fddeb923c14f9",
+    "arn:aws:ssm:ap-southeast-1:739275468267:managed-instance/i-02e4fddeb923c14f9",
+    "arn:aws:ssm:ap-southeast-1::document/AWS-RunShellScript"
+  ]
+}
+```
+
+The `ec2:instance/i-X` ARN form alone fails the IAM check because AWS evaluates SSM agent-routed instances against the `managed-instance/i-X` ARN form. Both are required. See `.claude/memory/gotchas.md` "SSM agent-routed instances require both `ec2:instance` and `ssm:managed-instance` ARN forms in `SendCommand` resource policy".
+
+**Applications:**
+
+- **First application:** `eventpulse-deploy-staging` (Sprint 2 Day 13, role ARN `arn:aws:iam::739275468267:role/eventpulse-deploy/eventpulse-deploy-staging`). Verified end-to-end via workflow_dispatch run [25988575225](https://github.com/publicpulseagency/EventPulse/actions/runs/25988575225) — all 10 steps green, EC2-side `deploy.sh` returned exit 0.
+- **Next application:** `eventpulse-deploy-prod` (Sprint 4) follows this exact pattern with `environment:production` and `deploy-prod.yml@refs/heads/prod`. No code review needed beyond confirming the three-claim shape; that's the whole point of the pattern.
+- **All future per-environment / per-service deploy roles** (Phase 3+ — payouts worker, KYC reviewer assist agent, future per-team roles) inherit the same shape. PRs that introduce a new GitHub-OIDC trust policy diverging from this shape (e.g. using `StringLike`, wildcards, ref-format `sub` while the workflow declares an environment, single-ARN-form SSM resource lists) are rejected during `/review`.
+
+**Provisioning script:** `infra/scripts/setup-github-oidc.sh` (idempotent, parameterised). One-command prod cutover when the time comes.
+
+**Cross-references:** `.claude/memory/decisions.md` "Canonical GitHub Actions → AWS OIDC trust pattern (project standard)" (2026-05-17, canonical source). The four debugging lessons that earned this pattern are individually documented in `.claude/memory/gotchas.md` (each finding grep-able from its symptom).
 
 ### 17.10 Backups
 
@@ -3416,12 +3538,21 @@ A unit of work is "done" when all of the following are true:
 - Day 9–10: Email sending via SES (verify domain, ship `tenant_welcome`, `verify_email`, `magic_link_signin` templates). PM2 ecosystem file configured; deploy.sh + rollback.sh runbook scripts. CI green.
 
 **Sprint 2 — KYC, Onboarding & Trust Center Skeleton**
+
+> **Shipped-as annotations (added 2026-05-19 at v2.3 bump).** The original plan below is preserved as historical record; bracketed annotations note where the actual sprint diverged. Sprint plan compression — Sprint 2 ran 10 work-days as 11 numbered days (Days 11–20) in the compressed-day execution log per `.claude/memory/progress.md`.
+
 - Day 1–3: KYC submission API; S3 bucket setup with KMS; document upload signed URLs.
+  - **[Shipped as Days 12–14 across three items.]** Item 6 (Day 12) — KYC bucket + dedicated CMK (per-purpose KMS pattern per §17.9). Items 7+8 (Day 13) — `kyc_submissions` schema + migration 0004 + S3 client + presigned-PUT upload-URL endpoint + 5 RLS cross-tenant tests + OIDC infra carry. Item 9 (Day 14) — state machine + submit endpoint + audit trail (`audit_logs` table + `writeKycTransition` helper) + notification stubs.
 - Day 4–5: Tenant portal onboarding (post-login Account-Type modal, dashboard empty state, KYC wizard for individual + org). Glass-card design system applied throughout.
+  - **[Shipped as Days 15–17 across two items.]** Item 11 (Day 15) — post-login Account-Type modal + `tenants.type` nullable migration 0006 + `useTenantType` hook + `TenantTypeGate` + frontend test rig (vitest jsdom + RTL + vitest-axe). Item 12 Part 1 (Day 16) — KYC wizard frame + Individual Tier 1 variant + per-tier zod discriminated unions + TanStack Query infrastructure + drafts router. Item 12 Part 2 (Day 17) — Organisation Tier A wizard + 6-step decomposition (verbose step names → shortened jsonb keys: `org_info`→`org`, `signatory_identity`/`signatory_docs`→`signatory`) + Individual Tier 1 polish + Playwright e2e infrastructure.
 - Day 6–7: Super admin KYC review queue UI + approve/reject API.
+  - **[Shipped as Day 18 PM as Item 13.]** Scope simplified per the platform-wide manual-verification policy (§13.0, decisions.md 2026-05-19): no validation badges, no `flags` jsonb column, no auto-flag UI. Reviewer-notes free-text + per-field helper text + approve-modal-confirm + reject-typed-reason as the entire concern-surfacing surface. Reviewer checklist as structured tracking (Decision I, decisions.md 2026-05-19) — checked-state persists across review sessions, server-enforces required keys before approve.
 - Day 8: Porichoy NID validation integration; eTIN format checks.
+  - **[Deferred.]** Per `.claude/memory/decisions.md` "Platform-wide policy — manual verification only for MVP" (2026-05-19, supersedes 2026-05-17 "Porichoy deferred" + 2026-05-17 "Sprint 2 Item 10 scope amendment"). Both Porichoy integration and eTIN format-regex deferred to Phase 3 (volume-triggered, see §13.0 Phase 2 trigger). Porichoy adapter scaffold-only ships Day 20 as Item 16; no live calls until credentials arrive.
 - Day 9: Notification on approval/rejection; provisioning of tenant subdomain on approval.
+  - **[Shipped as Day 20 as part of Item 16.]** Notification stubs landed at Day 14 (Item 9, `[STUB]` log marker); real SES wiring Day 20 along with bilingual `kyc_approved` + `kyc_rejected` templates. Tenant subdomain provisioning lands at Day 20 (TODO-stubbed inside Item 13's approve action; actual Nginx vhost generation in Item 16).
 - Day 10: Trust Center pages scaffolded — `legal_documents` + `legal_document_versions` tables seeded with v1.0 content for all 6 legal contracts + 12 trust artefacts; public routes wired; super admin "Legal & Trust" editor with version control.
+  - **[Shipped as Day 19 as bundled Items 14+15.]** Scope reduced to **v0.1 placeholders** per `.claude/memory/decisions.md` "Trust Center v0.1 placeholders — skeleton-only" (2026-05-17): real headings + one-sentence "PLACEHOLDER — to be drafted by counsel covering X" per section, non-dismissable DRAFT banner, no AI-generated full-text drafts. Onboarding flow gates on consent → consent gates on v1.0 documents → first paying tenant blocked until counsel returns drafts.
 
 **Sprint 3 — Events, Tickets, Orders, EPS, Fee Engine**
 - Day 1: Fee calculator (§14.3) as the first-class deliverable. Unit tested with all four (absorb/pass_through) combinations × edge amounts.
@@ -3556,11 +3687,20 @@ Claude Code must STOP and ask before proceeding if any of these come up. Items m
 
 **Resolved in v2.2 (Sprint 1 + Sprint 2 kick-off):**
 - ✓ Auth foundation library — rolled our own in-repo composition (`@noble/hashes` argon2id + `jose` JWT + `arctic` OAuth + custom Postgres session adapter). Lucia is in maintenance mode as of 2026 and not adoptable for the most security-critical surface. See `.claude/memory/decisions.md` "Auth foundation library choice" (2026-05-17). Documented in §1.2 + §5.
-- ✓ Porichoy NID validation availability — service unreachable at Sprint 2 kick-off; procurement timeline unclear. MVP ships KYC validation as manual reviewer flow with Porichoy adapter scaffolded but not wired. Reopens as §29 Open Decision if Porichoy remains unreachable through Phase 2. See `.claude/memory/decisions.md` "Porichoy deferred — manual NID review for MVP" (2026-05-17) and §13.0 Status block above.
+- ✓ Porichoy NID validation availability — service unreachable at Sprint 2 kick-off; procurement timeline unclear. MVP ships KYC validation as manual reviewer flow with Porichoy adapter scaffolded but not wired. Reopens as §29 Open Decision if Porichoy remains unreachable through Phase 2. Originally resolved per `.claude/memory/decisions.md` "Porichoy deferred — manual NID review for MVP" (2026-05-17); that entry is now **superseded** by the broader 2026-05-19 "Platform-wide policy — manual verification only for MVP (consolidates prior per-item deferrals)" — see that entry + current §13.0 Status block above for the canonical pointer.
 - ✓ KYC reviewer role for MVP — super-admin-only. `kyc_reviewer` role + multi-reviewer routing deferred to Phase 2 Sprint 6 alongside team-management UI. See `.claude/memory/decisions.md` "KYC reviewer role for MVP — super-admin-only" (2026-05-17).
 - ✓ KYC bucket KMS — dedicated `alias/eventpulse-kyc-<env>` CMK per per-purpose blast-radius pattern (§17.9). See `.claude/memory/decisions.md` "Dedicated KMS CMK for KYC bucket" (2026-05-17).
 - ✓ Trust Center v0.1 placeholder content policy — skeleton-only (real headings + one-sentence "PLACEHOLDER — to be drafted by counsel covering X" per section), non-dismissable DRAFT banner, no AI-generated full-text drafts. See `.claude/memory/decisions.md` "Trust Center v0.1 placeholders — skeleton-only" (2026-05-17). Onboarding flow gates on consent → consent gates on v1.0 documents → first paying tenant blocked until counsel returns drafts.
 - ✓ Postgres role hierarchy for RLS — `eventpulse_app` (NOLOGIN, non-superuser, no BYPASSRLS) ← `eventpulse_admin` (NOLOGIN, non-superuser, BYPASSRLS) with explicit table grants for both. Codified in §4.2.1. Surfaced by the Sprint 1 Day 5-6 CI failure documented in `.claude/memory/gotchas.md` "Postgres superusers ALWAYS bypass RLS" + "BYPASSRLS roles need explicit table grants".
+
+**Resolved in v2.3 (Sprint 2 Days 14–19):**
+
+- ✓ Platform-wide manual KYC verification policy — at MVP, zero automated verification of any submitted KYC data; all data reviewed by human super admin via the KYC review queue (Item 13). Server-side schema validation (zod) continues unchanged; anything semantic is reviewer judgment. Phase 2 trigger: 50 verified submissions/week sustained as a 4-week trailing average (reviewer-capacity criterion, not feature ambition). Phase 3 plan: seven advisory-flag integrations alongside reviewer judgment, never auto-reject. Consolidates and supersedes prior per-item deferrals (Porichoy + eTIN/sanctions). See `.claude/memory/decisions.md` "Platform-wide policy — manual verification only for MVP (consolidates prior per-item deferrals)" (2026-05-19). Documented in §13.0.
+- ✓ `tenants.type` nullability + set-once semantics — schema relaxed via migration 0006; the row exists from sign-up but `type` is chosen via the post-login Account-Type modal on first dashboard load. Once a non-NULL value is written, transition to a different non-NULL value is rejected at the application layer (409 `TENANT_TYPE_ALREADY_SET`); change requires support intervention. See `.claude/memory/decisions.md` "Tenant account_type is set-once for MVP — change requires support intervention" (2026-05-18). Documented in §9.1.
+- ✓ Append-only audit-table invariant — explicit `REVOKE UPDATE, DELETE, TRUNCATE FROM eventpulse_app` required in every migration introducing an append-only table; `ALTER DEFAULT PRIVILEGES` over-grants and is not sufficient. `eventpulse_admin` retains full grants for legitimate retention sweeps. First application: `audit_logs` (Day 14, PR #70). See `.claude/memory/gotchas.md` "`ALTER DEFAULT PRIVILEGES` over-grants UPDATE/DELETE on new append-only tables — REVOKE explicitly". Documented in §4.2.1.1.
+- ✓ Canonical GitHub Actions → AWS OIDC trust pattern — three-claim shape (aud + sub environment-scoped + job_workflow_ref workflow-file-pinned) + SSM dual-ARN inline policy convention. First application: `eventpulse-deploy-staging` (Sprint 2 Day 13). See `.claude/memory/decisions.md` "Canonical GitHub Actions → AWS OIDC trust pattern (project standard)" (2026-05-17). Documented in §17.9.1.
+- ✓ Audit helper pattern — one-per-domain (never a generic `writeAudit()`). Multiple helpers in the same domain file are fine. Codified by Day 14 (`writeKycTransition`) + Day 15 (`writeTenantTypeSet`) + Day 16 (`writeKycDraftCreated` + `writeKycDraftUpdated`).
+- ✓ TanStack Query landing decision — server-state cache for the tenant portal lands at Item 12 (Day 16); `useTenantType` migrated alongside for consistency. Provider wired into `(tenant)/layout.tsx`; per-query cache overrides allowed (e.g. KYC reviewer detail view sets `staleTime: 0` for PII). See `.claude/memory/decisions.md` "TanStack Query lands at Item 12; `useTenantType` migrated for consistency" (2026-05-18). Documented in §5.3.
 
 **Still open — Claude Code asks before assuming:**
 
