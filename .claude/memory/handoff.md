@@ -68,10 +68,23 @@ d9d765f       feat(api): Sprint 2 Day 14 — Item 9 KYC submission state machine
 - Memory commits separate from feature commits. `memory:` prefix for memory-only.
 - STOP-ASK in force for §29 Open Decisions, contradictions with decisions.md, RLS policies unjustified against §4, money math outside `fee-calculator.ts`, AWS writes with prod blast radius, anything committing to a legal/regulatory position not already in decisions.md.
 
-## Sprint 2 closeout candidates (queued for v0.2.0-sprint-2 + v2.3 CLAUDE.md bump)
+## Scheduled mid-sprint PR slots (carved out of the original closeout bundle 2026-05-18)
 
-- **CLAUDE.md §17 amendment** — codify the canonical OIDC trust pattern (three-claim shape) as project standard in the playbook.
-- **CLAUDE.md §13.0 + §13.3 amendment** — drop the "eTIN format check: local regex" + "BFIU sanctions screening: manual list-check against `infra/compliance/sanctions.json`" language from §13.0; document the `draft` state added in migration 0005 in §13.3.
+- **Day 18 AM — v2.3 CLAUDE.md playbook bump (dedicated PR, runs BEFORE Item 13 starts).** Synchronises the playbook with reality so Items 13 + 14 + 15 don't build against stale text. Bundles:
+  - §17 amendment — canonical OIDC trust pattern (three-claim shape) as project standard
+  - §13.0 amendment — drop "eTIN format check: local regex" + "BFIU sanctions screening: manual list-check against `infra/compliance/sanctions.json`" language (Item 10 deferred)
+  - §13.3 amendment — document the `draft` state added in migration 0005 for the `rejected → draft` resubmit lane
+  - §9.1 amendment — `tenants.type` nullable (Item 11 / migration 0006 relaxed NOT NULL)
+  - §4.2.1 amendment — append-only audit-table invariant (REVOKE UPDATE/DELETE pattern per Day 14 gotcha)
+  - Any additional §-touching decisions that land Days 16-17
+- **Day 20 AM — OAuth sign-in bug fix (dedicated PR, runs BEFORE `/sprint` retro).** Discovered 2026-05-17 evening while investigating `https://staging.eventpulse.com.bd/sign-in`:
+  - Button hrefs `/api/auth/{provider}/start` 404 on the web vhost (actual API routes live at `https://api.staging.eventpulse.com.bd/api/v1/auth/oauth/{provider}/start`)
+  - OAuth credentials never provisioned: `eventpulse/staging/oauth-google` + `eventpulse/staging/oauth-apple` Secrets Manager entries don't exist; `googleClient()`/`appleClient()` throw on first request → 500
+  - Code-fix scope (this PR): switch hrefs to absolute `NEXT_PUBLIC_API_BASE_URL` + correct `/api/v1/auth/oauth/...` path; extend `bootstrap-staging.sh` to materialise OAuth secrets into `.env.staging` like the existing KYC step does
+  - Credential-provisioning (parallel-track Moshiur): create Google OAuth 2.0 Client + Apple Services ID / private key with staging callback URLs registered; hand back so Claude Code can write the Secrets Manager entries
+
+## Sprint 2 closeout candidates (queued for v0.2.0-sprint-2 release — NOT bundled into the v2.3 playbook bump)
+
 - **S3 signed URL issuance audit_logs backfill** — single audit write inside `getKycUploadUrl()` (per Day 14 evening decision).
 - **audit_logs unset-GUC smoke test** — one-test follow-up to `rls-cross-tenant.test.ts` per Day 14 /review finding #1.
 - Reviewer S4 (Day 12) — dedicated KMS key-admin role for the KYC CMK.
