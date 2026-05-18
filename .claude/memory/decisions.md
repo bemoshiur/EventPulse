@@ -4,6 +4,158 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-18 · KYC wizard uses server-side drafts (activates the `draft` status added in migration 0005) — not localStorage
+
+**Context:** Sprint 2 Day 16-17 Item 12 ships the KYC wizard. Tier 1 Individual decomposes into 4 steps (identity → address → financial → review); the forthcoming Organisation Tier A variant (Day 17) decomposes into ~5–6 steps. With document uploads and form fields measured in dozens per submission, a tenant who closes the tab mid-flow must not lose work — that's a hostile experience for a payment platform where the very gate is verifying who can take money. The question at plan time is **where** the partial state lives: client-side (localStorage) vs server-side (a `kyc_submissions` row that progresses through `draft → submitted`).
+
+**Decision:** Server-side drafts. The wizard creates a `kyc_submissions` row in `status='draft'` on step 1 entry; each subsequent step PATCHes the row's `documents` / `fields` jsonb columns; the final review step transitions the row `draft → submitted` via the Day 14 state machine. No client-side persistence of KYC field values is permitted anywhere in the wizard.
+
+The `draft` status was added to `kyc_submissions.status` CHECK in migration 0005 (Day 14) and added to the state machine's legal-transitions map (`rejected → draft → submitted`) in `apps/api/src/domain/kyc/state-machine.ts`. Until Item 12, only the `rejected → draft` resubmit lane used the `draft` state at the DB layer; the comment in the state machine file ("Row creation (first-write) does NOT route through transition()") was correct for Item 9's direct-submit endpoint but Item 12 introduces a parallel path. Both paths coexist; the wizard creates rows directly in `draft` via a new `createKycDraft()` helper, then transitions them through `transition('draft', 'submitted')` on final submit. The existing `POST /api/v1/tenant/kyc/submissions` endpoint (Item 9, direct-submit, status='submitted' on first write) is **not deprecated** — it remains valid for programmatic clients or any future "I already have all the data" surface (Phase 3 public API), and the two endpoints share validation via the per-tier schema (Decision B below).
+
+**Rationale:**
+
+- **Device portability.** A tenant who starts the wizard on a phone during their commute and finishes on a laptop at the office gets a coherent experience without re-uploading their NID. localStorage cannot deliver this; sessionStorage/IndexedDB are scoped per-browser.
+- **Browser-clear / private-mode safety.** A user clearing their browser data — common defensive behaviour, especially on shared devices — must not lose 20 minutes of KYC submission. The wizard's audience includes first-time SaaS users and individual organisers on shared family devices.
+- **Audit trail of draft progression.** Each PATCH writes an `audit_logs` row with a diff (see audit-shape note below). Combined with the existing state-transition writes, the audit trail can reconstruct the full submission lifecycle from first draft entry to reviewer decision. Regulatory framing under §15 (BFIU) values this lineage.
+- **Server-side validation parity.** The same per-tier zod schemas (Decision B) validate both PATCHes (partial — per-step sub-schemas) and final submit (full — tier-level schema). Client-side localStorage would either duplicate the schema in JS-only form (drift risk) or omit validation (worse).
+- **Day 13 upload-url integration cleanly composes.** Document uploads already issue S3 keys via the Day 13 signed-URL flow before the row is finalised; the draft row stores the S3 refs in `documents` jsonb as each upload completes. Without a draft row, document refs would need an ephemeral cross-reference table — strictly more complex.
+
+**Audit shape for `kyc.draft_updated`** (sibling helper to `writeKycTransition`, added in `apps/api/src/services/audit/kyc.ts` — same file because both are KYC-domain, one-per-domain pattern preserved per the 2026-05-18 reaffirmation on the Day 14 audit_logs scope entry):
+
+- `action`: `'kyc_submission.draft_updated'`
+- `entity_type`: `'kyc_submission'`, `entity_id`: submission id
+- `diff`: `{ fields: { added: [...field paths], updated: [...field paths], removed: [...field paths] } }` — **field paths only, no values**. Storing values would (a) duplicate PII into a second table when §1.3 R5 says hash-or-omit, (b) bloat the audit table with the same NID/eTIN strings already in `kyc_submissions.fields`. The path-only diff reconstructs "what changed when" without re-storing the secret.
+- Field paths use jsonb path notation (`'identity.nidFront'`, `'address.line1'`, `'financial.accountNumber'`, etc.) — the same paths the per-step zod schemas validate. Wildcards (`*`) and array indices not needed at this stage.
+- `metadata`: `{ actor_role: 'tenant_user', step: 'identity' | 'address' | 'financial' }` — the step the PATCH targeted, captured for forensic queries that want to filter audit rows by wizard step without parsing field paths.
+- One audit row per PATCH request, not per field — a single PATCH that updates 6 fields produces one row with all 6 paths in `diff.fields.updated`.
+
+**jsonb merge semantics on PATCH:**
+
+- The PATCH handler computes the diff (added/updated/removed paths) by comparing the incoming partial against the current `documents` / `fields` jsonb columns, then issues a Postgres `jsonb_set` (or `||` shallow merge for top-level keys) to merge field-by-field rather than replacing the whole jsonb document.
+- Critical safety invariant: a Step 2 PATCH must NEVER wipe Step 1 fields. The merge is server-enforced; the client is not trusted to send the full state. This is the entire reason the merge logic lives at the server layer.
+- For nested keys (e.g. `identity.fullName` inside `fields.identity`), `jsonb_set` is used to target the path; for whole-step replacement (e.g. user revisits Step 1 and re-enters), the handler accepts a `replaceStep: 'identity'` flag in the PATCH body that drops the whole sub-object before merging the new one. Default behaviour is merge.
+
+**Consequences:**
+
+- New endpoints land at `POST/GET/PATCH /api/v1/tenant/kyc/drafts/[:id]` + `POST /api/v1/tenant/kyc/drafts/:id/submit`. All gated by `requireTenantAuth` + `requireTenantType` (the wizard is meaningless before account type is set).
+- New helper `createKycDraft()` lives in `apps/api/src/domain/kyc/state-machine.ts` (or a sibling file) — direct insert in `status='draft'`, audit row written via a new `writeKycDraftCreated()` helper. **Updated comment** in state-machine.ts removes the "draft state is only needed by the resubmit lane" framing; now: "draft state is used by both the wizard create path and the resubmit lane".
+- The wizard's submit handler routes through `transition('draft', 'submitted')` — an existing legal transition; no state machine change required. The `writeKycTransition` audit writer is reused unchanged (its `fromState='draft'` path is already supported).
+- **No client-side persistence anywhere in the wizard.** Verified explicitly for react-hook-form (default behaviour stores in component state only — confirm `persistConfig` is not enabled; no localStorage adapter wired), TanStack Query (cache is in-memory by default — confirm no `persistQueryClient` is installed), and framer-motion (animation state only, no form values touched). The /review pass before PR 3 merge audits all three.
+- **Idempotency on draft creation.** The wizard sends a client-generated UUID in the body; the route uses the Item 9 `INSERT … ON CONFLICT DO NOTHING + SELECT-back` pattern so retries don't double-create. Cross-tenant submissionId conflicts return 409 `SubmissionIdInUseError` (existing error class).
+
+**Cross-references:**
+
+- 2026-05-17 "audit_logs scope at Item 9 — KYC transitions only; auth events + S3 issuance backfill deferred" (incl. 2026-05-18 reaffirmation) — sibling helpers within `services/audit/kyc.ts` honour the one-per-domain pattern; per-domain means per-business-area, not per-helper.
+- 2026-05-17 "Sprint 2 Item 10 scope amendment" — same operational pattern (the wizard captures eTIN as a plain string per-tier; no regex validation, no automated sanctions match; reviewer eyeballs at Item 13).
+- 2026-05-18 "Tenant account_type is set-once for MVP" — the wizard variant choice depends on `tenants.type`; the set-once guarantee means the wizard's variant selection cannot change mid-submission. If a tenant somehow needed to switch (support escalation path), their drafts under the old type would be invalidated by the super admin "change tenant type" action's cascade logic (Phase 2).
+- CLAUDE.md §13 + §13.3 + §13.4 — the wizard implements the graduation flow described in §13.4 at the UX layer; the state machine sits behind the wizard, not in front of it.
+- `apps/api/src/domain/kyc/state-machine.ts` — existing comment about row creation not routing through `transition()` is correct for Item 9's direct-submit; Item 12 adds a parallel create-as-draft path. The state-machine.ts header comment is updated as part of PR 1 (Day 16).
+
+**Path back to client-side drafts:** Not anticipated. Server-side drafts are the durable choice for any KYC-grade flow. If a future surface needs an "anonymous, no-account preview" path (Phase 4 marketing experiment, perhaps), that surface gets its own non-`kyc_submissions` storage with explicit zero-PII guarantees — never localStorage holding NID strings.
+
+---
+
+## 2026-05-18 · Per-tier KYC schemas are discriminated unions, exported from `apps/api/src/schemas/kyc.ts` — single source of truth shared between server validation and client form schema
+
+**Context:** Item 9 (Day 14) accepted submissions through `POST /api/v1/tenant/kyc/submissions` with discriminated-union validation in the route handler itself — schemas defined inline, never extracted. That was acceptable for a single submit endpoint whose only consumer was the test suite. Item 12's wizard adds (a) per-step PATCH endpoints that need partial-validation against each step's slice of the tier schema, (b) a client-side form layer (react-hook-form) that benefits from sharing the exact same schema as the server resolver, (c) a forthcoming Organisation Tier A variant (Day 17) that must compose with the Individual variant cleanly. Inlining schemas in each route + duplicating them in the frontend is the wrong direction.
+
+**Decision:** Per-tier zod schemas live in `apps/api/src/schemas/kyc.ts`, exported as named TS types + zod schemas, and consumed by both server route handlers (`apps/api/src/routes/tenant/kyc-drafts.ts` + the existing `apps/api/src/routes/tenant/kyc.ts`) and frontend form components (`apps/web/src/components/kyc-wizard/...` via the same package alias).
+
+**Schema shape:**
+
+- Top-level discriminated union `KycSubmissionSchema = z.discriminatedUnion('tenantType', [IndividualTier1SubmissionSchema, OrganisationTierASubmissionSchema, ...])` keyed on `tenants.type`.
+- Each tier exports both a **full-tier schema** (used by `POST /kyc/drafts/:id/submit` for final validation) and **per-step sub-schemas** (used by `PATCH /kyc/drafts/:id` for partial validation).
+- Step sub-schemas are `.partial()` derivatives where appropriate, but each required field within a given step stays required when that step is being PATCHed (a step PATCH that omits a known-required field is rejected; the user can move on without entering the step, but cannot enter the step and submit it half-filled).
+
+**Tier 1 Individual decomposition (locked Day 16):**
+
+- **Step 1 — Identity** (`IndividualTier1Step1Schema`): NID front image (S3 ref), NID back image (S3 ref), live selfie (S3 ref), date of birth (ISO date string, must be ≥ 18 years ago), full name as on NID (string, 2–120 chars).
+- **Step 2 — Address** (`IndividualTier1Step2Schema`): address line 1 (string, 1–200), address line 2 (optional string, 0–200), city (string, 1–80), division (BD enum below), postal code (string, 4-digit BD format), address proof document (S3 ref).
+- **Step 3 — Financial** (`IndividualTier1Step3Schema`): account type (enum: `'bank' | 'bkash' | 'nagad' | 'rocket' | 'upay'`), account name (string, 2–120 — must match NID name; soft-validated server-side via case-insensitive equality on normalised whitespace, reviewer makes the hard call), account number (string, 8–32 — format varies by account type), branch name (string, 2–120, required iff account type is `'bank'`), eTIN number (plain string, 10–13 chars, no regex — Item 10 deferred per 2026-05-17 amendment).
+- **Step 4 — Review** (`IndividualTier1Step4Schema`): empty — no new fields, just a confirmation that the full `IndividualTier1SubmissionSchema` validates against the accumulated row state.
+
+**Bangladesh division enum (locked Day 16):**
+
+- Eight divisions, lowercase enum values: `dhaka`, `chattogram` (post-2018 official spelling — was Chittagong), `khulna`, `rajshahi`, `sylhet`, `barishal` (post-2018 official — was Barisal), `rangpur`, `mymensingh`.
+- Bilingual labels rendered in the frontend select component, NOT in the schema enum: ঢাকা, চট্টগ্রাম, খুলনা, রাজশাহী, সিলেট, বরিশাল, রংপুর, ময়মনসিংহ.
+- Defined as `export const BD_DIVISIONS = ['dhaka','chattogram','khulna','rajshahi','sylhet','barishal','rangpur','mymensingh'] as const` + `export type BdDivision = (typeof BD_DIVISIONS)[number]` in `packages/shared-types/src/bd.ts` (new file — first cross-package shared constant; the package already exists from Sprint 1 Day 1-2 scaffold). Both backend zod (`z.enum(BD_DIVISIONS)`) and frontend select options import from the same source.
+
+**Rationale:**
+
+- **Single source of truth eliminates drift.** Server adds a required field → server validation rejects partial submissions → frontend form's resolver picks up the same rejection at next render → user sees the field. No "the server says X but the form thinks Y" class of bug.
+- **Per-step sub-schemas enable progressive validation.** PATCH for Step 1 doesn't fail because Step 3 fields are missing — they aren't being PATCHed. Full-tier schema fails on final submit if any required step is incomplete; the wizard navigates the user back to the offending step rather than failing silently.
+- **Discriminated union scales to Organisation Tier A in Day 17 + Tier 2/3 + Tier B/C in Phase 2** without restructuring — adding a tier means adding a branch to the union, not modifying existing tier schemas.
+- **BD division enum is a shared constant, not a schema-internal detail.** The same eight divisions surface in (a) KYC address forms, (b) tenant profile editing (Sprint 3+), (c) event venue forms (Sprint 3+, public landing pages). Putting them in `packages/shared-types` keeps the canonical list maintainable and prevents the inevitable "wait, is it Chittagong or Chattogram?" question from arising in each new surface. Post-2018 official spellings locked.
+
+**Consequences:**
+
+- New file `apps/api/src/schemas/kyc.ts` houses all tier schemas + per-step sub-schemas. Exported as both zod schemas (`IndividualTier1SubmissionSchema`) and inferred TS types (`type IndividualTier1Submission = z.infer<typeof IndividualTier1SubmissionSchema>`).
+- New file `packages/shared-types/src/bd.ts` houses the BD division enum + type. Re-exported from `packages/shared-types/src/index.ts`. Both apps/api and apps/web import from `@eventpulse/shared-types`.
+- Existing `apps/api/src/routes/tenant/kyc.ts` submit endpoint's inline schemas are replaced with imports from the new central file. The endpoint's behaviour is unchanged (still validates against the full-tier schema on first-write); only the source of the schema moves. Tests still pass; no migration required.
+- Frontend `react-hook-form` instances use `zodResolver(IndividualTier1Step1Schema)` etc. per step. The wizard's final submit step builds the full submission object from the accumulated draft row state and validates against `IndividualTier1SubmissionSchema` before POSTing to `/kyc/drafts/:id/submit`.
+- **Eyes on the "account name must match NID name" check at Sprint 2 closeout.** The schema-level soft check (case-insensitive + normalised whitespace) is intentionally lenient — reviewer makes the hard call. If MVP review patterns show frequent rejections at this step, Sprint 3 can revisit whether server should reject at submit-time instead of letting submissions through to the reviewer queue.
+
+**Cross-references:**
+
+- 2026-05-17 "Sprint 2 Item 10 scope amendment" — eTIN captured as plain string (no regex) per the amendment; no automated sanctions match. Schema reflects this: `etinNumber: z.string().min(10).max(13)` without `.regex()`.
+- 2026-05-17 "Porichoy deferred — manual NID review for MVP" — schema captures NID number + NID images as plain fields + S3 refs; no automated NID format validation. Reviewer compares submitted NID against the uploaded NID image by eye.
+- 2026-05-17 "KYC reviewer role for MVP — super-admin-only" — the reviewer's eyes are the canonical source of truth for soft-validated fields (name match, NID format). Schema does the minimal "reject obvious garbage" pass; reviewer does the hard call.
+
+**Path back if schema sharing breaks:** Server is canonical. If the frontend ever needs to diverge from the server's schema (e.g. richer UX validation like "country code must come from a typed select"), it's a sibling schema that **extends** the server's via `.merge()` or `.refine()`, never a fork. The server schema's shape is the contract.
+
+---
+
+## 2026-05-18 · TanStack Query lands at Item 12; `useTenantType` migrated for consistency
+
+**Context:** Day 15 Item 11 introduced `useTenantType` as a native `fetch` hook with a deliberate note ("TanStack Query deferred to Item 12") because the single read of `tenants.type` was simple enough not to justify the dep. Day 16's wizard work changes the cost-benefit: resumable drafts need cached server state with optimistic updates on PATCH, document uploads need mutation state per file, submission status transitions need cache invalidation. The wizard is the second TanStack-shaped consumer; landing TanStack Query as project infra now (rather than copying native fetch boilerplate across 8+ wizard hooks) is the proportional move.
+
+**Decision:** TanStack Query (`@tanstack/react-query` + `@tanstack/react-query-devtools` dev-only) lands in PR 2 of Day 16. `useTenantType` migrates from native fetch to `useQuery` in the same PR, keeping its interface shape stable so the consumers in `TenantTypeGate` + `AccountTypeModal` don't break. A small invalidation hook (`useInvalidateTenantType()`) is added so the account-type setter can mark the cached value stale on success rather than waiting for the stale time to elapse.
+
+**QueryClient defaults (locked Day 16):**
+
+- `staleTime: 30_000` (30s) — tenant portal data tends to be slowly-changing; aggressive refetch is noise for the operator-style UX.
+- `gcTime: 5 * 60_000` (5 min) — keep cache around for typical session lengths.
+- `retry: 1` — one silent retry for network blips, surface the second failure to the user.
+- `refetchOnWindowFocus: false` — tenant portal is not a real-time surface (no incoming notifications drive refetch); window-focus refetching is unnecessary chatter, especially on mobile where it fires on every app-resume.
+- `refetchOnReconnect: true` — if the user loses network mid-wizard and recovers, get fresh state.
+
+**Rationale:**
+
+- **Wizard cannot reasonably ship without it.** The optimistic-update + rollback semantics on PATCH (so a slow network doesn't freeze the UI between keystroke and save-confirmation) are TanStack Query's bread and butter; building them by hand for 8+ wizard fields is a recipe for inconsistency.
+- **Consistency across the codebase.** A project that uses TanStack for the wizard but native fetch for everything else is harder to reason about than one that picks one pattern and follows it. `useTenantType` migration is cheap (the hook signature stays identical from the consumer's perspective) and prevents the divergence.
+- **Devtools are a real productivity win.** Cache inspection, mutation state, refetch triggers — visible in a dev-only panel that doesn't ship to prod. Worth the dev dep.
+- **Server state vs client state separation.** TanStack handles server state; component state (form values, modal open/closed) stays in react-hook-form / local React state. Zustand stays out of the wizard entirely (the locked tech stack at §1.2 mentions Zustand for UI state, but the wizard's UI state is local enough to not need a global store).
+
+**Bundle impact:** `@tanstack/react-query` adds ~12 KB gzipped to the client bundle. Acceptable per the Day 15 /review precedent of measuring production bundle output; PR 2's bundle diff is reported in the PR body.
+
+**Consequences:**
+
+- New dep in `apps/web/package.json` — both `@tanstack/react-query` and `@tanstack/react-query-devtools` (the latter as `devDependency`).
+- New file `apps/web/src/lib/query-client.ts` exports a singleton `QueryClient` with the defaults above.
+- `apps/web/src/app/(tenant)/layout.tsx` wraps children in `<QueryClientProvider client={queryClient}>` + conditionally renders `<ReactQueryDevtools>` when `process.env.NODE_ENV === 'development'`.
+- `useTenantType` rewrites to `useQuery({ queryKey: ['tenant', 'me'], queryFn: ... })`; consumers see the same return shape (`{ type, isLoading, error, refetch }`). New `useInvalidateTenantType()` calls `queryClient.invalidateQueries({ queryKey: ['tenant', 'me'] })`.
+- Existing Item 11 tests for `useTenantType` continue to pass; the test rewrite is mechanical (TanStack Query's test utilities + a fresh QueryClient per test). New test added: invalidation hook actually invalidates.
+- Tenant portal's existing pages don't need to change; the QueryClientProvider is added at the route-group level so all `(tenant)/*` routes inherit it without per-page wiring.
+
+**Query keys convention (locked Day 16):**
+
+- `['tenant', 'me']` — current tenant context (type, name, slug, etc.).
+- `['kyc', 'drafts', 'list']` — list of all draft submissions for the current tenant (probably empty for MVP — one draft at a time — but the list shape is the right abstraction).
+- `['kyc', 'drafts', submissionId]` — a specific draft submission row.
+- Future: `['kyc', 'submissions', 'list']` for the submitted/under_review/approved/rejected rows; `['kyc', 'submissions', submissionId]` for a specific finalised submission.
+
+This nested-array convention matches TanStack's official recommendation for cache invalidation hierarchies. `invalidateQueries({ queryKey: ['kyc'] })` would invalidate all KYC-related queries; `invalidateQueries({ queryKey: ['kyc', 'drafts'] })` only draft-related; etc.
+
+**Cross-references:**
+
+- 2026-05-18 "KYC wizard uses server-side drafts" — TanStack Query's `useMutation` powers the PATCH-on-blur draft persistence with optimistic update + rollback on failure.
+- 2026-05-18 "Per-tier KYC schemas are discriminated unions" — TanStack Query carries the typed response shape from the per-tier schema's TS type inference.
+- §1.2 (CLAUDE.md) — "TanStack Query" was always the planned server-state library; this entry codifies the timing.
+
+**Path back if TanStack Query causes problems:** Unlikely (the library is mature, widely-used, and the project already specced it in §1.2). If a future surface needs different defaults (e.g. real-time check-in scanner refreshing every 2s), it gets a query-key-scoped override via the query's options — not a different library.
+
+---
+
 ## 2026-05-18 · Tenant account_type is set-once for MVP — change requires support intervention
 
 **Context:** Sprint 2 Day 15 Item 11 introduces the post-login Account-Type modal in the tenant portal (`§1.6`: "Account type chosen on first dashboard load via a friendly modal, not at sign-up"). Once a user picks Individual or Organisation, the rest of the tenant portal unblocks — the KYC wizard variant (Item 12, Days 16-17) renders different required fields per type, the reviewer queue (Item 13, Day 18) surfaces different document checklists, and downstream defaults (fee handling per §14, subdomain provisioning per §2.4, KYC tier eligibility per §13.3) all branch on the type field. The choice is structurally load-bearing; the question is whether tenants should be able to change it themselves.
