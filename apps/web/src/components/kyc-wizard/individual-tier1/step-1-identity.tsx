@@ -32,6 +32,10 @@ export function Step1Identity({
     handleSubmit,
     formState: { errors },
   } = useForm<IndividualTier1Identity>({
+    // mode: 'onBlur' surfaces errors per-field on blur rather than only
+    // at submit. Per Day 17 polish scope (decisions.md 2026-05-19) — the
+    // user fixes mistakes in flow instead of after a wall of submit errors.
+    mode: 'onBlur',
     resolver: zodResolver(IndividualTier1IdentitySchema),
     defaultValues: {
       fullName: initialValues?.fullName ?? '',

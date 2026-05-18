@@ -32,6 +32,8 @@ export function Step3Financial({ formId, initialValues, onValidSubmit }: Step3Fi
     control,
     formState: { errors },
   } = useForm<IndividualTier1Financial>({
+    // mode: 'onBlur' — per Day 17 polish scope (decisions.md 2026-05-19).
+    mode: 'onBlur',
     resolver: zodResolver(IndividualTier1FinancialSchema),
     defaultValues: {
       accountType: initialValues?.accountType ?? 'bank',

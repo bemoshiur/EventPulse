@@ -36,6 +36,8 @@ export function Step2Address({
     handleSubmit,
     formState: { errors },
   } = useForm<IndividualTier1Address>({
+    // mode: 'onBlur' — per Day 17 polish scope (decisions.md 2026-05-19).
+    mode: 'onBlur',
     resolver: zodResolver(IndividualTier1AddressSchema),
     defaultValues: {
       addressLine1: initialValues?.addressLine1 ?? '',

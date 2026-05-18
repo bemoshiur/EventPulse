@@ -167,4 +167,84 @@ describe('usePatchKycDraft (optimistic update + rollback)', () => {
     const fields = (cached?.fields ?? {}) as Record<string, unknown>
     expect(fields.identity).toBeUndefined()
   })
+
+  it('document-only PATCH overlays optimistic placeholder URI without wiping prior fields (Day 17 carry)', async () => {
+    // Carry from Day 16 PR 3 /review issue #5: a step PATCH racing
+    // with a document-upload PATCH must not lose the document URI from
+    // the optimistic snapshot. After Day 16 fix, the document-only
+    // PATCH's onMutate writes an `optimistic:<contentType>` placeholder
+    // into `cached.documents` so the cache reflects the slot being
+    // filled even before the server responds. This test pins that
+    // behaviour.
+    const seededRow = {
+      ...sampleRow,
+      fields: { identity: { fullName: 'Already Typed' } },
+      documents: {},
+    }
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ data: seededRow }))
+    const { wrapper, client } = withProvider()
+    const { result: read } = renderHook(() => useKycDraft(seededRow.id), { wrapper })
+    await waitFor(() => expect(read.current.draft?.id).toBe(seededRow.id))
+
+    // The server's response (will fire later but we'll snapshot the
+    // cache before settle). Use a never-resolving promise so we can
+    // inspect the optimistic cache without the server replacing it.
+    let resolvePatch: (value: Response) => void = () => undefined
+    vi.mocked(global.fetch).mockReturnValueOnce(
+      new Promise<Response>((resolve) => {
+        resolvePatch = resolve
+      }),
+    )
+
+    const { result: patch } = renderHook(() => usePatchKycDraft(), { wrapper })
+
+    // Fire the document-only PATCH (no `fields` per the BLOCKER 1 fix).
+    let mutationPromise: Promise<KycDraftRow> | undefined
+    await act(async () => {
+      mutationPromise = patch.current.mutateAsync({
+        submissionId: seededRow.id,
+        body: {
+          step: 'identity',
+          documents: { nid_front: { contentType: 'image/jpeg' } },
+        },
+      })
+    })
+
+    // Cache should reflect the optimistic state: prior fields survive,
+    // new document slot filled with the `optimistic:<contentType>`
+    // placeholder URI. waitFor blocks until onMutate's async chain
+    // (cancelQueries + setQueryData) commits — a single setTimeout(0)
+    // tick wouldn't be reliable per Day 17 PR 2 /review important #3.
+    await waitFor(() => {
+      const c = client.getQueryData<KycDraftRow>(['kyc', 'drafts', seededRow.id])
+      expect(c?.documents['nid_front']).toBe('optimistic:image/jpeg')
+    })
+    const optimisticCached = client.getQueryData<KycDraftRow>(['kyc', 'drafts', seededRow.id])
+    const optimisticFields = (optimisticCached?.fields ?? {}) as Record<
+      string,
+      Record<string, string> | undefined
+    >
+    expect(optimisticFields.identity?.fullName).toBe('Already Typed')
+
+    // Resolve the PATCH with the server's authoritative S3 URI.
+    const serverRow = {
+      ...seededRow,
+      documents: { nid_front: 's3://eventpulse-kyc-test/tenants/x/y/nid_front.jpg' },
+    }
+    await act(async () => {
+      resolvePatch(jsonResponse({ data: serverRow }))
+      await mutationPromise
+    })
+
+    const finalCached = client.getQueryData<KycDraftRow>(['kyc', 'drafts', seededRow.id])
+    expect(finalCached?.documents['nid_front']).toBe(
+      's3://eventpulse-kyc-test/tenants/x/y/nid_front.jpg',
+    )
+    // Identity fields must survive the whole cycle.
+    const finalFields = (finalCached?.fields ?? {}) as Record<
+      string,
+      Record<string, string> | undefined
+    >
+    expect(finalFields.identity?.fullName).toBe('Already Typed')
+  })
 })
