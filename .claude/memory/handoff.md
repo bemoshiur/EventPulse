@@ -1,74 +1,57 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-05-19 (Day 18 pre-flight — platform-wide manual-verification policy locked)
+**Last update:** 2026-05-19 (end of Sprint 2 Day 18)
 **Driver:** Claude Code (Opus 4.7) — Sprint 2 standard execution mode (1 day/session, `/start` → `/work` → `/end`)
 
 ## State right now
 
-**Sprint 2 Day 17 closed. One pre-Day-18 memory PR scoped: consolidates three prior per-item KYC-verification deferrals (Porichoy, eTIN/sanctions, Day 17's BIN BLOCKER near-miss) into a single platform-wide "manual verification only for MVP" policy. Day 18's plan adjusts as a direct consequence: AM playbook bump grows from 8 to 9 §-section amendments (§13.0 promoted from Porichoy-specific to platform-wide); PM Item 13 review queue scope simplifies (no validation badges, no `flags` jsonb column, raw data + per-field reviewer helper text + reviewer-notes free-text field).**
+**Sprint 2 Day 18 closed. Five PRs merged across the day** — the largest single-day delivery of Sprint 2: a platform-wide policy consolidation, a 9-amendment playbook bump, three Item 13 PRs (pre-code memory + backend + frontend). The super admin KYC review queue is now reviewable end-to-end at `/admin/kyc` (queue) and `/admin/kyc/[id]` (detail). The highest-PII surface in the entire project is live.
 
 ```text
-<pending>   memory: Sprint 2 — platform-wide manual verification policy for MVP (this PR)
-4c8047c     memory: Sprint 2 Day 17 closeout — Item 12 Part 2 shipped (3 PRs + 2 BLOCKERs fixed in-PR) (#85)
-479f3b3     feat(web): Day 17 Item 12 PR 2 — Org Tier A wizard + Individual Tier 1 polish + e2e infra (#84)
-b994606     feat(api): Day 17 Item 12 PR 1 — Organisation Tier A backend (schemas + drafts router + tests) (#83)
-b46d22b     memory: Sprint 2 Day 17 pre-code — Org Tier A 6-step decomposition + e2e local-only + polish scope locked (#82)
+<pending>   memory: Sprint 2 Day 18 closeout — Item 13 shipped (5 PRs)
+1925e2c     feat(web): Day 18 PM Item 13 frontend — super admin KYC review queue UI (#90)
+f509efd     feat(api): Day 18 PM Item 13 backend — super admin KYC review queue + decision API (#89)
+4782b05     memory: log Day 18 Item 13 pre-code — read-audit + cache-zero + structured checklist (#88)
+bbf5409     docs(playbook): bump CLAUDE.md to v2.3 — 9 §-section amendments synchronising Days 11-18 reality (#87)
+62fcef7     memory: Sprint 2 — platform-wide manual verification policy for MVP (#86)
 ```
 
-## What landed in this memory PR (pre-Day-18)
+## What landed in Day 18
 
-**decisions.md** — new consolidated entry at top: "Platform-wide policy — manual verification only for MVP (consolidates prior per-item deferrals)". Supersedes two prior 2026-05-17 entries (Item 10 scope amendment + Porichoy deferred), each annotated with `Superseded by:` notes; both remain in the log for archaeology. The new entry covers: rationale (MVP volume operationally fine for manual review; half-built automation worse than no automation; third-party procurement risk; reviewer queue is already where humans look); Day 18 consequences (Item 13 scope adjustments + v2.3 playbook bump §13.0 amendment); already-shipped surfaces unchanged; Phase 2 trigger (50 verified submissions/week sustained 4-week trailing average — reviewer-capacity criterion, not feature ambition); Phase 3 plan (advisory flags alongside manual review, never auto-reject).
+**Pre-day-18 memory (PR #86 `62fcef7`):** consolidated three prior per-item KYC-verification deferrals (Porichoy 2026-05-17, Item 10 eTIN/sanctions 2026-05-17, Day 17 BIN BLOCKER near-miss) into a single platform-wide "manual verification only for MVP" decisions.md entry. Both prior entries marked `Superseded by`. Reframed BIN 13-digit fact in gotchas.md as reviewer-documentation, not server-side enforcement directive.
 
-**gotchas.md** — new entry at top: "BIN 13-digit fact is reviewer-documentation, not server-side enforcement". Reframes the Day 17 PR 1 BLOCKER fact (regex tightened from 9-13 digits to 13 digits per NBR 2019-11-30): the BIN regex remains in code as a passing-test guard against the original specific regression, but the broader principle does NOT generalise. New format fields default to plain-string structural validation only. Future schemas adding format regex must cross-reference a decisions.md entry justifying departure from the manual-verification policy.
+**AM playbook bump (PR #87 `bbf5409`):** v2.3 bump with 9 §-section amendments. Highlights: §13.0 replaced with platform-wide policy text (verbatim alignment with PR #86 decisions.md); §17.9.1 new sub-subsection codifying the canonical GitHub→AWS OIDC three-claim trust pattern; §4.2.1.1 new sub-subsection codifying the append-only table invariant + REVOKE pattern; §29 Resolved-in-v2.3 block. /review: 2 BLOCKERs (subtitle still v2.2; v2.2 §-1 bullet contradicted new policy) + 1 IMPORTANT (§29 Porichoy supersession) fixed in-PR; 2 IMPORTANTs (§3.2 extensionAlias, §9.2 'draft' state CHECK) deferred to v2.4 with documented rationale.
 
-**handoff.md** — this regeneration. Day 18 plan adjusted: 9 amendments (was 8) + Item 13 scope simplifications. New hard guardrails added for Day 18 (no validation badges in queue; no `flags` jsonb column in Item 13; format regex additions require decisions.md cross-reference).
+**Pre-code memory (PR #88 `4782b05`):** locked three Item 13 architecture decisions G/H/I as canonical project decisions before code started.
+
+**Backend (PR #89 `f509efd`):** migration 0007 (`reviewer_checklist jsonb` + `reviewer_notes text` + composite index on audit_logs for conflict-of-interest queries); new shared-types schemas (per-tier REQUIRED_CHECKLIST_KEYS + decision/toggle/notes schemas); presigned-GET URL helper (15-min TTL); four new sibling audit helpers (viewed/checklist_toggled/notes_updated/decided); five endpoints under `/api/v1/admin/kyc` (list with cursor pagination, detail with audit-on-fetch + self-claim submitted→under_review, checklist toggle, notes update, decide with conflict-of-interest + checklist-completeness server-enforcement). 27 integration tests. /review: 3 IMPORTANTs (PATCH terminal-state guard, COI on reject, detail-view defensive comment) all fixed in-PR. CI lint failure on first push (prettier-check) fixed in follow-up commit.
+
+**Frontend (PR #90 `1925e2c`):** admin route group at `/(admin)/admin/kyc/`; viewport guard < 1024px; queue list page (status filter, cursor, no PII); detail page (two-column desktop); SubmissionDetail with per-tier field rendering + helper text; DocumentViewer with browser-native `<img>` + per-doc verified checkbox + image-dimensions surface; ReviewerNotes with auto-save + Saved indicator; DecisionActions with typed-APPROVE modal + reject reason + ESC dismiss + focus return to trigger button (WCAG 2.1 SC 2.1.2 + 2.4.3); useAdminKyc hook with Decision H per-query cache override on detail. 64 web tests. /review: 2 BLOCKERs (ESC key missing, focus return missing) + 3 IMPORTANTs (misleading hook comment, missing checkbox-click test, missing modal-open axe scans) all fixed in-PR with new tests. CI e2e Playwright build failed first push on route group collision (`/(admin)/kyc/` and `/(tenant)/kyc/` both resolved to bare `/kyc`); fixed by moving admin pages under `/(admin)/admin/kyc/` so URL becomes `/admin/kyc`.
+
+**Final routes:** `/admin/kyc` (static, 3.03 kB + 118 kB shared) + `/admin/kyc/[id]` (dynamic, 5.43 kB + 136 kB shared).
 
 ## Next concrete step
 
-**Day 18 AM — v2.3 CLAUDE.md playbook bump (dedicated PR, runs BEFORE Item 13 starts).** Synchronises the playbook with reality so Items 13 + 14 + 15 build against current §-text. Now bundles **9 section amendments** (was 8; the new amendment is §13.0):
+**Day 19 — Items 14 + 15 bundled in one PR — Trust Center scaffolding + super admin Legal & Trust editor.**
 
-- **§13.0 — REPLACED.** Old block was Porichoy-specific deferral language ("Porichoy deferred — manual NID review for MVP"). New block is the platform-wide manual-verification policy from decisions.md 2026-05-19: zero automated verification of any submitted KYC data for MVP; Phase 2 trigger (50 verified submissions/week sustained, 4-week trailing average, reviewer-capacity criterion); Phase 3 plan (advisory flags alongside reviewer judgment, never auto-reject); explicit list of fields covered (BIN, RJSC, eTIN, NID, address proof, bank/MFS account name match, sanctions, signatory, board resolution authenticity — everything). Cross-references decisions.md 2026-05-19 entry as authoritative.
-- §17 — canonical OIDC trust pattern (three-claim shape).
-- §13.3 — `draft` state documented for BOTH lanes (`rejected → draft` from Day 14 + wizard create-as-draft from Day 16).
-- §13.3 — Org Tier A 6-step decomposition + financial-schema reuse note (per decisions.md 2026-05-19).
-- §9.1 — `tenants.type` nullable (Item 11 / migration 0006).
-- §4.2.1 — append-only audit-table invariant (Day 14 REVOKE pattern).
-- §3.2 — ESM-typed workspace + `extensionAlias` pattern (Day 16 PR 3 gotcha).
+Per `.claude/memory/decisions.md` "Trust Center v0.1 placeholders — skeleton-only" (2026-05-17): **skeleton-only placeholder content** — real headings + one-sentence "PLACEHOLDER — to be drafted by counsel covering X" per section + non-dismissable DRAFT banner. **NO AI-generated full-text legal drafts.** Onboarding flow gates on consent → consent gates on v1.0 documents → first paying tenant blocked until counsel returns drafts.
 
-Single PR titled `docs(playbook): v2.3 bump — Sprint 2 amendments`. Bump CLAUDE.md changelog (§-1) + add a Sprint 2 section to the changelog noting all nine amendments. §13.0 amendment is the new and largest item; the other 8 are unchanged in scope from yesterday's plan.
+**Scope:**
 
-**Day 18 PM — Item 13: super admin review queue.** First reviewer-facing surface. Per `.claude/memory/decisions.md` "KYC reviewer role for MVP — super-admin-only" (2026-05-17) + the platform-wide manual-verification policy (2026-05-19):
+- New tables `legal_documents` + `legal_document_versions` per §9.11 (migration 0008). `legal_document_versions` is the **second append-only table** after `audit_logs`; needs the explicit `REVOKE UPDATE, DELETE, TRUNCATE FROM eventpulse_app` boilerplate per §4.2.1.1 (codified in v2.3 bump, PR #87).
+- Seed entries for all 18 documents (6 legal contracts + 12 trust artefacts) per §20.2 with v0.1 placeholder body_md.
+- Public routes for all 18 paths per §20.1: `/privacy`, `/terms`, `/eula`, `/dpa`, `/cookies`, `/refund-policy`, plus 12 `/trust/...` paths.
+- Each page renders the placeholder body, the version metadata, and the non-dismissable DRAFT banner at the top.
+- Super admin Legal & Trust editor at `/admin/legal-trust` — list view of all documents, per-document version history view, new-version create form (markdown editor + body_html pre-render). Tightly scoped: text-area-based editor, no rich-text formatting, no media upload.
+- `consent_records` table is **NOT** in Day 19 scope — that lands when the v1.0 legal documents are signed (post-counsel-review). The onboarding consent prompt is queued for Sprint 3 alongside the v1.0 publish.
 
-- New `/admin/kyc/queue` route — list of submissions in `under_review` status (with `submitted → under_review` self-claim on row open).
-- Per-submission detail view rendering BOTH wizard tiers' jsonb shapes:
-  - Tier 1: `fields.identity` + `fields.address` + `fields.financial`
-  - Tier A: `fields.org` + `fields.signatory` + `fields.financial`
-- Inline document preview (NID images, trade license PDF, MOA/AOA) loaded from the S3 URIs in `documents` jsonb.
-- **Per-field helper text** describing what the reviewer should check (e.g. next to BIN: "Verify against NBR VAT portal at vat.gov.bd; current format is 13 digits per NBR 2019-11-30").
-- **Reviewer notes field per submission** (free text, captured in audit_log on save).
-- Approve action: **modal confirmation** that the reviewer has reviewed all required fields and documents. Transitions `under_review → approved` via state machine + writes audit row via `writeKycTransition({actorRole: 'super_admin'})`.
-- Reject action: **typed reason required** that goes to the tenant in the rejection email and persists in audit_log.
-- New `manual_nid_verified` checkbox in the reviewer UI that flips `kyc_submissions.nid_verified` — manual reviewer compares the submitted NID number against the uploaded NID image.
-- "Request more info" action that transitions `under_review → rejected` with a flag in `decisionReason` distinguishing it from a hard reject (no schema change; reviewer convention).
+**STOP-ASK conditions for Day 19:**
 
-**Scope reduced from the original Day 17 plan per the platform-wide manual-verification policy:**
-
-- **No validation badges** in queue list view (no automated checks → nothing to badge).
-- **No `kyc_submissions.flags` jsonb column** (was speculative for sanctions hits in Item 10's original scope; not needed under the policy — when Phase 3 automation lands, the flag column lands in the same migration as the validator code).
-- **No auto-flag UI affordances.** Reviewer-notes free-text is the only "concern surfacing" mechanism; the reviewer types the concern in their own words rather than the system pre-populating.
-- **Notification copy for rejections** must surface the reviewer's typed reason verbatim, not a templated "automated check failed" message.
-
-**Item 13 must cover both shapes** — verify the reviewer UI doesn't assume Tier 1 keys; per `.claude/memory/decisions.md` 2026-05-19 the Tier A jsonb keys are shortened (`fields.org`, `fields.signatory`), not the verbose step names.
-
-**STOP-ASK conditions for Day 18:**
-
-- New dep beyond what Day 16/17 landed (TanStack Query, react-hook-form, vitest-axe) → halt, ask.
-- Schema change beyond what Item 13 strictly needs (e.g. new column on `kyc_submissions` for the request-more-info flag if the reviewer convention proves insufficient) → halt, ask.
-- **Any temptation to add format regex / sanctions matcher / auto-flag logic** on the strength of "the queue would be cleaner with it" → halt, ask. The platform-wide manual-verification policy is load-bearing; adding automation absorbs scope and reopens decisions the policy explicitly closed.
-- Any super-admin authentication assumption — Item 13 is the FIRST super-admin route; `requireSuperAdmin` middleware needs to be the correctness gate, NOT the tenant-context middleware. Per §5.1 the super-admin audience is separate; verify the audit row's `actor_type` is `'super_admin'`, not `'tenant_user'`.
-- Reviewer queue counts mutate via `under_review` self-claim; concurrent reviewer opens of the same submission need to be considered (Day 18 likely ships without optimistic-locking; flag as Sprint 3 candidate if pattern emerges).
-- v2.3 playbook bump touches §-text only; no code changes. If the bump introduces something that contradicts merged code, halt.
-- v2.3 §13.0 amendment text must align verbatim with the decisions.md 2026-05-19 policy entry. The decisions log is the canonical source; the playbook restates it concisely.
+- New dep beyond what's already landed → halt, ask.
+- Schema change beyond migration 0008's two tables → halt, ask.
+- **Any temptation to add real legal-language drafts** (whether AI-generated, ported from open-source templates, or transcribed from another project) → halt, surface to Moshiur. This is a load-bearing decision per `.claude/memory/decisions.md` 2026-05-17; counsel must produce v1.0. v0.1 is skeleton-only.
+- Markdown sanitization at render: trust-document body_html is pre-rendered server-side from body_md by the editor PR; ensure the editor passes through a server-side sanitizer (DOMPurify equivalent, or strict allow-list HTML) before storing body_html. If no clean way to do this without a new dep, halt.
+- Any reviewer-checklist-style structured data on legal documents (e.g. "approver checklist") → out of scope; queue for Sprint 3+.
 
 ## Scheduled mid-sprint PR slots
 
@@ -76,18 +59,24 @@ Single PR titled `docs(playbook): v2.3 bump — Sprint 2 amendments`. Bump CLAUD
 
 ## Sprint 2 closeout candidates (queued for v0.2.0-sprint-2 release)
 
-**New from Day 17:**
+**New from Day 18:**
+
+- **v2.4 playbook bump candidates from PR #87 /review deferrals:**
+  - §3.2 amendment — add the `extensionAlias` pattern in `next.config.mjs` for ESM-typed workspace packages with `.js` re-exports (Day 16 PR 3 gotcha). Already documented in gotchas.md; the playbook line is the deferred surface.
+  - §9.2 amendment — update the `kyc_submissions.status` CHECK to include `'draft'` (migration 0005 reality from Day 14). Important because §9.2 is a schema reference; the current DDL would mislead anyone using the playbook as schema source-of-truth.
+- **Conflict-of-interest "approve disabled with tooltip" pre-detection** — Day 18 PR 4 surfaces the 409 server response as a friendly inline error. The user brief §2.3 mentions a tooltip-disable version (requires fetching audit history per submission) — Sprint 2 closeout polish.
+- **E2E Playwright happy-path through admin KYC queue** — needs admin JWT minting in setup, walks list → detail → checklist toggle → approve → notification stub fired. Estimated 2-3 hours focused.
+- **`useAdminKycDetail` test coverage for the cache override** — current PR 4 tests don't directly assert `staleTime: 0` / `gcTime: 0` are present; relies on the hook's source being correct. Could pin via a unit test that inspects the QueryClient state after navigation away.
+
+**Pre-existing (carried from Days 12–17):**
 
 - **Full Individual Tier 1 happy-path Playwright test** — Day 17 PR 2 carry. Needs globalSetup that mints a JWT via apps/api signTokens; walks 4 steps + uploads; asserts success. Local-only with KYC_S3_DRY_RUN=1.
 - **Org Tier A axe coverage for steps 2-6** — Day 17 PR 2 ships axe on Step1OrgInfo only; queue the other 5 (~30 min).
-- **`KycDraftPatchInput.body.step` union drift risk** — Day 17 PR 2 /review #2. Hand-coded 7-literal union should re-export from shared-types (`IndividualTier1Step | OrganisationTierAStep`). Sprint 3 task.
+- **`KycDraftPatchInput.body.step` union drift risk** — Day 17 PR 2 /review #2. Hand-coded 7-literal union should re-export from shared-types.
 - **`maskAccount → maskLast4` + dedicated `maskEtin`** — Day 17 PR 2 /review #4 cosmetic.
 - **Staging-real e2e Playwright cutover** — per decisions.md 2026-05-19. CI IAM outbound + Cloudflare allowlist + staging fixture + S3 PUT teardown.
 - **Loading/saving indicator near wizard progress bar** — polish item deferred from Day 17.
 - **Framer-motion step transitions with prefers-reduced-motion fallback** — polish item deferred from Day 17.
-
-**Pre-existing (carried from Days 12–16):**
-
 - **S3 signed URL issuance audit_logs backfill** — single helper call in `getKycUploadUrl()`. Per decisions.md 2026-05-17.
 - **audit_logs unset-GUC smoke test** — Day 14 /review #1 follow-up.
 - Reviewer S4 (Day 12) — dedicated KMS key-admin role for the KYC CMK.
@@ -96,19 +85,19 @@ Single PR titled `docs(playbook): v2.3 bump — Sprint 2 amendments`. Bump CLAUD
 ## Cross-sprint carries (not closeout)
 
 - GitHub Pro upgrade → Environment branch-protection on `staging` (and `prod`) — Sprint 1 carry.
-- Sprint 4 — `eventpulse-deploy-prod` role using canonical three-claim pattern.
+- Sprint 4 — `eventpulse-deploy-prod` role using canonical three-claim pattern (§17.9.1 codified in v2.3 bump).
 - **Sprint 3 auth-hardening bundle PR** — session revocation fix + auth events audit_logs backfill.
 
 ## Open questions for Moshiur
 
 - **§29 #9 (AIT withholding) + #10 (VAT/Mushak)** — legal consult email queued. Needed by end of Sprint 2 for Sprint 3 fee calculator.
+- **Counsel engagement for Trust Center v1.0 drafts** — Day 19 ships v0.1 placeholders only. Counsel must produce v1.0 before the first paying tenant can complete onboarding (consent → v1.0 docs gating per decisions.md 2026-05-17). Email queued?
 - **EPS sandbox credentials** in `eventpulse/staging/eps` — Sprint 3 dependency.
 - **EPS library question** (`eps-gateway-nodejs` npm vs EPS-PG/EPS_Nodejs GitHub) — queued for the last session of Sprint 2.
 - **OAuth credentials for staging** — needed for Day 20 AM OAuth fix PR.
 - **Playwright runner staging connectivity** — Sprint 2 closeout dependency for the staging-real e2e cutover.
-- **Reviewer auth context for Item 13** (Day 18 PM) — confirm the existing super-admin JWT minting path supports the reviewer queue without additional middleware. Likely yes per §5.1 but worth verifying before coding.
 
-## Hard guardrails (unchanged + 3 new for Day 18)
+## Hard guardrails (unchanged + 3 new for Day 19)
 
 - Single EC2 only. ~$23/mo total. $40/mo canary.
 - No SSH, no port 22. Shell via `aws ssm start-session --target i-02e4fddeb923c14f9 --profile eventpulse`.
@@ -116,22 +105,26 @@ Single PR titled `docs(playbook): v2.3 bump — Sprint 2 amendments`. Bump CLAUD
 - Never write fee math anywhere except `apps/api/src/domain/payments/fee-calculator.ts`.
 - §21.3 host-liability clause is load-bearing — don't weaken via code defaults or UX.
 - KYC bucket policy: never `StringNotEqualsIfExists` on encryption-key enforcement.
-- GitHub Actions OIDC trust policies: canonical three-claim shape only.
-- audit_logs is APPEND-ONLY (§1.3 R8). No UPDATE/DELETE from application code.
+- GitHub Actions OIDC trust policies: canonical three-claim shape only (§17.9.1).
+- audit_logs is APPEND-ONLY (§1.3 R8 + §4.2.1.1). No UPDATE/DELETE from application code.
 - Idempotent inserts under RLS must handle zero-rows-after-collision as cross-tenant ownership (409).
-- **Audit helpers are one-per-domain** — never a generic `writeAudit()`. Multiple helpers in the same KYC domain file are fine.
+- **Audit helpers are one-per-domain** — never a generic `writeAudit()`. Multiple helpers in the same domain file are fine (4 KYC reviewer helpers in `services/audit/kyc.ts` per Day 18).
 - **`tenants.type` is set-once for MVP** — change requires support intervention.
 - **`requireTenantType` middleware caching is request-scoped only** — Hono `c.set('tenantType')`, never closure/module-level.
-- **Frontend test rig precedent** — every new interactive component test includes `expect(await axe(container)).toHaveNoViolations()` via vitest-axe. Use `@testing-library/user-event` for keyboard + focus interactions.
-- **jsonb `||` shallow merge with `{step:{}}` SILENTLY wipes the step's sub-object** — Day 16 PR 3 BLOCKER 1 + Day 17 server's `fieldsKeyForStep` mapping for verbose→short keys. Any future PATCH endpoint that merges jsonb must guard against empty-payload-wipes-prior-state.
-- **No client-side PII persistence** — react-hook-form: component memory only; TanStack Query: in-memory cache; sessionStorage holds only opaque IDs.
-- **ESM-typed workspace packages with `.js` re-exports need `extensionAlias` in `next.config.mjs`** — Day 16 PR 3 gotcha; documented in §3.2 amendment (Day 18 AM v2.3 bump).
-- **BIN 13-digit fact (NBR 2019-11-30) is reviewer-documentation, NOT server-side enforcement.** Day 17 PR 1 BLOCKER fix grandfathered as the one exception; new format fields default to plain-string structural validation only. See `.claude/memory/gotchas.md` "BIN 13-digit fact is reviewer-documentation, not server-side enforcement" + decisions.md 2026-05-19 platform-wide manual-verification policy. Future schemas adding format regex must cross-reference a decisions.md entry justifying departure.
-- **Wizard step→jsonb-key mapping for Tier A** — verbose step names (`org_info`, `signatory_identity`) shorten to jsonb keys (`fields.org`, `fields.signatory`). PR 1 integration test pins this; PR 2 variant root has the comment cross-referencing.
-- **Document-only wizard steps MUST disable the CTA until all required step docs are uploaded** — Day 17 PR 2 BLOCKER. Org wizard's `isPrimaryDisabled` gates currentStepIndex 2 + 3 on `signatoryDocsComplete` / `orgDocsComplete`. Apply same gate pattern to any future variant.
-- **NEW for Day 18 — Item 13 review queue: NO validation badges, NO `kyc_submissions.flags` jsonb column, NO auto-flag UI affordances.** Per the 2026-05-19 platform-wide manual-verification policy. Reviewer-notes free-text + per-field helper text + approve-modal-confirm + reject-typed-reason are the entire concern-surfacing surface for MVP. If Item 13 scope creeps to add any of these, halt and ask.
-- **NEW for Day 18 — manual-verification policy is load-bearing.** Any temptation to add automated checks (format regex, sanctions matcher, validator stub) on the strength of "the queue would be cleaner with it" → halt, surface to Moshiur. The Phase 2 trigger (50 verified submissions/week sustained 4-week trailing average, reviewer-capacity criterion) is the only sanctioned re-evaluation gate.
-- **NEW for Day 18 — Porichoy adapter scaffold-only shape is the canonical pattern for all future automation integrations.** Interface + env vars + Secrets Manager entry + TODO stub. Live wiring lands as a focused PR alongside the operational decision to flip from manual-only to manual-plus-flag (Phase 3). Day 20 Item 16 Porichoy scaffold work continues unchanged but is now an instance of the pattern, not a vendor-specific exception.
+- **Frontend test rig precedent** — every new interactive component test includes `expect(await axe(container)).toHaveNoViolations()` via vitest-axe. Modal-open state needs its own axe scan (Day 18 PR 4 /review I3).
+- **jsonb `||` shallow merge with `{step:{}}` SILENTLY wipes the step's sub-object** — Day 16 PR 3 BLOCKER 1.
+- **No client-side PII persistence** — react-hook-form: component memory only; TanStack Query: in-memory; sessionStorage holds only opaque IDs. **Detail-view queries on PII surfaces MUST override the default TanStack Query cache to `staleTime: 0` + `gcTime: 0` + `refetchOnWindowFocus: false` + `refetchOnReconnect: false`** so PII evaporates on navigation away (Decision H, Day 18).
+- **ESM-typed workspace packages with `.js` re-exports need `extensionAlias` in `next.config.mjs`** — Day 16 PR 3 gotcha; deferred from v2.3 playbook bump to v2.4.
+- **BIN 13-digit fact (NBR 2019-11-30) is reviewer-documentation, NOT server-side enforcement.** Day 17 PR 1 BLOCKER fix grandfathered as the one exception. Future schemas adding format regex must cross-reference a decisions.md entry justifying departure from the manual-verification policy.
+- **Wizard step→jsonb-key mapping for Tier A** — verbose step names (`org_info`, `signatory_identity`) shorten to jsonb keys (`fields.org`, `fields.signatory`).
+- **Document-only wizard steps MUST disable the CTA until all required step docs are uploaded** — Day 17 PR 2 BLOCKER. Same pattern for any future variant.
+- **Item 13 review queue: NO validation badges, NO `kyc_submissions.flags` jsonb column, NO auto-flag UI affordances.** Per the 2026-05-19 platform-wide manual-verification policy. Reviewer-notes free-text + per-field helper text + approve-modal-confirm + reject-typed-reason are the entire concern-surfacing surface for MVP.
+- **Manual-verification policy is load-bearing.** Any temptation to add automated checks (format regex, sanctions matcher, validator stub) on the strength of "the queue would be cleaner with it" → halt, surface to Moshiur. The Phase 2 trigger (50 verified submissions/week sustained 4-week trailing average, reviewer-capacity criterion) is the only sanctioned re-evaluation gate.
+- **Porichoy adapter scaffold-only shape is the canonical pattern for all future automation integrations.** Interface + env vars + Secrets Manager entry + TODO stub. Day 20 Item 16 Porichoy scaffold work continues unchanged.
+- **NEW for Day 19 — Trust Center v0.1 is skeleton-only.** No AI-generated full-text legal drafts. Real headings + one-sentence "PLACEHOLDER — to be drafted by counsel covering X" per section + non-dismissable DRAFT banner. Per `.claude/memory/decisions.md` "Trust Center v0.1 placeholders — skeleton-only" 2026-05-17 (load-bearing). Onboarding consent gating queued for Sprint 3 once counsel returns v1.0.
+- **NEW for Day 19 — `legal_document_versions` is the second append-only table.** Migration 0008 must include the explicit `REVOKE UPDATE, DELETE, TRUNCATE FROM eventpulse_app` boilerplate per §4.2.1.1 (codified in v2.3 bump, PR #87). RLS forced + SELECT/INSERT policies only (no UPDATE/DELETE policies).
+- **NEW for Day 19 — super-admin Legal & Trust editor uses server-side markdown sanitization.** body_html is rendered + sanitized server-side from body_md. If no clean way to sanitize without a new dep, halt.
+- **NEW for Day 19 — admin route group lives under `/(admin)/admin/...` to avoid /kyc route collision with /(tenant)/kyc.** Day 18 PR 4 hit this and moved everything under `/admin/...`. Apply the same convention to `/admin/legal-trust` (the Legal & Trust editor).
 
 ## Useful runbook fragments
 
