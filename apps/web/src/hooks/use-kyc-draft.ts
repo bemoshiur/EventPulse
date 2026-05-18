@@ -148,15 +148,25 @@ export function useCreateKycDraft() {
 export interface KycDraftPatchInput {
   submissionId: string
   /**
-   * Per-step PATCH body — must match IndividualTier1PatchSchema.
+   * Per-step PATCH body — must match either `IndividualTier1PatchSchema`
+   * or `OrganisationTierAPatchSchema` (server picks by tenantType).
    *
    * `fields` is optional: a document-only PATCH should omit it
    * entirely (sending `fields: {}` would wipe the user's prior typed
    * values via the server's `||` shallow merge — Day 16 PR 3 /review
    * BLOCKER 1).
+   *
+   * `step` union covers both tiers (Tier 1 + Tier A) — Sprint 2 Day 17.
    */
   body: {
-    step: 'identity' | 'address' | 'financial'
+    step:
+      | 'identity'
+      | 'address'
+      | 'financial'
+      | 'org_info'
+      | 'signatory_identity'
+      | 'signatory_docs'
+      | 'org_docs'
     fields?: Record<string, unknown>
     documents?: Record<string, { contentType: string }>
   }
