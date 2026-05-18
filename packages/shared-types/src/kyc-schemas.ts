@@ -313,18 +313,26 @@ export type IndividualTier1WizardStep = (typeof INDIVIDUAL_TIER1_STEPS)[number]
 
 /**
  * Bangladesh Business Identification Number (BIN) — VAT registration.
- * 9-digit numeric per NBR; plain string capture (Item 10 deferral applies
- * the same way as eTIN — no automated format validation for MVP).
+ *
+ * The e-BIN format has been **13 digits** since 30 November 2019 per
+ * NBR's mandate; the older 9-digit and 11-digit formats are deprecated
+ * and would no longer appear on a current VAT-compliant invoice. Per
+ * Day 17 PR 1 /review BLOCKER (confidence 90): accepting 9–12 digits
+ * would bless formats that NBR explicitly rejects, leaving the
+ * reviewer with no system guard against an outdated document.
+ *
+ * Sources: NBR's "fourteen-digit BIN search" portal + 2019 Bangladesh
+ * Post mandate coverage.
  */
-const binRegex = /^\d{9,13}$/
+const binRegex = /^\d{13}$/
 
 export const OrganisationTierAOrgInfoSchema = z.object({
   /** Registered legal name as it appears on the trade license. */
   legalName: z.string().trim().min(2).max(200),
   /** Trade license number. Format varies by issuing authority; plain capture. */
   tradeLicenseNumber: z.string().trim().min(3).max(60),
-  /** BIN (Business Identification Number) — VAT registration. 9–13 digits. */
-  bin: z.string().trim().regex(binRegex, 'BIN must be 9–13 digits'),
+  /** BIN (Business Identification Number) — e-BIN, 13 digits. NBR mandate since 2019-11-30. */
+  bin: z.string().trim().regex(binRegex, 'BIN must be 13 digits (NBR e-BIN format)'),
   /** Date of incorporation (ISO YYYY-MM-DD). Must be in the past. */
   dateOfIncorporation: z
     .string()
@@ -332,8 +340,8 @@ export const OrganisationTierAOrgInfoSchema = z.object({
     .refine((d) => {
       const [y, m, day] = d.split('-').map(Number)
       if (!y || !m || !day) return false
-      const t = new Date(Date.UTC(y, m - 1, day))
-      return t.getTime() < Date.now()
+      const incorporationDate = new Date(Date.UTC(y, m - 1, day))
+      return incorporationDate.getTime() < Date.now()
     }, 'date of incorporation must be in the past'),
 })
 

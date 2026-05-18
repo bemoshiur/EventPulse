@@ -198,6 +198,31 @@ function fieldsKeyForStep(
   }
 }
 
+/**
+ * Pick the per-tier PATCH zod schema by tenant type. A switch (not a
+ * ternary) so a future third tenant type (e.g. 'enterprise' in Phase 2)
+ * fails the TypeScript exhaustiveness check at compile time instead of
+ * silently routing to the Org Tier A schema. Per Day 17 PR 1 /review
+ * important issue #2 (confidence 82).
+ */
+function pickPatchSchema(tenantType: 'individual' | 'organisation') {
+  switch (tenantType) {
+    case 'individual':
+      return IndividualTier1PatchSchema
+    case 'organisation':
+      return OrganisationTierAPatchSchema
+  }
+}
+
+function pickSubmissionSchema(tenantType: 'individual' | 'organisation') {
+  switch (tenantType) {
+    case 'individual':
+      return IndividualTier1SubmissionSchema
+    case 'organisation':
+      return OrganisationTierASubmissionSchema
+  }
+}
+
 // ─── POST / — create a draft row ──────────────────────────────────────
 
 const createDraftSchema = z.object({
@@ -343,10 +368,11 @@ drafts.patch(
     // Pick the per-tier PATCH schema by tenant type. Day 17 wires the
     // Org Tier A branch alongside Individual Tier 1 (Day 16). Both
     // schemas converge on the same `{step, fields?, documents?}` shape;
-    // only the per-step field validators differ.
+    // only the per-step field validators differ. Uses the switch-based
+    // pickPatchSchema helper above for TypeScript exhaustiveness — a
+    // future third tenant type fails the type check.
     const rawBody = c.req.valid('json')
-    const patchSchema =
-      tenantType === 'individual' ? IndividualTier1PatchSchema : OrganisationTierAPatchSchema
+    const patchSchema = pickPatchSchema(tenantType)
     const parsed = patchSchema.safeParse(rawBody)
     if (!parsed.success) {
       return c.json(
@@ -560,10 +586,7 @@ drafts.post('/:id/submit', zValidator('param', idParamSchema), async (c) => {
         fields: existing.fields,
         documents: existing.documents,
       }
-      const submissionSchema =
-        tenantType === 'individual'
-          ? IndividualTier1SubmissionSchema
-          : OrganisationTierASubmissionSchema
+      const submissionSchema = pickSubmissionSchema(tenantType)
       const parsed = submissionSchema.safeParse(accumulated)
       if (!parsed.success) {
         throw new SubmissionIncompleteError(parsed.error.issues)

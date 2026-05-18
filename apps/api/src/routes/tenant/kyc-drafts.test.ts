@@ -960,7 +960,8 @@ describeIfDb('/api/v1/tenant/kyc/drafts router — Organisation Tier A (Day 17)'
     fields: {
       legalName: 'Acme Bangladesh Ltd',
       tradeLicenseNumber: 'TL-2024-DHK-0042',
-      bin: '123456789',
+      // 13-digit e-BIN per NBR's 2019-11-30 mandate (Day 17 /review BLOCKER).
+      bin: '0001234567890',
       dateOfIncorporation: '2018-03-15',
     },
   })
@@ -992,7 +993,11 @@ describeIfDb('/api/v1/tenant/kyc/drafts router — Organisation Tier A (Day 17)'
     step: 'financial' as const,
     fields: {
       accountType: 'bank' as const,
-      accountName: 'Acme Bangladesh Ltd',
+      // Per Day 17 /review important issue #4: Tier A's accountName is
+      // soft-checked against the signatory's fullName (not the org
+      // legal name) — bank accounts for SMEs in BD are typically held
+      // in the authorised signatory's capacity. Match signatoryIdentityPatch.
+      accountName: 'Tanvir Hossain',
       accountNumber: '987654321098',
       branchName: 'Dhanmondi',
       etinNumber: '9876543210',
