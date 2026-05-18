@@ -44,7 +44,15 @@ BEGIN;
 
 ALTER TABLE tenants ALTER COLUMN type DROP NOT NULL;
 
-ALTER TABLE tenants DROP CONSTRAINT tenants_type_chk;
+-- Migration 0001 declared the CHECK inline on the column
+-- (`type text NOT NULL CHECK (type IN (...))`) without a CONSTRAINT
+-- clause, so Postgres auto-named it `tenants_type_check`. The Drizzle
+-- schema (db/schema/index.ts) generates the explicitly-named
+-- `tenants_type_chk` for new tables. We drop either name (whichever
+-- the live DB happens to carry) and re-add under the explicit name so
+-- subsequent migrations can reference it without auto-name guessing.
+ALTER TABLE tenants DROP CONSTRAINT IF EXISTS tenants_type_check;
+ALTER TABLE tenants DROP CONSTRAINT IF EXISTS tenants_type_chk;
 
 ALTER TABLE tenants
   ADD CONSTRAINT tenants_type_chk

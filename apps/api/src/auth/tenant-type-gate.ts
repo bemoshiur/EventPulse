@@ -90,11 +90,7 @@ export const requireTenantType: MiddlewareHandler = async (c, next) => {
   // against future RLS-policy loosening on the tenants table. Per
   // Day 15 /review finding #1.
   const rows = await withTenant(tenantId, async (tx) =>
-    tx
-      .select({ type: tenants.type })
-      .from(tenants)
-      .where(eq(tenants.id, tenantId))
-      .limit(1),
+    tx.select({ type: tenants.type }).from(tenants).where(eq(tenants.id, tenantId)).limit(1),
   )
 
   const type = rows[0]?.type ?? null
