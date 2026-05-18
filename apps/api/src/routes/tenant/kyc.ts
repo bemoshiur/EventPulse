@@ -27,6 +27,7 @@ import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { requireTenantAuth } from '../../auth/middleware.js'
+import { requireTenantType } from '../../auth/tenant-type-gate.js'
 import { withTenant } from '../../db/client.js'
 import { kycSubmissions } from '../../db/schema/index.js'
 import {
@@ -43,6 +44,13 @@ import { sendKycSubmittedNotice } from '../../services/notifications/kyc.js'
 const kyc = new Hono()
 
 kyc.use('*', requireTenantAuth)
+// requireTenantType MUST come AFTER requireTenantAuth (it reads
+// c.get('tenantId') which the auth middleware populates). KYC routes
+// gate on type-set per Sprint 2 Day 15 Item 11: a tenant cannot start
+// uploading KYC documents or finalising a submission until they've
+// picked Individual or Organisation, because the wizard variant (Item
+// 12, Days 16-17) renders different required documents per type.
+kyc.use('*', requireTenantType)
 
 // ─── /upload-url (Day 13 Item 8) ──────────────────────────────────────
 
