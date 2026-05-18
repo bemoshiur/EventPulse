@@ -1,27 +1,38 @@
 /**
- * KYC submission state machine — Sprint 2 Day 14 Item 9.
+ * KYC submission state machine — Sprint 2 Day 14 Item 9 + Day 16 Item 12.
  *
  * Implements the transition graph from CLAUDE.md §13.3 plus the
- * rejected → draft resubmit lane added in Sprint 2 (decisions.md
- * 2026-05-17 "Sprint 2 Item 10 scope amendment" leaves Item 9's state
- * machine spec as the authoritative shape; v2.3 closeout bump amends
- * §13.3 to match).
+ * `rejected → draft → submitted` resubmit lane added Day 14, plus the
+ * wizard's `(create-as-draft) → submitted` lane added Day 16
+ * (decisions.md 2026-05-18 "KYC wizard uses server-side drafts").
+ * v2.3 playbook bump (Day 18 AM) amends §13.3 to document both lanes.
  *
  * Row-creation vs transition split (intentional, do not collapse):
  *
  *   • Row creation (first-write) does NOT route through transition().
- *     The route handler calls `createKycSubmission()` which inserts the
- *     row directly in status='submitted'. The de-facto-draft phase at
- *     submission time is the Day 13 upload-url step, which has no DB
- *     row to transition from. Introducing a synthetic null→submitted
- *     transition would add a double-write (insert as 'draft', then
- *     update to 'submitted') with no functional gain — the resubmit
- *     lane is the only path that needs 'draft' at the database layer.
+ *     Two creation paths exist:
+ *
+ *       1. Direct-submit (Item 9 — `POST /tenant/kyc/submissions`):
+ *          inserts the row directly in status='submitted'. The de-facto-
+ *          draft phase is the Day 13 upload-url step. No DB row to
+ *          transition from. Audit: `kyc_submission.transition` with
+ *          from=null, to='submitted'.
+ *
+ *       2. Wizard create-as-draft (Item 12 — `POST /tenant/kyc/drafts`):
+ *          inserts the row directly in status='draft'. The wizard PATCHes
+ *          the draft row across steps; only the final submit moves it
+ *          through transition('draft', 'submitted'). Audit:
+ *          `kyc_submission.draft_created` (helper:
+ *          `writeKycDraftCreated()` in services/audit/kyc.ts).
+ *
+ *     Both creation paths bypass transition() because there's no
+ *     prior state to transition from. transition() handles ONLY
+ *     transitions of EXISTING rows.
  *
  *   • transition() handles transitions of EXISTING rows only. Every
  *     legal transition listed below corresponds to an action by a
- *     real actor (a reviewer approving, a tenant resubmitting) on a
- *     row that already exists.
+ *     real actor (a reviewer approving, a tenant resubmitting, the
+ *     wizard finalising a draft) on a row that already exists.
  *
  * Legal transitions:
  *

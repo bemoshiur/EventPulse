@@ -46,16 +46,20 @@ export const ALLOWED_CONTENT_TYPES = {
 export type AllowedContentType = keyof typeof ALLOWED_CONTENT_TYPES
 
 // ─── document type enum (Sprint 2 minimal set) ────────────────────────
-// Tier 1 individual: nid_front, nid_back, photograph, bank_statement
-// Tier 2+ individual: + etin_certificate
+// Tier 1 individual: nid_front, nid_back, photograph, address_proof
+//   (bank_statement is captured as a text-only set of fields per the
+//    Day 16 wizard spec; reviewer can request bank_statement upload
+//    out-of-band at the Item 13 review queue if needed)
+// Tier 2+ individual: + etin_certificate, + bank_statement
 // Org Tier A/B/C: trade_license, moa, aoa, + above
-// Extending in Sprint 2 Day 18 (review queue) when the wizard's per-tier
-// requirements solidify.
+// `address_proof` added in Sprint 2 Day 16 Item 12 for the Tier 1
+// wizard's Step 2 (Address); doc-type-agnostic from an S3 perspective.
 
 export const KYC_DOCUMENT_TYPES = [
   'nid_front',
   'nid_back',
   'photograph',
+  'address_proof',
   'etin_certificate',
   'bank_statement',
   'trade_license',
