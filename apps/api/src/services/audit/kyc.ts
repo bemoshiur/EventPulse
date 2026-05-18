@@ -345,3 +345,189 @@ function deepEqualAt(
     JSON.stringify(getAtPath(after, path, prefix))
   )
 }
+
+// ─── Item 13 reviewer helpers (Day 18) ────────────────────────────────
+//
+// Four sibling helpers — one per reviewer action — that all write into
+// audit_logs from withSuperAdmin context. Same one-per-domain pattern
+// as the wizard helpers above. The KycAuditActorRole union widens
+// implicitly: actorRole on these helpers is always 'super_admin'
+// (Item 13 is super-admin-only per decisions.md 2026-05-17), but we
+// keep the parameter explicit so the helper signature documents which
+// surface wrote the row.
+//
+// All four are called inside withSuperAdmin() — Item 13 routes use
+// the BYPASSRLS context because:
+//   (a) super-admin reads need to span tenants for the queue list view,
+//   (b) the audit_logs INSERT has to populate tenant_id from the
+//       submission row (the super-admin's session doesn't carry a
+//       tenant context), so BYPASSRLS lets us write a tenant-tagged
+//       row from a non-tenant session.
+
+// ─── writeKycSubmissionViewed (Decision G) ────────────────────────────
+
+export interface WriteKycSubmissionViewedInput {
+  submissionId: string
+  /** Tenant id from the submission row — denormalised into the audit
+   *  row so tenant-side audit-trail queries surface this read event. */
+  tenantId: string
+  /** Reviewer who opened the detail view. */
+  actorUserId: string
+  ip?: string | null
+  userAgent?: string | null
+}
+
+export async function writeKycSubmissionViewed(
+  tx: Tx,
+  input: WriteKycSubmissionViewedInput,
+): Promise<void> {
+  await tx.insert(auditLogs).values({
+    tenantId: input.tenantId,
+    actorType: 'super_admin',
+    actorId: input.actorUserId,
+    action: 'kyc_submission.viewed',
+    entityType: 'kyc_submission',
+    entityId: input.submissionId,
+    // No diff — this is a pure read.
+    diff: null,
+    metadata: {
+      actor_role: 'super_admin',
+      reviewer_user_id: input.actorUserId,
+      viewed_at: new Date().toISOString(),
+    },
+    ip: input.ip ?? null,
+    userAgent: input.userAgent ?? null,
+  })
+}
+
+// ─── writeKycChecklistToggled (Decision I) ────────────────────────────
+
+export interface WriteKycChecklistToggledInput {
+  submissionId: string
+  tenantId: string
+  /** Which checklist key was toggled (e.g. 'nid_front', 'bin_format'). */
+  key: string
+  /** New state. */
+  checked: boolean
+  /** Prior state, captured before the UPDATE — undefined if the key
+   *  didn't exist in the checklist before this toggle. */
+  priorChecked?: boolean | undefined
+  actorUserId: string
+  ip?: string | null
+  userAgent?: string | null
+}
+
+export async function writeKycChecklistToggled(
+  tx: Tx,
+  input: WriteKycChecklistToggledInput,
+): Promise<void> {
+  await tx.insert(auditLogs).values({
+    tenantId: input.tenantId,
+    actorType: 'super_admin',
+    actorId: input.actorUserId,
+    action: 'kyc_submission.checklist_toggled',
+    entityType: 'kyc_submission',
+    entityId: input.submissionId,
+    diff: {
+      key: input.key,
+      from: input.priorChecked ?? null,
+      to: input.checked,
+    },
+    metadata: { actor_role: 'super_admin' },
+    ip: input.ip ?? null,
+    userAgent: input.userAgent ?? null,
+  })
+}
+
+// ─── writeKycNotesUpdated (Decision I) ────────────────────────────────
+
+export interface WriteKycNotesUpdatedInput {
+  submissionId: string
+  tenantId: string
+  /** Prior notes value (may be null if first-time set). Truncated to
+   *  first 500 chars in the audit diff per Decision I. */
+  priorNotes: string | null
+  /** New notes value. Truncated to first 500 chars in the audit diff
+   *  per Decision I. Full text stays in the kyc_submissions column. */
+  newNotes: string
+  actorUserId: string
+  ip?: string | null
+  userAgent?: string | null
+}
+
+function truncate(s: string | null, n: number): string | null {
+  if (s === null) return null
+  return s.length > n ? `${s.slice(0, n)}…` : s
+}
+
+export async function writeKycNotesUpdated(
+  tx: Tx,
+  input: WriteKycNotesUpdatedInput,
+): Promise<void> {
+  await tx.insert(auditLogs).values({
+    tenantId: input.tenantId,
+    actorType: 'super_admin',
+    actorId: input.actorUserId,
+    action: 'kyc_submission.notes_updated',
+    entityType: 'kyc_submission',
+    entityId: input.submissionId,
+    diff: {
+      // Truncated to 500 chars per Decision I. Full text stays in the
+      // kyc_submissions.reviewer_notes column. The diff is for audit
+      // forensics ("what kind of change") not for full notes history.
+      from_truncated: truncate(input.priorNotes, 500),
+      to_truncated: truncate(input.newNotes, 500),
+      from_length: input.priorNotes?.length ?? 0,
+      to_length: input.newNotes.length,
+    },
+    metadata: { actor_role: 'super_admin' },
+    ip: input.ip ?? null,
+    userAgent: input.userAgent ?? null,
+  })
+}
+
+// ─── writeKycDecided (Decision I) ─────────────────────────────────────
+//
+// Final decision (approve or reject) writes a separate audit row with
+// the full checklist snapshot in the diff for retrospective audit
+// review. The transition itself ALSO writes a row via the existing
+// writeKycTransition helper — the decision-context row complements
+// the transition row by capturing what was true at decision time.
+
+export interface WriteKycDecidedInput {
+  submissionId: string
+  tenantId: string
+  decision: 'approve' | 'reject'
+  /** Reject only — the reviewer's typed reason. */
+  reason?: string | null
+  /** Reject only — optional category for downstream analytics. */
+  category?: string | null
+  /** Snapshot of the full checklist state at decision time. Stored as
+   *  jsonb so the regulator can answer "which keys were checked when
+   *  this submission was approved" without joining back to the (then-
+   *  mutated) kyc_submissions row. */
+  checklistSnapshot: Record<string, { checked: boolean; checkedAt: string; checkedBy: string }>
+  actorUserId: string
+  ip?: string | null
+  userAgent?: string | null
+}
+
+export async function writeKycDecided(tx: Tx, input: WriteKycDecidedInput): Promise<void> {
+  await tx.insert(auditLogs).values({
+    tenantId: input.tenantId,
+    actorType: 'super_admin',
+    actorId: input.actorUserId,
+    action: 'kyc_submission.decided',
+    entityType: 'kyc_submission',
+    entityId: input.submissionId,
+    diff: {
+      decision: input.decision,
+      ...(input.reason ? { reason: input.reason } : {}),
+      ...(input.category ? { category: input.category } : {}),
+      checklist_snapshot: input.checklistSnapshot,
+    },
+    metadata: { actor_role: 'super_admin' },
+    ip: input.ip ?? null,
+    userAgent: input.userAgent ?? null,
+  })
+}

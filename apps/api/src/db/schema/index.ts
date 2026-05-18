@@ -376,6 +376,16 @@ export const kycSubmissions = pgTable(
     porichoyVerificationId: text('porichoy_verification_id'),
     bankNameMatch: boolean('bank_name_match').notNull().default(false),
     bfiuScreened: boolean('bfiu_screened').notNull().default(false),
+    // Reviewer state added in migration 0007 (Sprint 2 Day 18 Item 13)
+    // per Decisions G/H/I in `.claude/memory/decisions.md` 2026-05-19.
+    // reviewerChecklist persists per-key check state across review
+    // sessions; per-tier required keys are in shared-types as canonical
+    // const arrays. reviewerNotes is internal-only free text, never
+    // surfaced to tenants.
+    reviewerChecklist: jsonb('reviewer_checklist')
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    reviewerNotes: text('reviewer_notes'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
