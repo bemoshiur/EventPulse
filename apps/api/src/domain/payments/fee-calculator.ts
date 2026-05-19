@@ -191,12 +191,16 @@ export function calculateOrderFees(input: FeeCalcInput): FeeCalcResult {
   // accrues to platform either way.
   const platformRevenuePaisa = platformFeePaisa
 
-  // Buyer-facing receipt breakdown — only lines the buyer actually sees.
-  // Always lead with the ticket subtotal so receipts render in a predictable
-  // order regardless of fee mode.
-  const breakdown: BreakdownLine[] = [
-    { label: 'ticket_subtotal', amountPaisa: ticketSubtotalPaisa },
-  ]
+  // Buyer-facing receipt breakdown — only lines the buyer actually sees,
+  // and only ones with a non-zero amount. Free events (subtotal=0 per §13.5)
+  // yield an EMPTY breakdown array so receipt renderers don't have to
+  // independently filter "Ticket — 0.00 BDT" lines. When subtotal > 0,
+  // the ticket line always leads so renderers see a predictable order
+  // regardless of fee mode.
+  const breakdown: BreakdownLine[] = []
+  if (ticketSubtotalPaisa > 0n) {
+    breakdown.push({ label: 'ticket_subtotal', amountPaisa: ticketSubtotalPaisa })
+  }
   if (platformFeeHandling === 'pass_through' && platformFeePaisa > 0n) {
     breakdown.push({ label: 'platform_fee', amountPaisa: platformFeePaisa })
   }
@@ -251,6 +255,14 @@ function validateInput(input: FeeCalcInput): void {
 function validateBps(field: string, bps: number): void {
   if (typeof bps !== 'number') {
     throw new InvalidFeeCalcInputError(`${field} must be a number; received ${typeof bps}`)
+  }
+  // Finite check before integer check so the error message for NaN / Infinity
+  // says "must be a finite number" instead of the misleading "must be an
+  // integer" — Number.isInteger() returns false for both Infinity and NaN,
+  // but they're not non-integer floats, they're non-finite. Clearer diagnostics
+  // matter when the fee calculator is the single source of money truth.
+  if (!Number.isFinite(bps)) {
+    throw new InvalidFeeCalcInputError(`${field} must be a finite number; received ${bps}`)
   }
   if (!Number.isInteger(bps)) {
     throw new InvalidFeeCalcInputError(`${field} must be an integer; received ${bps}`)

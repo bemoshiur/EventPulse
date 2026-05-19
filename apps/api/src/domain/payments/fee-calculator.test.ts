@@ -157,6 +157,8 @@ describe('Free event (subtotal = 0)', () => {
   // §13.5 specifies that the fee calculator is called regardless of
   // whether an event is free; the calculator returns all-zeros for
   // subtotal=0 and downstream code never branches on "is this free?"
+  // The breakdown is EMPTY for free events so receipt renderers don't
+  // have to filter "Ticket — 0.00 BDT" lines themselves.
   it.each([
     { p: 'pass_through' as const, e: 'pass_through' as const },
     { p: 'absorb' as const, e: 'absorb' as const },
@@ -176,7 +178,7 @@ describe('Free event (subtotal = 0)', () => {
     expect(result.buyerTotalPaisa).toBe(0n)
     expect(result.organiserNetPaisa).toBe(0n)
     expect(result.platformRevenuePaisa).toBe(0n)
-    expect(result.breakdown).toEqual([{ label: 'ticket_subtotal', amountPaisa: 0n }])
+    expect(result.breakdown).toEqual([])
   })
 })
 
@@ -350,15 +352,21 @@ describe('Invalid input — calculator throws rather than silently producing wro
     ).toThrow(/epsFeeHandling must be 'absorb' \| 'pass_through'/)
   })
 
-  it('rejects NaN bps', () => {
+  it('rejects NaN bps with "must be a finite number" diagnostic', () => {
     expect(() => calculateOrderFees(makeInput({ platformFeeBps: NaN }))).toThrow(
-      InvalidFeeCalcInputError,
+      /platformFeeBps must be a finite number/,
     )
   })
 
-  it('rejects Infinity bps', () => {
+  it('rejects Infinity bps with "must be a finite number" diagnostic (not the misleading "must be an integer")', () => {
     expect(() =>
       calculateOrderFees(makeInput({ platformFeeBps: Number.POSITIVE_INFINITY })),
-    ).toThrow(InvalidFeeCalcInputError)
+    ).toThrow(/platformFeeBps must be a finite number/)
+  })
+
+  it('rejects negative Infinity bps with "must be a finite number" diagnostic', () => {
+    expect(() =>
+      calculateOrderFees(makeInput({ platformFeeBps: Number.NEGATIVE_INFINITY })),
+    ).toThrow(/platformFeeBps must be a finite number/)
   })
 })
