@@ -121,12 +121,34 @@ describeIfDb('/api/v1/admin/legal router (Items 14+15)', () => {
 
   afterAll(async () => {
     await withSuperAdmin(async (db) => {
-      // Clean up the audit row from this test run.
+      const { sql } = await import('drizzle-orm')
+      // 1. Clean up audit rows from this test run.
       await db.delete(auditLogs).where(eq(auditLogs.entityType, 'legal_document_version'))
-      // Clean up legal rows touched by this test (slug prefixed by ts).
-      await db.delete(legalDocumentVersions).where(eq(legalDocumentVersions.documentId, fix.docId!))
-      await db.delete(legalDocuments).where(eq(legalDocuments.id, fix.docId!))
-      // Tenant + users.
+      // 2. Null out current_version_id on all test-created docs so we
+      //    can delete versions in any order.
+      await db
+        .update(legalDocuments)
+        .set({ currentVersionId: null })
+        .where(sql`${legalDocuments.slug} LIKE 'test-%'`)
+      // 3. Delete ALL legal_document_versions whose created_by points
+      //    at the test admin user (publish endpoint inserts these on
+      //    every successful POST and they live across iterations of
+      //    beforeEach). Doing this BEFORE user delete avoids the
+      //    legal_document_versions_created_by_fkey violation.
+      if (fix.adminUser) {
+        await db
+          .delete(legalDocumentVersions)
+          .where(eq(legalDocumentVersions.createdBy, fix.adminUser))
+      }
+      // 4. Delete all versions whose document was created by this test.
+      await db
+        .delete(legalDocumentVersions)
+        .where(
+          sql`${legalDocumentVersions.documentId} IN (SELECT id FROM legal_documents WHERE slug LIKE 'test-%')`,
+        )
+      // 5. Delete all test-created documents.
+      await db.delete(legalDocuments).where(sql`${legalDocuments.slug} LIKE 'test-%'`)
+      // 6. Tenant + users.
       if (fix.tenant) {
         await db.delete(tenants).where(eq(tenants.id, fix.tenant))
       }
@@ -200,7 +222,9 @@ describeIfDb('/api/v1/admin/legal router (Items 14+15)', () => {
           headers: { authorization: `Bearer ${fix.tenantToken!}` },
         }),
       )
-      expect(res.status).toBe(401) // middleware returns 401 with FORBIDDEN code
+      expect(res.status).toBe(403)
+      const body = (await res.json()) as { error: { code: string } }
+      expect(body.error.code).toBe('FORBIDDEN')
     })
   })
 

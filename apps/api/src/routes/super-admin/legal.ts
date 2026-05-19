@@ -333,7 +333,10 @@ adminLegalRoutes.post(
         return c.json({ error: { code: 'DOCUMENT_NOT_FOUND', message: err.message } }, 404)
       }
       // Postgres unique-constraint violation (23505) on (document_id, version).
-      if (typeof err === 'object' && err !== null && 'code' in err && err.code === '23505') {
+      // Drizzle wraps pg errors in DrizzleQueryError; the original pg
+      // error sits at err.cause. Check both the top-level err and the
+      // cause so we don't miss the wrap.
+      if (isUniqueViolation(err)) {
         return c.json(
           {
             error: {
@@ -352,6 +355,25 @@ adminLegalRoutes.post(
     }
   },
 )
+
+// ─── error-shape sniffer for pg unique-violation under DrizzleQueryError ────
+
+function isUniqueViolation(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false
+  if ('code' in err && (err as { code?: unknown }).code === '23505') return true
+  if ('cause' in err) {
+    const cause = (err as { cause?: unknown }).cause
+    if (
+      typeof cause === 'object' &&
+      cause !== null &&
+      'code' in cause &&
+      (cause as { code?: unknown }).code === '23505'
+    ) {
+      return true
+    }
+  }
+  return false
+}
 
 // ─── small helper used by the version-fetch cross-check above ────────
 
