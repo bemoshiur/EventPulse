@@ -4,6 +4,287 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-19 · Items 14+15 Trust Center scaffolding + super admin Legal & Trust editor — pre-code architecture (Decisions J, K, L, M)
+
+**Context:** Day 19 ships Items 14 + 15 **bundled** — Trust Center public routes (6 legal contracts + 12 trust artefacts, all at v0.1 skeleton placeholders per §20) + super admin Legal & Trust editor for version-tracked markdown publishing. Per `Trust Center v0.1 placeholders — skeleton-only, no AI-generated full text` (2026-05-17, load-bearing): zero AI-generated full-text legal drafts; counsel produces v1.0 before the first paying tenant onboards. The Day 19 infrastructure is the substrate counsel writes onto, the rendering pipeline tenants will eventually consent against, and the URL surface that gets crawled, linked-to, and tested against between now and v1.0.
+
+Four architecture decisions need to land before Item 14+15 code starts so backend + frontend are built against a single shared shape. All four were proposed in Moshiur's Day 19 brief and confirmed in the kick-off response; this entry codifies them as canonical project decisions.
+
+---
+
+### Decision J — Markdown sanitization pipeline: `rehype-sanitize` (unified family), `defaultSchema` allowlist
+
+The super admin Legal & Trust editor accepts markdown (`body_md`) and pre-renders it to sanitized HTML (`body_html`) **server-side at publish time**, not at render time. The pipeline is the unified ecosystem standard:
+
+```typescript
+// apps/api/src/domain/legal/render.ts
+import { unified } from 'unified'
+import remarkParse from 'remark-parse'
+import remarkRehype from 'remark-rehype'
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
+import rehypeStringify from 'rehype-stringify'
+
+const pipeline = unified()
+  .use(remarkParse)
+  .use(remarkRehype)
+  .use(rehypeSanitize, defaultSchema)
+  .use(rehypeStringify)
+
+export async function renderLegalMarkdown(markdown: string): Promise<string> {
+  const file = await pipeline.process(markdown)
+  return String(file)
+}
+```
+
+**Five new runtime deps** added to `apps/api/package.json` (deliberately all in one ecosystem to minimise dependency surface area and ensure cohesive maintenance): `unified`, `remark-parse`, `remark-rehype`, `rehype-sanitize`, `rehype-stringify`. All MIT-licensed, all by the same author (Titus Wormer), all widely-deployed across Next.js / Astro / Gatsby / MDX. The combined surface is ~120 KB of unpacked JS, all server-side (never shipped to the browser since rendering happens server-side at publish).
+
+**Why this pipeline over alternatives:**
+
+- **`marked` + `dompurify`** (2 deps) would be smaller on paper, but `dompurify` requires `jsdom` for server-side use (a ~10 MB transitive). Net: bigger install, more attack surface.
+- **In-house regex-based sanitizer.** Rejected outright. Markdown-to-HTML sanitization is an attack-surface domain where reinvention is the wrong move; the unified ecosystem has had ~10 years of community security review against XSS payloads (e.g. nested `<svg>` exploits, `data:` URI tricks, malformed `<a href="javascript:">` variants).
+- **MDX.** Out of scope. MDX lets authors embed React components inline — by design the opposite of what we want for legal text. Authors are super admins typing prose; they don't need React.
+
+**Allowlist scope — `defaultSchema` unchanged:** rehype-sanitize ships `defaultSchema` which mirrors the GitHub-flavored-Markdown safe set: headings (`h1`-`h6`), paragraphs, lists (`ul`, `ol`, `li`), blockquotes, code blocks (`pre`/`code`), inline emphasis (`em`, `strong`), `<a>` with `href` constrained to `http(s)`/`mailto`, `<hr>`, `<br>`. Stripped: `<script>`, `<style>`, `<iframe>`, `<object>`, `<embed>`, `<form>`, `<input>`, all event-handler attributes, all inline `style` attributes, `<img>` with non-https sources. **`<img>` is allowed only when `src` is `https://`** — preserves the option for counsel to embed Trust Center diagrams later, blocks `data:`/`javascript:` URI trickery.
+
+**Widening the allowlist requires an explicit decisions.md entry.** If counsel returns v1.0 drafts requiring callout boxes, definition lists, footnotes, tables, or any HTML construct outside `defaultSchema`, that's a Sprint 3+ decision documented separately. The Day 19 baseline is "the allowlist is the contract."
+
+**Rendering happens at publish, not at request:**
+
+- Editor submits `body_md` → server runs the pipeline → stores `body_md` (canonical) AND `body_html` (cached render) on the new `legal_document_versions` row. Both columns are NOT NULL.
+- Public pages serve `body_html` directly, bypassing the pipeline at request time. Per §20.5: "Public pages are rendered server-side from `body_html` and cached at the edge."
+- Re-render path: a maintenance script (`pnpm legal:rerender`) can re-process all current versions if the allowlist changes — emits a `legal.version.rerendered` audit row per version (sibling helper to the existing audit-per-domain pattern). Not Day 19 scope; queued as Sprint 3+ candidate for the moment the allowlist widens.
+
+**Why pre-render and store HTML rather than render-on-request:** (a) edge cache hit rate of a static HTML string is higher than a dynamic render; (b) the sanitization step is a defensive boundary — sanitizing at publish means the stored `body_html` is *known-safe-at-store-time*, and a stored-HTML XSS would require both a sanitizer bypass at publish AND a compromise of the editor flow. Render-on-request would re-run the sanitizer per page load — wasted CPU and an attack surface that re-opens with every request.
+
+**Cross-references:**
+
+- `Trust Center v0.1 placeholders — skeleton-only, no AI-generated full text` (2026-05-17, load-bearing) — what the pipeline renders (placeholder text) vs what it will render once counsel returns (v1.0 drafts).
+- §20.3 + §20.5 — page anatomy + storage contract that this pipeline implements.
+- Audit helper pattern (`audit_logs scope at Item 9 — KYC transitions only; auth events + S3 issuance backfill deferred` 2026-05-17, reaffirmed 2026-05-18). When the Legal & Trust editor publishes a new version, the audit row is written by a new domain helper `writeLegalVersionPublished` in `apps/api/src/services/audit/legal.ts` — new domain (legal), new file, one helper for now. Sibling helpers (`writeLegalVersionEdited` for in-progress drafts, `writeLegalVersionRerendered` for the allowlist-widening maintenance flow) can join later; never collapse into a generic `writeAudit()`.
+
+**Consequences:**
+
+- Five new deps land in `apps/api/package.json`. Lockfile commit included in the backend PR.
+- New file `apps/api/src/domain/legal/render.ts` exports `renderLegalMarkdown(md: string): Promise<string>`. Single source of truth — no other module re-implements sanitization.
+- The editor's create-new-version endpoint (`POST /api/v1/admin/legal/documents/:slug/versions`) **must** call `renderLegalMarkdown()` and persist `body_html` from its output. Storing client-supplied HTML is forbidden — the endpoint only accepts `{ version, body_md, summary_of_changes, material_change, effective_at }` and computes `body_html` server-side.
+- Unit tests: (a) round-trip a known-safe markdown sample and assert HTML output; (b) sanitization tests confirming `<script>alert(1)</script>`, `<a href="javascript:alert(1)">`, `<img src="data:..." onerror="...">`, `<iframe>`, `<style>` are all stripped or escaped; (c) a "boring markdown" snapshot test (placeholder body_md → known HTML output) that catches accidental allowlist changes.
+
+---
+
+### Decision K — Public Trust Center pages render via Server Components with direct service-layer DB read; no client-side hydration
+
+Each of the 18 public Trust Center paths (`/privacy`, `/terms`, `/eula`, `/dpa`, `/cookies`, `/refund-policy`, plus 12 `/trust/...` paths per §20.1) is a Next.js **Server Component** under `apps/web/src/app/(public)/`. It fetches the document + its current version directly via the service-layer function and renders the pre-rendered `body_html` plus version metadata + a non-dismissable DRAFT banner (per `Trust Center v0.1 placeholders — skeleton-only`).
+
+```typescript
+// apps/web/src/app/(public)/privacy/page.tsx (illustrative)
+import { fetchLegalDocumentByUrlPath } from '@/lib/legal'
+import { LegalDocumentPage } from '@/components/legal/document-page'
+
+export const revalidate = 3600  // edge cache 1h; busted by editor on publish via revalidatePath()
+
+export default async function PrivacyPage() {
+  const doc = await fetchLegalDocumentByUrlPath('/privacy')
+  return <LegalDocumentPage doc={doc} />
+}
+```
+
+**No client-side hydration of legal content.** The legal page is static HTML at request time. No `'use client'`, no TanStack Query, no useEffect, no client-fetched JSON. The DRAFT banner is a server-rendered `<div role="alert">` — not a dismissable client component.
+
+**Why server-rendered, not client-fetched:**
+
+1. **Edge cache friendliness.** A pure server-rendered page with `revalidate: 3600` caches as a single HTML string. Client-fetched pages would shell-render then hydrate then fetch — three network round trips for content that hasn't changed since the last publish.
+2. **No user-state shape.** Trust Center pages are identical for every visitor — no per-tenant scope, no per-user state, no personalisation, no A/B tests. The natural shape is "render once, serve everywhere."
+3. **SEO + crawler friendliness.** Legal pages must be crawler-readable. Server-rendered HTML is always crawler-readable; client-hydrated content can fail if the crawler doesn't run JS (most respect-policy crawlers do, but search-engine fallback indexing relies on initial HTML).
+4. **No PII surface.** Per Decision H (Item 13, 2026-05-19), the project's only per-query cache override (`staleTime: 0` + `gcTime: 0`) exists for PII surfaces. Trust Center pages have no PII whatsoever — they're the opposite extreme. Default Next.js edge caching applies cleanly.
+
+**Cache invalidation:** the Legal & Trust editor's "publish new version" action calls Next.js `revalidatePath()` for the document's `canonical_url_path` (per Decision M) immediately after persisting the new version row. Within ~1s the public page reflects the new content. Background re-render attempts fall through `revalidate: 3600` if invalidation fails for any reason. No manual cache flush UI in v0.1.
+
+**Direct service-layer DB read — bypasses the HTTP API:** `fetchLegalDocumentByUrlPath()` lives in `apps/web/src/lib/legal.ts` and calls into a service-layer function exported from `apps/api/src/domain/legal/queries.ts`. Per §3.2 the web app can directly import from `apps/api`'s service layer (it does already for tenant context). This avoids a same-server HTTP hop and keeps the public-page render path as one Postgres SELECT. The query runs as `eventpulse_admin` (BYPASSRLS) since legal documents are platform-global, not tenant-scoped.
+
+**Data shape returned:**
+
+```typescript
+interface LegalDocumentRender {
+  slug: string                    // 'privacy', 'security-disclosure', ...
+  category: 'legal_contract' | 'trust_artefact'
+  title: string                   // 'Privacy Policy', 'Vulnerability Disclosure', ...
+  oneLiner: string                // for SEO meta + Trust Center landing card
+  canonicalUrlPath: string        // '/privacy', '/trust/security/disclosure', ...
+  currentVersion: {
+    version: string               // 'v0.1'
+    effectiveAt: string           // ISO timestamp
+    bodyHtml: string              // pre-rendered, sanitized
+    materialChange: boolean       // false for v0.1 placeholders
+    isDraft: boolean              // true when version matches /^v0\./
+  }
+  requiresSignature: boolean      // true for the 6 contracts, false for the 12 artefacts
+}
+```
+
+The `isDraft` boolean is derived server-side from the version string (any `v0.x` is draft). The DRAFT banner is rendered conditionally on `isDraft === true`. Once counsel publishes `v1.0.0`, the banner stops rendering automatically — no code change required.
+
+**Trust Center landing page (`/trust`):** separate Server Component that fetches all documents via a single `listLegalDocumentsForTrustCenterLanding()` query, renders the two card grids per §20.2 (6 contracts + 12 artefacts). Same `revalidate: 3600`.
+
+**Cross-references:**
+
+- §20.5 — "Public pages are rendered server-side from `body_html` and cached at the edge. Cache invalidation on new version publication is automatic." Decision K is the implementation contract for that line.
+- §3.2 module boundaries — web app can import service-layer functions from `apps/api`, not routes. This is exactly that pattern.
+- Decision H (2026-05-19, Item 13) — explicitly *non*-PII surface, so the cache-zero override does not apply. Default Next.js `revalidate` is correct.
+
+**Consequences:**
+
+- 19 server-component page files land in `apps/web/src/app/(public)/`: 18 individual document pages + `/trust/page.tsx` (landing).
+- One shared `<LegalDocumentPage>` component renders the document + DRAFT banner. Same shape for all 18 — only the data differs.
+- One shared `<TrustCenterLandingGrid>` for the `/trust` landing page.
+- Service-layer functions `fetchLegalDocumentByUrlPath`, `fetchLegalDocumentBySlug`, `listLegalDocumentsForTrustCenterLanding`, `fetchVersionHistoryForDocument` in `apps/api/src/domain/legal/queries.ts` — Decision M codifies the URL-path-keyed lookup pattern.
+- Test coverage: (a) each of the 18 pages returns a 200 with the correct title via Playwright smoke (lighter than e2e — just confirms route resolution + render); (b) the DRAFT banner is in the DOM for v0.1; (c) the Trust Center landing lists all 18 with correct categories; (d) cache header asserts (server returns a sensible `Cache-Control` for edge caching).
+
+---
+
+### Decision L — Re-consent enforcement gate deferred to Sprint 3 alongside counsel-produced v1.0 documents
+
+The §20.4 material-change re-consent flow (cron sets `requires_reconsent = true` → interstitial at next login → `consent_records` row written) **is not in Day 19 scope**. Day 19 ships only the document-storage substrate (`legal_documents` + `legal_document_versions` tables + admin editor + public pages). The `consent_records` table, the interstitial UI, the cron job, and the registration-flow consent gate all defer to **Sprint 3** alongside the first counsel-produced v1.0 publishes.
+
+**Why deferred:**
+
+1. **Consent against a v0.1 DRAFT placeholder is harmful.** Capturing a `consent_records` row for `terms@v0.1` legally implies the user agreed to the v0.1 text, when in fact v0.1 explicitly says "PLACEHOLDER — to be drafted by counsel." Either the consent is meaningless (in which case why capture it) or it's misleading (in which case it's worse than not capturing it). The right shape is: no consent flow at all until v1.0 exists.
+2. **The infrastructure landing in Day 19 is already enough to support Sprint 3.** `legal_documents.requires_signature` is in the schema. `legal_document_versions.material_change` is in the schema. Sprint 3 adds `consent_records(user_id, document_id, version_id, consented_at, ip, user_agent, withdrawn_at)` per §9.11 plus the interstitial + the gate. No re-migration of Day 19's tables needed.
+3. **Onboarding flow is not yet blocked anyway.** Per `Trust Center v0.1 placeholders — skeleton-only` (2026-05-17): "Onboarding flow gates on consent → consent gates on v1.0 documents → first paying tenant blocked until counsel returns drafts." First paying tenant is end-of-Sprint-2 / Sprint-4. Sprint 3 lands consent in time.
+
+**What this means for Day 19's deliverables:**
+
+- **No new tables beyond `legal_documents` + `legal_document_versions`.** Specifically: no `consent_records`. The §9.11 DDL for `consent_records` stays unpicked-up until Sprint 3.
+- **No consent prompt UI.** Sign-up flow renders nothing about Trust Center documents.
+- **No re-consent interstitial.** `/legal/reconsent` route is not added; the route lands with the Sprint 3 consent work.
+- **No cron job.** No `requires_reconsent` flag is set anywhere. The publish endpoint does NOT trigger a re-consent broadcast.
+- **Public pages link from a footer-level "Trust" link** so they're reachable, but there's no enforcement to read them before sign-up. Tenants can complete onboarding without ever clicking through.
+
+**What Day 19 DOES do that Sprint 3 benefits from:**
+
+- Tables, columns, indexes for legal_documents + legal_document_versions are *correct for the final flow* — Sprint 3 only adds `consent_records` + the UI/cron layer.
+- `requires_signature` boolean is populated correctly per §20.2 (true for the 6 contracts, false for the 12 artefacts). Sprint 3's gate reads this directly.
+- `canonical_url_path` (per Decision M) is in place — Sprint 3's interstitial can deep-link to the document being re-consented.
+- `material_change` boolean is in the schema — Sprint 3's cron reads this to decide whether to broadcast a re-consent prompt vs. silently update.
+
+**Scope-creep red flags to halt at:** if Day 19 implementation tempts toward (a) a "click to acknowledge" button on any page, (b) capturing IP / user-agent on any Trust Center view, (c) adding a footer-acceptance checkbox to sign-up, (d) a "preview consent flow" toggle for super admins, (e) any column on `users` or `tenants` referencing consent state — halt and surface. All of those are Sprint 3 scope.
+
+**Cross-references:**
+
+- `Trust Center v0.1 placeholders — skeleton-only, no AI-generated full text` (2026-05-17) — the load-bearing companion. Day 19 + Decision L together codify "infrastructure in v0.1, enforcement in Sprint 3."
+- §9.11 — `consent_records` DDL stays unbuilt until Sprint 3.
+- §20.4 — Re-consent flow specification; describes the Sprint 3 surface, not the Day 19 surface.
+
+**Consequences:**
+
+- Sprint 3 sprint plan acquires a new line item: "Items 14+15 extension — consent_records table + onboarding gate + reconsent interstitial + cron." Owner TBD; sized after counsel returns v1.0 drafts.
+- Day 19 PRs (backend + frontend) are smaller than they'd otherwise be, by deliberate choice. Estimate: ~1500 lines + tests vs ~3000 if consent were bundled.
+- Public footer rendering on tenant + attendee portals links to `/trust` but does NOT pop a consent banner; the link is for discoverability only.
+
+---
+
+### Decision M — Defer to §20 verbatim on document set; flat database slugs + `canonical_url_path` column for data-driven URL routing
+
+Two interlocking choices about the document data model.
+
+**M.1 — Document set: defer to §20.2 verbatim (6 legal contracts + 12 trust artefacts).** No additions, no slug renames, no category re-mappings. The canonical inventory is:
+
+**Legal contracts (`category = 'legal_contract'`, `requires_signature = true`):**
+
+| slug | canonical_url_path | title | one_liner (from §20.2) |
+| --- | --- | --- | --- |
+| `privacy` | `/privacy` | Privacy Policy | How we handle your data, what your 9 rights are, who our sub-processors are. |
+| `terms` | `/terms` | Terms of Service | The deal between you and Event Pulse, written plainly. Pro-user framing throughout. |
+| `eula` | `/eula` | EULA | Your licence to use Event Pulse — and confirmation you own every output, every page, every form. |
+| `dpa` | `/dpa` | Data Processing Addendum | GDPR-compliant DPA for B2B customers handling controller-to-processor obligations. |
+| `cookies` | `/cookies` | Cookie Policy | Every cookie we set, its purpose, and how to opt out. |
+| `refund-policy` | `/refund-policy` | Refund Policy | When buyers can get their money back, the SLA-credit schedule, the EPS chargeback path. |
+
+**Trust artefacts (`category = 'trust_artefact'`, `requires_signature = false`):**
+
+| slug | canonical_url_path | title | one_liner (from §20.2) |
+| --- | --- | --- | --- |
+| `security` | `/trust/security` | Security & Infrastructure | Cloud architecture, encryption, KMS, ISO 27001 alignment, pen-test cadence. |
+| `sub-processors` | `/trust/sub-processors` | Sub-processors | Live list of every third party that touches your data, with purpose, location, and DPA link. |
+| `security-disclosure` | `/trust/security/disclosure` | Vulnerability Disclosure | Safe-harbour policy for security researchers. We respond within 72 hours. |
+| `sla` | `/trust/sla` | Service Level Agreement | Our 99.5% monthly uptime commitment and the credit schedule when we fall short. |
+| `acceptable-use` | `/trust/acceptable-use` | Acceptable Use Policy | What you can and can't do with Event Pulse. The suspension + appeal path. |
+| `anti-bribery` | `/trust/anti-bribery` | Anti-Bribery & Anti-Corruption | Our procurement-grade integrity policy. UK Bribery Act, FCPA, BD ACC Act 2004. |
+| `ai-policy` | `/trust/ai-policy` | Responsible AI Policy | Which models we use, how, what we don't allow, and our no-training-on-customer-data guarantee. |
+| `bangladesh-compliance` | `/trust/bangladesh-compliance` | Bangladesh Compliance | Per-clause mapping to DSA 2018 §29–§32, BTRC notice handling, ICT Act 2006. |
+| `gdpr` | `/trust/gdpr` | GDPR Compliance | Per-Article walk-through, SCCs + UK IDTA, EU representative info. |
+| `accessibility` | `/trust/accessibility` | Accessibility Statement | Our WCAG 2.1 AA conformance status, known issues, remediation timeline. |
+| `transparency` | `/trust/transparency` | Transparency Report | Government requests received in the year, refusal rate, our gag-order disclosure approach. |
+| `retention` | `/trust/retention` | Data Retention Schedule | Per-data-type retention windows. KYC docs: 5 years. Invoices: 7 years. Event logs: 1 year. |
+
+**Sub-processors entry is IN `legal_documents`.** §20.6 describes a separate `docs/sub-processors.json` flow with a daily diff job. Decision M consolidates this: the sub-processors document lives in `legal_documents` like every other artefact, with version-tracked publishes through the same Legal & Trust editor. For v0.1 the body is a single-paragraph DRAFT placeholder (per the skeleton structure below); the structured-table editor (form-based JSON edit + auto-format to a sortable HTML table at render) **defers to Sprint 3**. Until then, super-admin updates to sub-processors flow through the standard markdown editor (a maintainer can paste a markdown table once counsel returns v1.0 with the canonical sub-processor list). Sprint 3 picks up the `<SubprocessorsEditor />` UI + the daily diff job per §20.6.
+
+**M.2 — Skeleton structure: single-section DRAFT placeholder per document.** Every seeded v0.1 body uses this exact template:
+
+```markdown
+# {{Document Title}}
+
+> **DRAFT — not yet legally reviewed**
+>
+> This document is a placeholder. Final legal content will be drafted by counsel before MVP launch. The structure shown here represents a starting frame; actual section headings and content will be determined by counsel based on Bangladesh law and the platform's specific operations.
+
+## Status
+
+This document is currently at version v0.1 — a structural placeholder published to establish the URL, rendering pipeline, and consent capture infrastructure. **No legal effect is intended or implied.** Tenants are not bound by this version; consent capture is explicitly blocked on documents at v0.x versions (see registration flow §20.4).
+
+## What this document will cover (provisional)
+
+{{Generated from §20.2's one-liner: "<title>" will cover <one_liner_paragraph>.}}
+
+## Contact
+
+For questions about this {{document type}}, contact legal@eventpulse.com.bd.
+```
+
+The seed script generates the "What this document will cover" paragraph from §20.2's per-document one-liner. The placeholder text intentionally **does not** speculate beyond the one-liner — no AI-generated full text, no transcribed open-source templates. Counsel produces v1.0 from this skeleton; v0.1 is just a structural and infrastructural fixture.
+
+**M.3 — Database slugs are flat; URL routing is data-driven via `canonical_url_path` column.**
+
+```sql
+-- migration 0008 amendment to the §9.11 DDL:
+CREATE TABLE legal_documents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug text NOT NULL UNIQUE,                  -- 'privacy', 'security-disclosure', 'sub-processors'
+  canonical_url_path text NOT NULL UNIQUE,    -- '/privacy', '/trust/security/disclosure'
+  category text NOT NULL CHECK (category IN ('legal_contract','trust_artefact')),
+  title text NOT NULL,
+  one_liner text NOT NULL,
+  current_version_id uuid,
+  requires_signature boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_legal_documents_url ON legal_documents(canonical_url_path);
+```
+
+The `canonical_url_path` column extends §9.11's published DDL (which only had `slug`). The motivation: §20.1 has nested URLs (`/trust/security/disclosure`) but the schema must accept flat unique slugs (`security-disclosure`) so the editor's UI / API never has to encode `/` in URL params. Sprint 4's sitemap generator + the Decision K public-page lookup both read `canonical_url_path` — single source of truth for "where does this document live on the public web."
+
+**Routing is purely data-driven, not pattern-based.** The Decision K Server Component pages each declare their own URL path (`/privacy/page.tsx`, `/trust/security/disclosure/page.tsx`, etc.) and call `fetchLegalDocumentByUrlPath(<path>)`. There is no central middleware mapping; no regex; no glob. Adding a new document is: insert a row with the right `canonical_url_path` + add the matching Next.js route file. The seed migration's data is the contract.
+
+**Cross-references:**
+
+- §9.11 — published DDL extended (not replaced) by Decision M. v2.4 playbook bump (Sprint 2 closeout candidate) carries the `canonical_url_path` column into §9.11 verbatim.
+- §20.1 — URL structure that `canonical_url_path` mirrors.
+- §20.2 — document set (6 contracts + 12 artefacts) that Decision M.1 codifies.
+- §20.6 — sub-processors daily-diff job + structured-JSON editor, both deferred to Sprint 3.
+- v2.4 playbook bump candidates list (in `progress.md` Done section for Day 18, will absorb the `canonical_url_path` column extension at Sprint 2 closeout).
+
+**Consequences:**
+
+- Migration 0008 creates `legal_documents` + `legal_document_versions` per §9.11, with the `canonical_url_path` column extension on `legal_documents`. `legal_document_versions` is the **second append-only table** after `audit_logs` — explicit `REVOKE UPDATE, DELETE, TRUNCATE FROM eventpulse_app` per §4.2.1.1.
+- Seed migration 0009 (or seed-script-on-first-boot) inserts 18 `legal_documents` rows + 18 `legal_document_versions` rows for v0.1 placeholders, computed from the table above. Idempotent — re-runnable.
+- Sub-processors document seeds as a single-paragraph DRAFT placeholder per M.2 (NOT a JSON table); the structured editor is Sprint 3 scope.
+- Adding a new legal document later: (a) DB row insert with correct `canonical_url_path`, (b) Next.js route file at that path. The two are paired; the editor cannot create a route, only a row.
+- Sub-processors `<SubprocessorsEditor />` UI + the daily diff job per §20.6 land as a Sprint 3 candidate. Logged in `progress.md` Sprint-3 carries.
+- Sprint 2 closeout v2.4 playbook bump candidates absorb: §9.11 amendment (add `canonical_url_path` to `legal_documents` DDL).
+
+---
+
 ## 2026-05-19 · Item 13 super admin KYC review queue — pre-code architecture (Decisions G, H, I)
 
 **Context:** Day 18 PM ships Item 13 — the super admin KYC review queue + decision API + reviewer checklist. This is the **highest-PII-sensitivity UI in the entire project**: super admin sees NID images, NID numbers, DOB, full names, addresses, bank accounts, eTINs, selfies, BINs, RJSC certificates for every tenant going through KYC. Per the platform-wide manual-verification policy (`Platform-wide policy — manual verification only for MVP`, 2026-05-19) this is also the **operational engine** of the policy — every check the platform doesn't automate, the reviewer does here.

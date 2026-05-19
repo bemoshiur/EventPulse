@@ -1,20 +1,28 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-05-19 (end of Sprint 2 Day 18)
-**Driver:** Claude Code (Opus 4.7) — Sprint 2 standard execution mode (1 day/session, `/start` → `/work` → `/end`)
+**Last update:** 2026-05-19 (Sprint 2 Day 19 in flight — pre-code memory PR ready)
+**Driver:** Claude Code (Opus 4.7) — Sprint 2 standard execution mode, autonomous (Day 19 brief approved "do all, do not to ask my, work on autonomus")
 
 ## State right now
 
-**Sprint 2 Day 18 closed. Five PRs merged across the day** — the largest single-day delivery of Sprint 2: a platform-wide policy consolidation, a 9-amendment playbook bump, three Item 13 PRs (pre-code memory + backend + frontend). The super admin KYC review queue is now reviewable end-to-end at `/admin/kyc` (queue) and `/admin/kyc/[id]` (detail). The highest-PII surface in the entire project is live.
+**Day 18 closed end-of-day with five PRs merged. Day 19 is now in flight — Items 14+15 (Trust Center scaffolding + super admin Legal & Trust editor) bundled across three PRs.** Pre-code memory PR drafted (Decisions J, K, L, M locked); backend + frontend PRs queued behind it.
 
 ```text
-<pending>   memory: Sprint 2 Day 18 closeout — Item 13 shipped (5 PRs)
+<pending>   memory: Day 19 pre-code — Decisions J/K/L/M for Trust Center + Legal & Trust editor
+4d5bd8b     memory: Sprint 2 Day 18 closeout — Item 13 shipped (5 PRs) (#91)
 1925e2c     feat(web): Day 18 PM Item 13 frontend — super admin KYC review queue UI (#90)
 f509efd     feat(api): Day 18 PM Item 13 backend — super admin KYC review queue + decision API (#89)
 4782b05     memory: log Day 18 Item 13 pre-code — read-audit + cache-zero + structured checklist (#88)
 bbf5409     docs(playbook): bump CLAUDE.md to v2.3 — 9 §-section amendments synchronising Days 11-18 reality (#87)
 62fcef7     memory: Sprint 2 — platform-wide manual verification policy for MVP (#86)
 ```
+
+**Day 19 PR 1 (memory, this PR) locks four decisions for the Trust Center work:**
+
+- **Decision J** — markdown sanitization via `rehype-sanitize` (unified family), `defaultSchema` allowlist unchanged, render-at-publish (5 new runtime deps in `apps/api` — all unified ecosystem)
+- **Decision K** — public Trust Center pages are Next.js Server Components calling the service-layer directly; no client-side hydration; `revalidate: 3600` + `revalidatePath()` on publish
+- **Decision L** — re-consent enforcement gate (consent_records table + interstitial + cron + onboarding gate) DEFERRED to Sprint 3 alongside counsel-produced v1.0 documents. Day 19 ships only the document substrate
+- **Decision M** — defer to §20 verbatim (6 contracts + 12 artefacts); flat database slugs + `canonical_url_path text NOT NULL UNIQUE` column for data-driven URL routing; sub-processors IS in legal_documents with markdown-editor publish path (structured `<SubprocessorsEditor />` deferred to Sprint 3)
 
 ## What landed in Day 18
 
@@ -32,26 +40,47 @@ bbf5409     docs(playbook): bump CLAUDE.md to v2.3 — 9 §-section amendments s
 
 ## Next concrete step
 
-**Day 19 — Items 14 + 15 bundled in one PR — Trust Center scaffolding + super admin Legal & Trust editor.**
-
-Per `.claude/memory/decisions.md` "Trust Center v0.1 placeholders — skeleton-only" (2026-05-17): **skeleton-only placeholder content** — real headings + one-sentence "PLACEHOLDER — to be drafted by counsel covering X" per section + non-dismissable DRAFT banner. **NO AI-generated full-text legal drafts.** Onboarding flow gates on consent → consent gates on v1.0 documents → first paying tenant blocked until counsel returns drafts.
+**Day 19 PR 2 (backend) — opens immediately after memory PR squash-merges.**
 
 **Scope:**
 
-- New tables `legal_documents` + `legal_document_versions` per §9.11 (migration 0008). `legal_document_versions` is the **second append-only table** after `audit_logs`; needs the explicit `REVOKE UPDATE, DELETE, TRUNCATE FROM eventpulse_app` boilerplate per §4.2.1.1 (codified in v2.3 bump, PR #87).
-- Seed entries for all 18 documents (6 legal contracts + 12 trust artefacts) per §20.2 with v0.1 placeholder body_md.
-- Public routes for all 18 paths per §20.1: `/privacy`, `/terms`, `/eula`, `/dpa`, `/cookies`, `/refund-policy`, plus 12 `/trust/...` paths.
-- Each page renders the placeholder body, the version metadata, and the non-dismissable DRAFT banner at the top.
-- Super admin Legal & Trust editor at `/admin/legal-trust` — list view of all documents, per-document version history view, new-version create form (markdown editor + body_html pre-render). Tightly scoped: text-area-based editor, no rich-text formatting, no media upload.
-- `consent_records` table is **NOT** in Day 19 scope — that lands when the v1.0 legal documents are signed (post-counsel-review). The onboarding consent prompt is queued for Sprint 3 alongside the v1.0 publish.
+- **Five new runtime deps** in `apps/api/package.json` (Decision J): `unified`, `remark-parse`, `remark-rehype`, `rehype-sanitize`, `rehype-stringify`. Lockfile commit included.
+- **Migration 0008** — `legal_documents` + `legal_document_versions` per §9.11 + Decision M extension (`canonical_url_path text NOT NULL UNIQUE` on `legal_documents`). `legal_document_versions` is the **second append-only table** after `audit_logs`; needs explicit `REVOKE UPDATE, DELETE, TRUNCATE FROM eventpulse_app` per §4.2.1.1 (codified in v2.3 bump, PR #87). FK back-reference (`legal_documents.current_version_id` → `legal_document_versions.id`) is deferred — added via `ALTER TABLE` after both tables exist, or set NULL initially + populated by seed (use the second approach for transactional cleanliness).
+- **Drizzle schema** entries for both tables matching the SQL exactly.
+- **`apps/api/src/domain/legal/render.ts`** — single source of truth for markdown sanitization via the unified pipeline (Decision J). Pipeline + `defaultSchema` + `renderLegalMarkdown(md): Promise<string>` export.
+- **`apps/api/src/domain/legal/queries.ts`** — service-layer reads for the public Trust Center: `fetchLegalDocumentByUrlPath`, `fetchLegalDocumentBySlug`, `listLegalDocumentsForTrustCenterLanding`, `fetchVersionHistoryForDocument`. All run under `withSuperAdmin()` (platform-global, not tenant-scoped).
+- **`apps/api/src/services/audit/legal.ts`** — new domain helper file with `writeLegalVersionPublished` (one-per-domain rule, sibling helpers can be added later).
+- **`apps/api/src/routes/super-admin/legal.ts`** — five endpoints under `requireSuperAdminAuth`:
+  - `GET    /api/v1/admin/legal/documents` — list all 18 with current version metadata
+  - `GET    /api/v1/admin/legal/documents/:slug` — single document + version history (server-side join)
+  - `GET    /api/v1/admin/legal/documents/:slug/versions/:versionId` — single version body_md + body_html for editor pre-fill
+  - `POST   /api/v1/admin/legal/documents/:slug/versions` — create new version (body_md → server-side sanitize → store body_html; sets material_change + summary_of_changes; on success bumps `legal_documents.current_version_id`; writes `writeLegalVersionPublished` audit row)
+  - The publish endpoint also calls Next.js `revalidatePath(canonical_url_path)` via the internal API helper so the public page updates within ~1s.
+- **Seed script `scripts/seed-legal-documents.ts`** — idempotent insert of 18 `legal_documents` rows + 18 `legal_document_versions` v0.1 rows using the skeleton template from Decision M.2 (single-section DRAFT placeholder + auto-generated "What this document will cover" paragraph from §20.2 one-liner). Sub-processors uses the same single-paragraph DRAFT — structured editor + JSON-encoded body is Sprint 3 scope.
+- **Tests** (vitest + supertest against test DB):
+  - migration RLS test (SELECT works, INSERT requires admin context, UPDATE/DELETE/TRUNCATE on `legal_document_versions` rejected for `eventpulse_app`)
+  - render pipeline tests (round-trip, `<script>` stripped, `javascript:` href stripped, `<iframe>` stripped, `data:` img stripped, `https://` img preserved, snapshot of placeholder body)
+  - service-layer query tests (by-url-path, by-slug, landing list)
+  - admin route tests (list / detail / single version / publish — including audit row written, body_html computed server-side, current_version_id bumped)
+  - seed-script idempotency test (run twice → same row count, no duplicates)
 
-**STOP-ASK conditions for Day 19:**
+**PR 3 (frontend) follows PR 2 — locked after PR 2 squash-merges. Brief scope:**
 
-- New dep beyond what's already landed → halt, ask.
+- 19 server-component pages under `apps/web/src/app/(public)/` — 18 individual documents + `/trust/page.tsx` landing
+- Shared `<LegalDocumentPage>` + `<TrustCenterLandingGrid>` components
+- Admin Legal & Trust editor at `/(admin)/admin/legal-trust/` — list + per-document version history + new-version create form (textarea-based markdown, server pre-renders to body_html on submit)
+- Frontend tests (vitest jsdom for components + Playwright smoke for the 19 public routes returning 200 + DRAFT banner visible)
+- Seed-script invocation hook (Day 20 deploy will re-run idempotently)
+
+**STOP-ASK conditions for the remaining Day 19 PRs:**
+
 - Schema change beyond migration 0008's two tables → halt, ask.
-- **Any temptation to add real legal-language drafts** (whether AI-generated, ported from open-source templates, or transcribed from another project) → halt, surface to Moshiur. This is a load-bearing decision per `.claude/memory/decisions.md` 2026-05-17; counsel must produce v1.0. v0.1 is skeleton-only.
-- Markdown sanitization at render: trust-document body_html is pre-rendered server-side from body_md by the editor PR; ensure the editor passes through a server-side sanitizer (DOMPurify equivalent, or strict allow-list HTML) before storing body_html. If no clean way to do this without a new dep, halt.
-- Any reviewer-checklist-style structured data on legal documents (e.g. "approver checklist") → out of scope; queue for Sprint 3+.
+- New dep beyond the five Decision-J-approved unified-family deps → halt, ask.
+- **Any temptation to add real legal-language drafts** (AI-generated, open-source-templated, or cross-project transcribed) → halt, surface to Moshiur. Decision L + 2026-05-17 entry; counsel must produce v1.0.
+- Allowlist widening from `defaultSchema` → halt, requires Sprint-3+ decisions.md entry per Decision J.
+- Any temptation to add `consent_records`, `requires_reconsent`, an interstitial route, or any sign-up consent UI → halt. Decision L scope-creep red flag.
+- Sub-processors editor going structured (form-based JSON edit) in Day 19 instead of Sprint 3 → halt per Decision M.
+- Re-implementing a markdown sanitizer elsewhere (not via `renderLegalMarkdown()`) → halt.
 
 ## Scheduled mid-sprint PR slots
 
@@ -121,10 +150,15 @@ Per `.claude/memory/decisions.md` "Trust Center v0.1 placeholders — skeleton-o
 - **Item 13 review queue: NO validation badges, NO `kyc_submissions.flags` jsonb column, NO auto-flag UI affordances.** Per the 2026-05-19 platform-wide manual-verification policy. Reviewer-notes free-text + per-field helper text + approve-modal-confirm + reject-typed-reason are the entire concern-surfacing surface for MVP.
 - **Manual-verification policy is load-bearing.** Any temptation to add automated checks (format regex, sanctions matcher, validator stub) on the strength of "the queue would be cleaner with it" → halt, surface to Moshiur. The Phase 2 trigger (50 verified submissions/week sustained 4-week trailing average, reviewer-capacity criterion) is the only sanctioned re-evaluation gate.
 - **Porichoy adapter scaffold-only shape is the canonical pattern for all future automation integrations.** Interface + env vars + Secrets Manager entry + TODO stub. Day 20 Item 16 Porichoy scaffold work continues unchanged.
-- **NEW for Day 19 — Trust Center v0.1 is skeleton-only.** No AI-generated full-text legal drafts. Real headings + one-sentence "PLACEHOLDER — to be drafted by counsel covering X" per section + non-dismissable DRAFT banner. Per `.claude/memory/decisions.md` "Trust Center v0.1 placeholders — skeleton-only" 2026-05-17 (load-bearing). Onboarding consent gating queued for Sprint 3 once counsel returns v1.0.
-- **NEW for Day 19 — `legal_document_versions` is the second append-only table.** Migration 0008 must include the explicit `REVOKE UPDATE, DELETE, TRUNCATE FROM eventpulse_app` boilerplate per §4.2.1.1 (codified in v2.3 bump, PR #87). RLS forced + SELECT/INSERT policies only (no UPDATE/DELETE policies).
-- **NEW for Day 19 — super-admin Legal & Trust editor uses server-side markdown sanitization.** body_html is rendered + sanitized server-side from body_md. If no clean way to sanitize without a new dep, halt.
-- **NEW for Day 19 — admin route group lives under `/(admin)/admin/...` to avoid /kyc route collision with /(tenant)/kyc.** Day 18 PR 4 hit this and moved everything under `/admin/...`. Apply the same convention to `/admin/legal-trust` (the Legal & Trust editor).
+- **Trust Center v0.1 is skeleton-only.** No AI-generated full-text legal drafts. Single-section DRAFT placeholder per Decision M.2 — title + non-dismissable DRAFT banner + auto-generated "What this document will cover" paragraph from §20.2 one-liner. Per `.claude/memory/decisions.md` "Trust Center v0.1 placeholders — skeleton-only" 2026-05-17 (load-bearing).
+- **`legal_document_versions` is the second append-only table.** Migration 0008 includes explicit `REVOKE UPDATE, DELETE, TRUNCATE FROM eventpulse_app` per §4.2.1.1 (codified in v2.3 bump, PR #87). RLS forced + SELECT/INSERT policies only.
+- **Admin route group lives under `/(admin)/admin/...`.** Day 18 PR 4 hit the `/kyc` route-collision (admin + tenant groups both registering `/kyc`). Apply same convention to `/admin/legal-trust`.
+- **NEW for Day 19 (Decision J) — markdown sanitization is via the `renderLegalMarkdown()` function in `apps/api/src/domain/legal/render.ts`.** Single source of truth. The unified pipeline (`unified` + `remark-parse` + `remark-rehype` + `rehype-sanitize` + `rehype-stringify`) with unchanged `defaultSchema` allowlist. Render-at-publish (NOT render-at-request). Widening the allowlist requires its own decisions.md entry. Never re-implement sanitization in any other module.
+- **NEW for Day 19 (Decision K) — public Trust Center pages are Server Components with direct service-layer DB reads.** No client-side hydration. No TanStack Query. `revalidate: 3600` + `revalidatePath()` invalidation on publish. The web app imports service-layer functions from `apps/api/src/domain/legal/queries.ts` directly per §3.2.
+- **NEW for Day 19 (Decision L) — `consent_records` table is NOT in Day 19 scope.** Deferred to Sprint 3 alongside counsel-produced v1.0. Scope-creep red flags: any "click to acknowledge" button, IP/UA capture on Trust Center views, sign-up consent checkbox, "preview consent" toggle, any users/tenants column referencing consent state → halt and surface.
+- **NEW for Day 19 (Decision M.1) — document set is §20.2 verbatim.** 6 contracts + 12 artefacts. No additions, no slug renames, no category re-mappings. Adding a new document later: row insert + matching Next.js route file; the two are paired (the editor cannot create routes).
+- **NEW for Day 19 (Decision M.3) — flat database slugs + `canonical_url_path text NOT NULL UNIQUE` column.** Routing is data-driven: the Server Component for a path calls `fetchLegalDocumentByUrlPath(<path>)`. No central middleware/regex/glob mapping.
+- **NEW for Day 19 (Decision M.2) — sub-processors uses single-paragraph DRAFT placeholder in v0.1.** Structured `<SubprocessorsEditor />` UI + the daily diff job (§20.6) defer to Sprint 3. v0.1 edits flow through the standard markdown editor.
 
 ## Useful runbook fragments
 
