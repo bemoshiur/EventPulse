@@ -480,3 +480,86 @@ export const auditLogs = pgTable(
     index('idx_audit_entity').on(t.entityType, t.entityId, t.createdAt),
   ],
 )
+
+// ─────────────────────────────────────────────────────────────────────────
+// LEGAL_DOCUMENTS — Trust Center registry (§9.11 + Decision M.3 2026-05-19).
+//
+// Platform-global table — no tenant_id. Decision M.3 extends §9.11 with the
+// `canonical_url_path` column so URL routing is data-driven: a Server
+// Component at /trust/security/disclosure calls
+// fetchLegalDocumentByUrlPath('/trust/security/disclosure'). Database slugs
+// are flat (`security-disclosure`) and never encode nested paths.
+//
+// Access pattern (Decision K 2026-05-19): all reads + writes via
+// withSuperAdmin() → eventpulse_admin (BYPASSRLS). RLS forced with no
+// policies as a defence-in-depth backstop — eventpulse_app has no expected
+// access path.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const legalDocuments = pgTable(
+  'legal_documents',
+  {
+    id: uuid()
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    slug: text().notNull().unique(),
+    canonicalUrlPath: text('canonical_url_path').notNull().unique(),
+    category: text().notNull(),
+    title: text().notNull(),
+    oneLiner: text('one_liner').notNull(),
+    currentVersionId: uuid('current_version_id'),
+    requiresSignature: boolean('requires_signature').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'legal_documents_category_chk',
+      sql`${t.category} IN ('legal_contract','trust_artefact')`,
+    ),
+    check('legal_documents_canonical_url_path_chk', sql`${t.canonicalUrlPath} LIKE '/%'`),
+    index('idx_legal_documents_url').on(t.canonicalUrlPath),
+    index('idx_legal_documents_category').on(t.category),
+  ],
+)
+
+// ─────────────────────────────────────────────────────────────────────────
+// LEGAL_DOCUMENT_VERSIONS — APPEND-ONLY version history per §9.11.
+//
+// Second append-only table after audit_logs. Per §4.2.1.1 (v2.3 amendment)
+// the migration explicitly REVOKEs UPDATE/DELETE/TRUNCATE from
+// eventpulse_app on top of the no-UPDATE/DELETE policy gap; the GRANT
+// layer is the load-bearing enforcement.
+//
+// body_md is the canonical authoring form (markdown). body_html is the
+// pre-rendered + sanitized output produced by renderLegalMarkdown() in
+// apps/api/src/domain/legal/render.ts (Decision J 2026-05-19). Public
+// pages serve body_html directly to avoid re-sanitizing per request.
+//
+// (document_id, version) is unique so re-publishing the same version
+// string for a document errors cleanly at the DB layer.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const legalDocumentVersions = pgTable(
+  'legal_document_versions',
+  {
+    id: uuid()
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => legalDocuments.id),
+    version: text().notNull(),
+    effectiveAt: timestamp('effective_at', { withTimezone: true }).notNull(),
+    bodyMd: text('body_md').notNull(),
+    bodyHtml: text('body_html').notNull(),
+    summaryOfChanges: text('summary_of_changes'),
+    materialChange: boolean('material_change').notNull().default(false),
+    createdBy: uuid('created_by').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('legal_document_versions_doc_version_uq').on(t.documentId, t.version),
+    index('idx_legal_versions_document').on(t.documentId, t.effectiveAt),
+  ],
+)

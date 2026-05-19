@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { authRoutes } from './routes/auth.js'
 import { oauthRoutes } from './routes/oauth-routes.js'
 import { adminKycRoutes } from './routes/super-admin/kyc.js'
+import { adminLegalRoutes } from './routes/super-admin/legal.js'
 import { accountTypeRoutes } from './routes/tenant/account-type.js'
 import { kycDraftRoutes } from './routes/tenant/kyc-drafts.js'
 import { kycRoutes } from './routes/tenant/kyc.js'
@@ -42,10 +43,11 @@ export function createApp() {
   // child route group in Hono's current routing model.
   app.route('/api/v1/tenant/kyc/drafts', kycDraftRoutes)
 
-  // Super admin routes — Sprint 2 Day 18 Item 13. Mounted under
-  // /api/v1/admin/* per §10.4. requireSuperAdminAuth is applied
-  // inside the sub-router via `admin.use('*', ...)`.
+  // Super admin routes — Sprint 2 Day 18 Item 13 + Day 19 Item 15.
+  // Mounted under /api/v1/admin/* per §10.4. requireSuperAdminAuth
+  // is applied inside each sub-router via `*.use('*', ...)`.
   app.route('/api/v1/admin/kyc', adminKycRoutes)
+  app.route('/api/v1/admin/legal', adminLegalRoutes)
 
   return app
 }
