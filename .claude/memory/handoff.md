@@ -1,9 +1,11 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-05-19 (Sprint 3 Day 21 — fee calculator shipped + verification-deploy clean)
-**Driver:** Claude Code (Opus 4.7) — Day 21 in flight; next session continues Sprint 3 Day 22
+**Last update:** 2026-05-20 (Sprint 3 Day 22 closed — 6 PRs landed)
+**Driver:** Claude Code (Opus 4.7) — Day 22 closeout; next session continues Sprint 3 Day 23
 
 ## State right now
+
+**Sprint 3 Day 22 closed — 6 PRs landed (Decision O + cert/DNS + migration 0009 + 3 workstreams).** Two architectural STOP-ASKs surfaced at pre-flight: (O.1) staging cert is 5-SAN not wildcard, blocking pure-Nginx subdomain provisioning; (O.2) `tenants.preferred_locale` column doesn't exist, blocking the SES templates locale helper. Both resolved as Option A (wildcard cert + new migration). After those landed, all 3 workstreams shipped: bilingual SES templates + selectLocale helper (PR #125), tenant subdomain provisioning (PR #126), Fix 6b deploy.sh Nginx reload (PR #127). The Decision O.1 cert + DNS infrastructure is APPLIED to staging (cert reissued to 2-SAN form on existing lineage; Route 53 wildcard A record INSYNC; 5 TLS regression checks all SSL=0); the wildcard probe via `--resolve` validates cert for unseen subdomains; the Sprint 2 silent-failure pattern's last latent gap (deploy.sh missing Nginx reload on vhost config change) is closed.
 
 **Sprint 3 Day 21 fee calculator SHIPPED.** `apps/api/src/domain/payments/fee-calculator.ts` (PR #119, 2026-05-19, 33 unit tests). Math review checkpoint passed: 14/16 cells match §14.2 verbatim; Mode C `buyer_total`+`eps_fee` match §14.2's parenthetical alternative ("or 25.00 depending on which side") not the primary line — see Decision N (decisions.md 2026-05-19) for the EPS-base rule + the mandatory Day 24-25 EPS sandbox truth gate that empirically validates the rule against real EPS transactions. §14.2 amended in a separate playbook PR with the calculator implementation note + Decision N reference.
 
@@ -33,12 +35,19 @@ b502d74           docs: Day 20 EPS library investigation note (#105)
 
 ## Next concrete step
 
-**Sprint 3 Day 22 — Event CRUD + `tenant_fee_config` exposure.** Day 21 main work (fee calculator) shipped. Two Day 21 carry-forwards still pending:
+**Sprint 3 Day 23 — Event CRUD + `tenant_fee_config` exposure** (deferred from original Day 22-23 slot since Day 22 was fully spent on Decision O + carries + Fix 6b). Day 22 Workstreams 1+2+3 + Decision O all landed; pre-flight for Day 23 should:
 
-1. **AM PR — bilingual SES templates** (Day 20 carry, queued at Day 21 AM, slipped). 5 templates × 2 locales; SES create-template idempotent; notification stubs wired to live `SendTemplatedEmail`.
-2. **Day 21 first PR — tenant subdomain provisioning** (Day 20 carry, queued at Day 21 first PR, slipped). SSM SendCommand → Nginx vhost template → certbot wildcard → audit trail. **Staging integration test REQUIRED before merge** — this was the Day 20 STOP-ASK.
+1. **Confirm PRs #125 + #126 + #127 merged cleanly** to main; if any failed CI, debug before opening Day 23 work.
+2. **Confirm staging-deploy after the merges picked up the new vhost** — first deploy that touches `infra/nginx/**` exercises Fix 6b's reload path. Manual SSM reload no longer needed.
+3. **Verify Item 13 subdomain provisioning fires on next KYC approve in staging** — create a fixture tenant, submit KYC, approve, watch logs for `provisionTenantSubdomain: success` + new vhost serving at `<slug>.staging.eventpulse.com.bd/nginx-health` returning 200.
 
-Day 22 main work (Event CRUD + `tenant_fee_config` super admin exposure + status state machine) lands alongside these two carries. Pick up whichever opens cleanly first.
+Day 23 main work:
+
+- **Event CRUD API** (`apps/api/src/routes/tenant/events.ts`) — POST/GET/PATCH/DELETE; event slug generation (citext unique, reserved-handles guard, 3-30 chars); status state machine (`draft → published → on_sale → sold_out → live → completed → archived`) per §2.4.
+- **`tenant_fee_config` exposed in super admin tenant detail view** — fee-override modal + `fee_override_log` audit (4-eyes principle for changes > 10 bps per §14.4).
+- **Fixed form template per event type** — hardcoded React forms (full builder is Sprint 5+ per §26.1).
+
+Pre-flight reads before Day 23 work begins: §2.4 (event lifecycle), §9.3 (events schema), §14.4 (tenant fee override workflow), §6 (API patterns).
 
 **Mandatory non-negotiable Day 24-25 EPS sandbox truth gate (per Decision N 2026-05-19).** Before any Day 26 sandbox-order work begins:
 
@@ -120,6 +129,9 @@ Days 11-20 shipped:
 - **NEW for Sprint 3 — EPS library is in-house wrapper** at `apps/api/src/infra/eps/` (Day 20 decisions.md). NO SDK dependency. Wrapper composes axios + `@noble/hashes` HMACSHA512 + zod-validated responses + `normaliseStatus()` shim for §11.4 alias gotcha. Never `import { EpsGateway } from 'eps-gateway-nodejs'` — that decision is locked.
 - **NEW for Sprint 3 — `STAGING_PAYMENT_BLOCK=1` is mandatory in staging.** Production EPS credentials in staging is intentional per Day 20 Moshiur decision; the gate is load-bearing. `initialiseOrder()` MUST throw if `STAGING_PAYMENT_BLOCK === '1'` AND `total_paisa > 0`. Removal requires explicit decisions.md MVP-cutover entry.
 - **NEW for Sprint 3 — OAuth button hrefs MUST use absolute URL via `NEXT_PUBLIC_API_BASE_URL`.** The Day 20 PR #104 regression-guard test fires loud if anyone reverts. "Manual verification is a fallback for what tests can't cover, not a substitute for what they can."
+- **NEW for Day 22 — Staging cert is 2-SAN form (apex + wildcard)** per Decision O.1. Any cert operation that touches this lineage MUST use `--cert-name staging.eventpulse.com.bd` + drop `--expand` (which gets in the way of SAN-set replacements). Going back to enumerated SANs requires explicit decisions.md amendment.
+- **NEW for Day 22 — `tenants.preferred_locale` is tenant-level, NOT owner-individual.** Notification helper `selectLocale({tenantId} | {userId})` discriminated-union prevents the wrong-column-read bug. Tenant-targeted templates (KYC events) → tenants.preferred_locale; user-targeted templates (magic link, OAuth) → users.locale.
+- **NEW for Day 22 — Tenant subdomain provisioning is PURE-NGINX.** Decision O.1 wildcard cert + wildcard A record live; the provisioner never calls certbot. The provisioning flow writes vhost + symlink + nginx -t + reload via SSM; failure surfaces in admin queue via `audit_logs.action='tenant.subdomain_provisioning_failed'`; tenant stays in approved status (KYC is the contract; provisioning is operational).
 
 ## Pending user actions
 

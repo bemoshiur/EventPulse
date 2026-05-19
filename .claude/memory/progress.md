@@ -6,13 +6,23 @@
 
 ### Sprint 3 scope (In Flight as Planned)
 
-**Day 21 — Fee calculator (§14.3) + carry-forwards from Sprint 2 closeout.**
+**Day 21 — Fee calculator (§14.3) ✅ SHIPPED (PR #119); carry-forwards to Day 22.**
 
-- **AM PR** — bilingual SES templates (5 templates × 2 locales — `kyc_submitted`, `kyc_approved`, `kyc_rejected`, `magic_link`, `oauth_account_linked`). SES `create-template` resources via aws CLI; bootstrap idempotent. Wire Item 9 / 11 / 15 notification stubs to live `SendTemplatedEmail`. Locale selection per `tenants.preferred_locale` (en/bn; default bn). Deferred from Day 20 per Sprint 2 PM scope decision (decisions.md 2026-05-19).
-- **Day 21 first PR — tenant subdomain provisioning** (deferred from Day 20). On Item 13 KYC approve transition, fire `provisionTenantSubdomain(tenantId)` background task: SSM SendCommand against EC2 → Nginx vhost from template → symlink into sites-enabled → `nginx -t` (rollback on failure) → reload → certbot extend OR existing-wildcard reuse → audit row → `tenants.subdomain_provisioned_at` bump. Error handling: failed provisioning writes `tenant.subdomain_provisioning_failed` audit row + super-admin notification + leaves tenant approved + surfaces in admin queue UI as "approved but provisioning failed — manual intervention needed". Idempotent on retry. Staging integration test required (the gap that drove the Day 20 defer).
+- **AM PR — bilingual SES templates** — SHIPPED Day 22 as PR #125 (`feat(notifications): bilingual SES templates + selectLocale helper`). 4 new templates (kyc-submitted, kyc-approved, kyc-rejected, oauth-account-linked); 5th already-existing magic-link template unchanged. `selectLocale({tenantId} | {userId})` discriminated-union helper consumes `tenants.preferred_locale` (migration 0009, Decision O.2). KYC notification stubs rewired to real SES via `sendOrFallback()`; `delivered: bool` + `messageId` replaces the old `stub: true` shape.
+- **Day 21 first PR — tenant subdomain provisioning** — SHIPPED Day 22 as PR #126 (`feat(kyc): tenant subdomain provisioning on approve action`). Pure-Nginx per Decision O.1 (wildcard cert + wildcard A record live; no certbot in the per-tenant hot path). Migration 0010 (`subdomain_provisioned_at` + `subdomain_provisioning_failed_at`); template + buildProvisionCommands/buildTeardownCommands; provisionTenantSubdomain task with SSM SendCommand + idempotency + audit; wired into super-admin/kyc.ts approve action replacing the `[STUB]` log line. 15 unit + DB-gated tests. Real staging integration test ran via SSM (TLS handshake validated for unseen subdomain via wildcard SAN, nginx -t + reload clean).
 - **Day 21 main work — fee calculator ✅ SHIPPED.** `apps/api/src/domain/payments/fee-calculator.ts` + 33 unit tests (PR #119, 2026-05-19). `calculateOrderFees(input): FeeCalcResult` pure function, single source of truth for money math per §14.3. 14/16 cells match §14.2 verbatim; Mode C (AB, PT) `buyer_total` + `eps_fee` match §14.2's parenthetical alternative ("or 25.00 depending on which side") not the primary line — see Decision N (decisions.md 2026-05-19). The §14.2 Mode C primary numbers are arithmetically inconsistent with EPS's stated 2.5% rate; the calculator's rule is internally consistent + conservative. Mandatory Day 24-25 EPS sandbox truth gate (below) is the empirical arbiter.
 
-**Day 22-23 — Event CRUD + tenant_fee_config exposure.**
+**Day 22 — Decision O + two Day 21 carries + Fix 6b ✅ SHIPPED (6 PRs).**
+
+- ✅ **PR #122 (memory):** Decision O logged before any feature code. O.1 = staging cert moves to wildcard (apex + wildcard 2-SAN form, NOT 5+wildcard which LE rejects). O.2 = `tenants.preferred_locale` column.
+- ✅ **Cert + DNS infra applied via SSM** (no code PR — operational ops). 5-SAN cert reissued as apex+wildcard via `certbot certonly --cert-name <existing> --force-renewal -d staging.eventpulse.com.bd -d '*.staging.eventpulse.com.bd'` after the first attempt created an orphan `-0001` lineage (certbot --expand superset-only semantics gotcha). Route 53 wildcard A record CREATEd. 5 external TLS regression checks pass; wildcard probe via `curl --resolve` validates SSL for unseen subdomains.
+- ✅ **PR #123 (memory):** Operation log + Decision O.1 framing correction + 5 gotchas (LE redundancy, certbot --expand semantics, Nginx vhost lineage paths, LE no-email, IAM SID aspirational).
+- ✅ **PR #124 (merged):** Migration 0009 — `tenants.preferred_locale text NOT NULL DEFAULT 'bn' CHECK ('en'|'bn')`. Drizzle schema + 1 sanity test + 3 DB-gated integration tests (pre-migration count = 0 confirmed; no backfill needed).
+- ✅ **PR #125 (open):** Workstream 1 — bilingual SES templates + selectLocale helper.
+- ✅ **PR #126 (open):** Workstream 2 — tenant subdomain provisioning.
+- ✅ **PR #127 (open):** Workstream 3 — Fix 6b deploy.sh Nginx reload on vhost-config change (closes the last latent silent-failure gap from Sprint 2).
+
+**Day 23 — Event CRUD + tenant_fee_config exposure (deferred from original Day 22-23 slot).**
 
 - Event CRUD API; event slug generation; status state machine (`draft → published → on_sale → sold_out → live → completed → archived`).
 - `tenant_fee_config` exposed in super admin tenant detail view with fee-override modal + `fee_override_log` audit (4-eyes principle for changes > 10 bps).
