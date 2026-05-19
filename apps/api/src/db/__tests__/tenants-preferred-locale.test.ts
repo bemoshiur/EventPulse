@@ -85,13 +85,20 @@ describeIfDb('migration 0009 — tenants.preferred_locale', () => {
           VALUES (${'Bad Locale Test'}, ${slug}, true, ${fixtures.ownerId!}, ${'es'})
         `)
       } catch (err) {
-        // pg.DatabaseError → code='23514', constraint='tenants_preferred_locale_chk'.
-        // Drizzle wraps PG errors in DrizzleQueryError; the underlying pg
-        // error is on .cause per Drizzle conventions.
+        // pg.DatabaseError → code='23514', constraint='tenants_preferred_locale_chk',
+        // message='new row for relation "tenants" violates check constraint
+        // "tenants_preferred_locale_chk"'.
+        //
+        // Drizzle wraps pg errors in DrizzleQueryError; the underlying pg
+        // error is on .cause. The wrapper's .message is "Failed query: ..."
+        // which does NOT include the constraint name — so for the message
+        // assertion we MUST read cause.message, not the wrapper. The code
+        // can come from either layer (Drizzle exposes the same code field
+        // on the wrapper), so prefer cause.code defensively too.
         const e = err as { code?: string; message?: string; cause?: unknown }
         const cause = e.cause as { code?: string; message?: string } | undefined
-        caughtCode = e.code ?? cause?.code
-        caughtMessage = e.message ?? cause?.message
+        caughtCode = cause?.code ?? e.code
+        caughtMessage = cause?.message ?? e.message
       }
       expect(caughtCode, 'expected pg error code 23514 (check_violation)').toBe('23514')
       expect(caughtMessage).toMatch(/tenants_preferred_locale_chk/)
