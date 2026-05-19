@@ -4,6 +4,32 @@
 
 **Sprint 3 (Days 21-30) — Events + Fee Calculator + EPS + Orders (per §26.1 Sprint plan).** Planned scope, opens with Day 21 kick-off session. Sprint 2 closed at v0.2.0-sprint-2 (Day 20).
 
+### Pre-Day-23 consolidation session (2026-05-20)
+
+Partial completion — GHA infra failure (gotchas.md "GitHub Actions org-wide failure") blocked Workstreams 1 Phase 2-4 and Workstream 2.1 PR-merge sequence. Workstreams that don't depend on CI completed.
+
+**Completed:**
+
+- ✅ Workstream 1 Phase 1 — pre-flight state audit (10 checks): cert 2-SAN apex+wildcard expires Aug 17 2026; all DNS records resolve; migrations 0001-0009 applied; tenants.preferred_locale present with CHECK; secrets manager 5/5 present; PM2 healthy; CI runs on main green (historical).
+- ✅ Direct staging smoke tests (replacement for Phase 3): 5 vhosts SSL=0; API `/health` returns DB-aware JSON with `db: ok`; Nginx `/nginx-health` returns ok; Trust Center renders with DRAFT banner on Privacy. Pre-existing: OAuth `/start` returns 503 OAUTH_NOT_CONFIGURED (bootstrap-staging.sh has not been re-run since Google OAuth secret was created Day 20).
+- ✅ Workstream 2.1 partial — PR #122 (Decision O memory) squash-merged to main. 5 remaining Day 22 PRs (#123, #125, #126, #127, #128) held until GHA restored.
+- ✅ Workstream 2.2 — Issues classified: #110 keep open (active sprint tracker); #52 closed (Sprint 2 done) with reference to v0.2.0-sprint-2 tag.
+- ✅ Workstream 2.3 — alerts inventoried + classified. 3 medium-severity Dependabot alerts (postcss/vite/esbuild — all dev-tooling only, no production runtime impact). 9 Dependabot fix PRs queued: 2 majors needing careful review (`@noble/hashes` 1→2, `jose` 5→6 — both security-critical auth libs), 1 major frontend (`hookform/resolvers` 3→5), 6 patch/minor. Fix-PR merges held until GHA restored. CodeQL not enabled (acceptable; can revisit Sprint 4).
+- ✅ Workstream 3 — README professional rewrite shipped. ~340 lines covering overview, architecture, sprint structure, memory protocol, playbook pointer, development setup, deployment, testing, operational notes, repo structure, active sprint tracker, free-plan workflow, definition of done, contact. No leaked secrets/IPs/instance IDs.
+
+**Blocked:**
+
+- ❌ Workstream 1 Phase 2 — empty-commit consolidation deploy. Both pre-push hook blocked direct push to main (correctly) AND `workflow_dispatch` failed in 3s after runner pickup. Pivoted to merging PR #122 (push-event deploy on memory-only PR), which also failed identically. Root cause: GHA org-wide quota/billing cutover at 19:01 UTC.
+- ❌ Workstream 1 Phase 3 — post-deploy smoke tests. Replaced by direct curl smoke tests since deploy never fired. Staging EC2 verified healthy directly.
+- ❌ Workstream 1 Phase 4 — staging consolidation memory PR. Folded into the single pre-Day-23 closeout PR (this one).
+- ❌ Workstream 2.1 — 5 remaining Day 22 PR merges. Held to prevent main-vs-staging drift growing silently on each failed deploy.
+- ❌ Workstream 2.3 fix-PR merges — held; CI is the merge gate.
+
+**User action required (Sprint 3 carry):**
+
+- Verify GHA org billing state at github.com/organizations/publicpulseagency/settings/billing. Likely Free-tier private-repo quota exhausted.
+- After billing restored: fire `gh workflow run deploy-staging.yml --ref main`, then resume Workstream 2.1 PR merges in sequence (#123 → #125 → #126 → #127 → #128 → this pre-Day-23 PR last).
+
 ### Sprint 3 scope (In Flight as Planned)
 
 **Day 21 — Fee calculator (§14.3) + carry-forwards from Sprint 2 closeout.**
