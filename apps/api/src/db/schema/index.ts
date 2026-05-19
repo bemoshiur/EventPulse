@@ -103,6 +103,16 @@ export const tenants = pgTable(
     // (magic link, OAuth) read users.locale instead. Default 'bn' per §1.3 R12
     // + §16.2 BD-market reality.
     preferredLocale: text('preferred_locale').notNull().default('bn'),
+    // Per migration 0010 (Sprint 3 Day 22 Workstream 2). Subdomain
+    // provisioning lifecycle on the wildcard cert + wildcard DNS
+    // infrastructure landed in Decision O.1. Both NULL until first KYC
+    // approve transition. See services/tenant-subdomain/provision.ts for
+    // the state-machine semantics (NULL/NULL = never tried; provisioned
+    // NOT NULL = success; failed NOT NULL + provisioned NULL = stuck).
+    subdomainProvisionedAt: timestamp('subdomain_provisioned_at', { withTimezone: true }),
+    subdomainProvisioningFailedAt: timestamp('subdomain_provisioning_failed_at', {
+      withTimezone: true,
+    }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),

@@ -80,6 +80,7 @@ import {
   writeKycTransition,
 } from '../../services/audit/kyc.js'
 import { sendKycApprovedNotice, sendKycRejectedNotice } from '../../services/notifications/kyc.js'
+import { provisionTenantSubdomain } from '../../services/tenant-subdomain/provision.js'
 
 const admin = new Hono()
 
@@ -695,13 +696,37 @@ admin.post(
           ),
         )
 
-        // Subdomain provisioning TODO-stubbed per Day 18 brief §2.5;
-        // Item 16 (Day 20) wires SSM for actual Nginx vhost generation.
+        // Subdomain provisioning — Sprint 3 Day 22 Workstream 2.
+        // Pure-Nginx per Decision O.1 (wildcard cert + DNS live; no
+        // certbot in the per-tenant hot path). Fire-and-forget after
+        // the audit + transition tx commits; the provisioner records
+        // its own audit row (success or failure) and updates the
+        // tenants.subdomain_provisioned_at column. Failure leaves the
+        // tenant in approved status — KYC is the contract, provisioning
+        // is the operational layer; super admin notification surfaces
+        // failures via the queue's "approved but provisioning failed"
+        // marker (audit log filter on action='tenant.subdomain_provisioning_failed').
         if (decision.action === 'approve') {
-          logger.info(
-            { submissionId: id, tenantId: row.tenantId },
-            '[STUB] tenant subdomain provisioning — wired at Item 16 (Day 20)',
-          )
+          provisionTenantSubdomain({
+            tenantId: row.tenantId,
+            actorUserId: auth.sub,
+            ip,
+            userAgent,
+          })
+            .then((result) => {
+              if (result.status === 'failed') {
+                logger.warn(
+                  { tenantId: row.tenantId, result },
+                  'tenant subdomain provisioning failed; super admin notification + audit row recorded',
+                )
+              }
+            })
+            .catch((provisionErr) =>
+              logger.error(
+                { err: provisionErr, tenantId: row.tenantId },
+                'tenant subdomain provisioning threw unexpectedly (provisioner should not throw)',
+              ),
+            )
         }
       }
 
