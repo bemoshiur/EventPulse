@@ -4,6 +4,26 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## Porichoy procurement status — credentials not yet obtained
+
+**Status (2026-05-19):** Porichoy NID verification (`api.porichoy.gov.bd`) is still in the procurement gap. Credentials were not obtained during Sprint 2. The PorichoyScaffoldStub at `apps/api/src/infra/porichoy/client.ts` throws `PorichoyNotImplementedError` on every call regardless of env var state.
+
+**Live integration is one focused PR away** once credentials arrive. The scaffold pattern (interface + env vars + Secrets Manager entry shape + TODO stub) is canonical for all future automation integrations per CLAUDE.md §13.0 v2.3 block. The interface signature `nidVerify(nid, name, dob): Promise<PorichoyVerificationResult>` MUST remain stable as the live wiring lands — any reviewer queue code consuming the result reads against this shape from today (scaffold) through Phase 2+ (live).
+
+**Why scaffold-only matters:** Per the platform-wide manual-verification policy (decisions.md "Platform-wide policy — manual verification only for MVP" 2026-05-19), automation is enabled at the Phase 2 trigger — 50 verified KYC submissions/week sustained on a 4-week trailing average (reviewer-capacity criterion, not feature ambition). Until then, Porichoy is a deliberate non-feature; the stub's `PorichoyNotImplementedError` is the load-bearing guard that prevents accidental wiring before policy permits it.
+
+**To re-enable** (Phase 2 wiring PR):
+
+1. Replace `PorichoyScaffoldStub` with a live `PorichoyAxiosClient` implementing the same `PorichoyClient` interface.
+2. Populate the `eventpulse/staging/porichoy` Secrets Manager entry: `{"api_key": "...", "base_url": "https://api.porichoy.gov.bd"}`.
+3. Wire the factory in `porichoyClient()` to construct the live client when `readPorichoyConfig()` returns non-null.
+4. Append the per-request advisory-flag write-back to `kyc_submissions.porichoy_verification_id` (column exists from migration 0004).
+5. Add a `legal_*_advisory_flag.fired` audit row per call (Decision I-style; one-per-domain helper at `services/audit/porichoy.ts`).
+
+**Anti-pattern to avoid (load-bearing):** never silently downgrade `PorichoyNotImplementedError` to a "return verified: false" shape. The error MUST throw loud and visible — any reviewer-queue code path that assumes `nidVerify()` returns rather than throws is silently bypassing the manual-verification policy.
+
+---
+
 ## OAuth sign-in button hrefs pointed at web vhost instead of API vhost
 
 **Symptom:** Sign-in page loads, "Continue with Google" / "Continue with Apple" buttons render correctly, click goes through, but the browser hits a Next.js 404 — `/api/auth/google/start` does not exist on the web vhost. Silently broken from Sprint 1 Day 7-8 (when the OAuth backend landed) until Sprint 2 Day 20 — about nine working days where no production user could sign in via OAuth.
