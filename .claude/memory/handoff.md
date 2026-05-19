@@ -107,7 +107,8 @@ Days 11-20 shipped:
 ## Pending user actions
 
 - **`aws secretsmanager create-secret --name eventpulse/staging/eps`** — Day 20 user-action pending (auto-classifier blocked agent-side). Command + JSON template in gotchas.md "Secrets-Manager writes via aws secretsmanager create-secret blocked by Claude Code auto-mode classifier".
-- **OAuth credentials** (Google + Apple) — Moshiur said "OAuth follows" at Day 20 but values never landed. Provide via the same workaround pattern when ready.
+- **Google OAuth credentials** — ✅ DONE 2026-05-19. `eventpulse/staging/oauth-google` Secrets Manager entry created with Moshiur-supplied Client ID + Client Secret. Manual happy-path verification gated on next staging deploy materialising the secret into `.env.staging` via bootstrap-staging.sh.
+- **Apple OAuth credentials** — DROPPED from MVP scope per Moshiur 2026-05-19. See `.claude/memory/decisions.md` "Apple Sign-In dropped from MVP scope — Google OAuth only". Scaffolding stays in code (cost-neutral); 503 OAUTH_NOT_CONFIGURED handles missing-credentials state. v2.4 playbook bump candidate: amend §1.2 + §5.2 + §19.2 references to "all four auth methods" → "three at MVP launch".
 - **Counsel engagement for Trust Center v1.0 drafts** — cross-sprint carry; first paying tenant blocked until counsel returns drafts.
 - **§29 #9 (AIT withholding) + #10 (VAT/Mushak)** — legal-consult email status; needed by Sprint 3 Day 22 for fee calculator math.
 - **EPS production credential rotation** — explicitly waived by Moshiur Day 20; revisit if compromise event arises.

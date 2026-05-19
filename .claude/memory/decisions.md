@@ -4,6 +4,39 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-19 · Apple Sign-In dropped from MVP scope — Google OAuth only
+
+**Context:** Sprint 2 Day 20 closeout. After PR #104 shipped the OAuth bug fix + bootstrap-staging.sh extension for both Google + Apple OAuth secrets, Moshiur populated the Google OAuth credentials (Client ID + Client Secret → `eventpulse/staging/oauth-google` Secrets Manager entry, created 2026-05-19) and then directed "login with apple is not necesssary, update the memory" — Apple OAuth credentials never provided + explicitly dropped from MVP scope.
+
+**Decision (Moshiur 2026-05-19):** Apple Sign-In dropped from MVP. Sign-in surface ships with Google OAuth + email/password + magic link (3 of the originally-planned 4 auth methods). Per CLAUDE.md §5.2 the four-method list was "Email/password, Email magic link, Google OAuth 2.0, Apple Sign-In"; this decision reduces to three.
+
+**What stays in code (cost-neutral):**
+
+- Apple OAuth scaffolding (Apple arctic client, `/api/v1/auth/oauth/apple/start` + callback routes, Apple-private-key auto-decode helper) remains in place. Removing it now would be a much larger scope of work than the value of removal.
+- The 503 OAUTH_NOT_CONFIGURED guard from PR #104 handles the missing-Apple-credentials state gracefully: clicking the Apple button hits the start endpoint, gets a clean 503 + structured error, frontend can surface a friendly message.
+- `bootstrap-staging.sh` block reading `eventpulse/staging/oauth-apple` Secrets Manager entry remains; missing secret falls through to the 503 path.
+- Apple's `<a data-testid="oauth-apple-button">` button stays in `OAuthButtonGroup`. Clicking shows the 503 OAUTH_NOT_CONFIGURED response.
+
+**Sprint 3+ candidate (not in this PR):** hide the Apple button in `OAuthButtonGroup` when `isOAuthProviderConfigured('apple')` would return false. Requires either a client-side env-flag check (`NEXT_PUBLIC_OAUTH_APPLE_ENABLED`) or a SSR-time check on the sign-in page. Cleaner UX than showing a button that 503s on click; minimal frontend change (~30 min). Queue as Sprint 3 polish.
+
+**Sprint 4+ candidate:** decide whether to re-enable Apple Sign-In before MVP launch or drop the scaffolding code entirely. The decision pivots on: (a) whether attendee-side market research surfaces an iOS-tier user who refuses email/password + Google, (b) whether Apple Developer account procurement cost ($99/year) is worth the marginal user acquisition. No action required for MVP launch — Google + email is sufficient.
+
+**Consequences:**
+
+- CLAUDE.md §1.2 + §5.2 + §19.2 references to "all four available from day one" become inaccurate for MVP. Queue as v2.4 playbook bump candidate: amend to "three auth methods at MVP launch — Email/password, Email magic link, Google OAuth 2.0. Apple Sign-In scaffolded but not configured per `decisions.md` 'Apple Sign-In dropped from MVP scope' (2026-05-19)."
+- Sprint 1 Day 7-8 OAuth foundation work effectively scopes down from 4 providers to 3 at the provisioning layer. The implementation code (arctic Apple client, JWT-based client_secret minting, the `decodeApplePrivateKey()` helper) is preserved but inert — zero runtime cost.
+- Sprint 3 Day 21 first-session pre-flight checklist updates: "OAuth credentials (Google ✅ + Apple — dropped from MVP)" instead of the prior "OAuth credentials still missing" entry.
+
+**Cross-references:**
+
+- CLAUDE.md §1.2 Auth providers row (v2.4 amendment candidate)
+- CLAUDE.md §5.2 Sign-Up and Sign-In — Four Methods, One Funnel (v2.4 amendment: "Three Methods" for MVP)
+- CLAUDE.md §19.2 Sign-In / Sign-Up UI (v2.4 amendment: drop Apple button from mockup)
+- `decisions.md` "Auth foundation library choice: roll our own (not Lucia)" (2026-05-17) — the precedent decision that scoped the foundation library before the four-method choice
+- `apps/api/src/auth/oauth.ts isOAuthProviderConfigured('apple')` — the 503 guard from PR #104 that handles the missing-Apple-credentials state
+
+---
+
 ## 2026-05-19 · Sprint 2 Day 20 PM scope reduction — subdomain provisioning + SES templates deferred to Sprint 3 Day 21
 
 **Context:** Day 20 brief offered two PM Block scope choices for Item 16:
