@@ -4,6 +4,76 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-19 · Decision O — Day 22 architectural choices: staging cert moves to wildcard + tenants.preferred_locale column
+
+**Context:** Sprint 3 Day 22 pre-flight surfaced two STOP-ASKs against the brief's assumptions: (1) staging cert is 5-SAN, not wildcard — per-tenant subdomain provisioning would require certbot extend per approve; (2) `tenants.preferred_locale` column was referenced by the SES-templates workstream but doesn't exist in the schema. Both are upstream-of-feature-code architectural choices; resolving them before any feature PR lands keeps the dependency chain clean.
+
+### O.1 — Staging cert moves to wildcard (`*.staging.eventpulse.com.bd` SAN added)
+
+**Decision (Moshiur 2026-05-19):** Issue an expanded Let's Encrypt cert including `*.staging.eventpulse.com.bd` alongside the existing 5 explicit SANs. Add a wildcard A record to the Route 53 staging hosted zone pointing at the same Elastic IP. Tenant subdomain provisioning is then **pure-Nginx** with no certbot in the hot path — DNS resolves via wildcard, cert covers via wildcard SAN; the provisioning task writes a vhost file, symlinks it, runs `nginx -t`, and reloads.
+
+**Why this reverses the v2.2 §17.6 "staging deliberately does NOT use a wildcard" stance:**
+
+Original Sprint 1 rationale: explicit 5-SAN enumeration is auditable; wildcard introduces "no surprises from an over-broad wildcard during dev." That rationale held while the 5 hostnames were the entire staging surface — pre-Item-13 there was no per-tenant subdomain provisioning. Now that provisioning becomes per-approve dynamic (Sprint 3 Day 22), the per-tenant certbot-extend path becomes operationally costly: slow (15-60s per certificate re-issue), Let's Encrypt rate-limited (50 certs/week per hostname; we'd burn the budget on staging integration tests alone), fragile (the 3-system SSM + Nginx + certbot chain has more failure modes than pure-Nginx), and divergent from production where the wildcard already covers all tenant subdomains. The cost of one-time wildcard issuance + wildcard A record + §17.6 amendment is small (~15 min); the cost of NOT doing it is paid per-tenant-per-deploy forever.
+
+Auditability concern from the original Sprint 1 stance is preserved through DNS records and vhost configs, which are stronger audit surfaces than cert SAN lists. Every tenant subdomain generates a Route 53 record (implicit via wildcard catch-all) AND a Nginx vhost file checked into the repo template; the cert SAN list was never the load-bearing audit record.
+
+**Consequences:**
+
+- Existing 5 explicit Route 53 A records stay in place. Wildcard ADDS to the routing tree; explicit records take precedence for the 5 known hostnames; wildcard catches everything else.
+- Certbot expansion is one-time + idempotent (`certbot certonly --expand`); the previous 5-SAN cert remains valid until expansion completes (atomic swap on disk).
+- `provisionTenantSubdomain()` task is pure-Nginx — no certbot library, no certbot CLI shell-out, no `--dns-route53` plugin coupling. Per-tenant flow: write vhost from template → symlink into `sites-enabled/` → `nginx -t` (rollback file write on failure) → `systemctl reload nginx` → audit row + `tenants.subdomain_provisioned_at` bump.
+- §17.6 amends as a v2.4 candidate (post-sprint memory PR): "staging deliberately uses wildcard `*.staging.eventpulse.com.bd` matching the production target shape; tenant subdomain provisioning is pure-Nginx; auditability preserved via Route 53 + vhost configs."
+- The Sprint 1 Day 3-4 cert (5 SANs, expires Aug 15 2026) gets superseded by the expanded cert (5 SANs + 1 wildcard, same expiry from `--expand`).
+
+### O.2 — `tenants.preferred_locale` column added (migration 0009)
+
+**Decision (Moshiur 2026-05-19):** Add `tenants.preferred_locale text NOT NULL DEFAULT 'bn' CHECK (preferred_locale IN ('en','bn'))` via migration 0009. Notification helper for tenant-targeted emails (KYC events) reads from `tenants.preferred_locale`; helper for user-targeted emails (magic link, OAuth account linked) reads from `users.locale`. Helper signature uses a discriminated union (`{tenantId} | {userId}`) so callers cannot confuse the two.
+
+**Why tenant-level vs owner-individual:**
+
+Tenant-organisation communications locale is a tenant-level decision, not an owner-individual decision. Using `users.locale` via `tenants.owner_user_id` as a proxy creates wrong-by-design coupling that surfaces as user-facing bugs at scale:
+
+- Owner changes their UI locale → all org notifications flip locale silently
+- Personal-tenant owner whose UI locale is 'en' (e.g. expat) is the wrong source for org's customer-facing comms
+- Multi-owner tenant (Sprint 6 RBAC scope) has no canonical owner to read from
+
+Migration 0009 prevents the debt now; the alternative is paying it down with a more disruptive backfill once real tenants exist.
+
+**Why default 'bn':**
+
+Per §1.3 R12 ("tenant portal UI English, public event pages bilingual Bangla+English") + §16.2 (Bangla SMS supported; "Masked sender ID EVENTPULSE"; Bangla Unicode billing acknowledged) + market reality: BD-domiciled tenants overwhelmingly prefer Bangla customer comms. The 'en' value is for tenants that explicitly opt out — most personal tenants from `my.eventpulse.com.bd` self-service hosting (Phase 2 §26.2) will want 'bn' by default. The CHECK constraint pins the two-value enum at the DB layer so a future "let's add Hindi/Urdu" decision lands as a deliberate migration, not a stringly-typed surprise.
+
+**Pre-migration backfill check:** count tenants on staging before applying. If > 0, surface to Moshiur to decide whether existing rows need an explicit `UPDATE tenants SET preferred_locale = 'en'` (English-default-assumption preserves backwards-compat for any test tenants created before this migration). On a fresh schema with no real tenants, the default 'bn' applies cleanly.
+
+**Notification helper shape:**
+
+```typescript
+type LocaleTarget = { tenantId: string } | { userId: string }
+async function selectLocale(target: LocaleTarget): Promise<'en' | 'bn'>
+```
+
+Discriminated union prevents the caller from passing a `userId` when they mean a `tenantId` (the most common bug class for this kind of lookup). The function reads from the right table based on the discriminator, returns the validated locale, and falls back to 'en' only on truly-missing data (which should be impossible under the CHECK + NOT NULL constraints, but defensive defaults beat thrown errors in a notification-send hot path).
+
+**Consequences:**
+
+- Migration 0009 ships as a focused PR before any SES template code lands.
+- Drizzle schema gains `preferredLocale: text('preferred_locale').notNull().default('bn')` on the `tenants` pgTable.
+- One integration test asserting the CHECK rejects unknown values (e.g. `'es'` → 23514 check_violation).
+- Notification helper at `apps/api/src/services/notifications/locale.ts` is the single source for locale selection across all 5 SES templates (and future SMS templates per §16.2).
+- The Phase 2 v2.4 playbook bump candidates list (`progress.md` cross-sprint carries) gains a §9.1 amendment: `tenants.preferred_locale text NOT NULL DEFAULT 'bn'` extension.
+
+### Combined sequencing for Day 22
+
+1. This memory PR (Decision O) lands first — both decisions in writing before any feature code.
+2. SSM SendCommand for cert expansion + Route 53 wildcard A record (await explicit go from Moshiur per the brief's "STOP-ASK before step 2" rule).
+3. Migration 0009 + Drizzle schema PR.
+4. Workstream 1 (bilingual SES templates + locale helper PR) — consumes O.2.
+5. Workstream 2 (tenant subdomain provisioning PR) — consumes O.1; pure-Nginx; staging integration test required before merge.
+6. Workstream 3 (Fix 6b deploy.sh Nginx reload) if time permits.
+
+---
+
 ## 2026-05-19 · Decision N — Fee calculator EPS-base rule locked + mandatory Day 24-25 EPS sandbox truth gate
 
 **Context:** Sprint 3 Day 21 fee calculator (`apps/api/src/domain/payments/fee-calculator.ts`, PR #119) review checkpoint. Implementation produced 16/16 internally-consistent cells but only 14/16 matched §14.2's verbatim primary numbers — Mode C (platform absorb, EPS pass-through) `buyer_total` + `eps_fee` matched §14.2's parenthetical alternative ("or 25.00 depending on which side") not the primary line (1,025.06 / 25.06). Investigation revealed §14.2's Mode C primary numbers are arithmetically inconsistent with the stated 2.5% EPS rate: a capture of 1,025.06 at 2.5% yields 25.6265 BDT, not 25.06. The spec author wrote Mode C's narrative to make `organiser_net` resolve cleanly to 997.50, working backward from that target rather than from EPS's actual rate. No single arithmetic rule across all 4 modes can match all 4 §14.2 primary `eps_fee` numbers because Mode B explicitly uses `eps_base = subtotal = 1,000` while Mode C primary would require `eps_base = subtotal + platform_fee = 1,002.50` — these are incompatible.
