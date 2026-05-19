@@ -10,7 +10,7 @@
 
 - **AM PR** — bilingual SES templates (5 templates × 2 locales — `kyc_submitted`, `kyc_approved`, `kyc_rejected`, `magic_link`, `oauth_account_linked`). SES `create-template` resources via aws CLI; bootstrap idempotent. Wire Item 9 / 11 / 15 notification stubs to live `SendTemplatedEmail`. Locale selection per `tenants.preferred_locale` (en/bn; default bn). Deferred from Day 20 per Sprint 2 PM scope decision (decisions.md 2026-05-19).
 - **Day 21 first PR — tenant subdomain provisioning** (deferred from Day 20). On Item 13 KYC approve transition, fire `provisionTenantSubdomain(tenantId)` background task: SSM SendCommand against EC2 → Nginx vhost from template → symlink into sites-enabled → `nginx -t` (rollback on failure) → reload → certbot extend OR existing-wildcard reuse → audit row → `tenants.subdomain_provisioned_at` bump. Error handling: failed provisioning writes `tenant.subdomain_provisioning_failed` audit row + super-admin notification + leaves tenant approved + surfaces in admin queue UI as "approved but provisioning failed — manual intervention needed". Idempotent on retry. Staging integration test required (the gap that drove the Day 20 defer).
-- **Day 21 main work — fee calculator** as the first-class deliverable (§14.3). `apps/api/src/domain/payments/fee-calculator.ts` exporting `calculateFees(input): FeeCalcResult` — pure function, single source of truth for all money math. 12+ unit tests covering every combination of `(absorb, pass_through) × (absorb, pass_through)` for several edge amounts (1 paisa, 1 BDT, very large BDT, free ticket coupon → 0). Per §1.3 R2 "money never lies".
+- **Day 21 main work — fee calculator ✅ SHIPPED.** `apps/api/src/domain/payments/fee-calculator.ts` + 33 unit tests (PR #119, 2026-05-19). `calculateOrderFees(input): FeeCalcResult` pure function, single source of truth for money math per §14.3. 14/16 cells match §14.2 verbatim; Mode C (AB, PT) `buyer_total` + `eps_fee` match §14.2's parenthetical alternative ("or 25.00 depending on which side") not the primary line — see Decision N (decisions.md 2026-05-19). The §14.2 Mode C primary numbers are arithmetically inconsistent with EPS's stated 2.5% rate; the calculator's rule is internally consistent + conservative. Mandatory Day 24-25 EPS sandbox truth gate (below) is the empirical arbiter.
 
 **Day 22-23 — Event CRUD + tenant_fee_config exposure.**
 
@@ -18,10 +18,11 @@
 - `tenant_fee_config` exposed in super admin tenant detail view with fee-override modal + `fee_override_log` audit (4-eyes principle for changes > 10 bps).
 - Fixed form template per event type (hardcoded React forms — full builder is Sprint 5+).
 
-**Day 24-25 — Landing page + ticket tier CRUD.**
+**Day 24-25 — Landing page + ticket tier CRUD + MANDATORY EPS sandbox truth gate.**
 
 - Single landing page template with brand customisation (logo, colour, banner, copy).
 - Ticket tier CRUD.
+- **EPS sandbox truth gate (NON-NEGOTIABLE per Decision N 2026-05-19).** Before any Day 26 sandbox-order work begins, run 4 real EPS sandbox transactions covering all §14.2 modes (subtotal 1,000 BDT, platform 0.25%, EPS 2.5%) and capture EPS's actual fee on each. Compare to the fee calculator's predictions (Mode A 2506, B 2500, C 2500, D 2506). Any delta in any cell is a calculator bug — adjust the calculator (not the sandbox observations), re-run the §24.4 fee-mode tests, and amend §14.2 to match. The 6-paisa Mode C delta from §14.2 primary is the specific cell most likely to surface a calculator change — Decision N picked the calc's lower (2500) prediction over §14.2's primary 2506 because §14.2 primary is arithmetically inconsistent with EPS's stated 2.5% rate. Sandbox is the empirical arbiter. Day 26 gates on this completing clean.
 
 **Day 26-28 — EPS in-house wrapper + order pipeline.**
 

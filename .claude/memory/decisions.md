@@ -4,6 +4,60 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-19 · Decision N — Fee calculator EPS-base rule locked + mandatory Day 24-25 EPS sandbox truth gate
+
+**Context:** Sprint 3 Day 21 fee calculator (`apps/api/src/domain/payments/fee-calculator.ts`, PR #119) review checkpoint. Implementation produced 16/16 internally-consistent cells but only 14/16 matched §14.2's verbatim primary numbers — Mode C (platform absorb, EPS pass-through) `buyer_total` + `eps_fee` matched §14.2's parenthetical alternative ("or 25.00 depending on which side") not the primary line (1,025.06 / 25.06). Investigation revealed §14.2's Mode C primary numbers are arithmetically inconsistent with the stated 2.5% EPS rate: a capture of 1,025.06 at 2.5% yields 25.6265 BDT, not 25.06. The spec author wrote Mode C's narrative to make `organiser_net` resolve cleanly to 997.50, working backward from that target rather than from EPS's actual rate. No single arithmetic rule across all 4 modes can match all 4 §14.2 primary `eps_fee` numbers because Mode B explicitly uses `eps_base = subtotal = 1,000` while Mode C primary would require `eps_base = subtotal + platform_fee = 1,002.50` — these are incompatible.
+
+The choice is between two unverified models of EPS's actual fee-computation base, both written before real EPS sandbox transactions have been run.
+
+**Decision (Moshiur 2026-05-19):** Accept the calculator's current internally-consistent rule. Ship Day 21 work as PR #119. Amend §14.2 with a clarifying implementation note. Gate Day 24-25 EPS sandbox work with a mandatory truth-verification step.
+
+**The rule the calculator implements (single rule, mode-independent):**
+
+```text
+eps_capture_base = subtotal + platform_fee   if platform pass_through
+                 = subtotal                  if platform absorb
+eps_fee          = floor(eps_capture_base × eps_bps / 10000)
+```
+
+This produces:
+
+- Mode A (PT, PT):  eps_fee=2506 ✓ §14.2 verbatim
+- Mode B (AB, AB):  eps_fee=2500 ✓ §14.2 verbatim
+- Mode C (AB, PT):  eps_fee=2500 ⚠ matches §14.2 parenthetical ("or 25.00"); §14.2 primary shows 2506
+- Mode D (PT, AB):  eps_fee=2506 ✓ §14.2 verbatim (incl. "EPS fee on larger captured amount" footnote)
+
+Mode C delta = 6 paisa (calc 2500 vs §14.2 primary 2506); 14/16 spec cells exact match.
+
+**Why this rule (vs. alternatives that match Mode C primary):**
+
+1. **Internally consistent.** A single arithmetic rule applies across all 4 modes. Alternatives that match Mode C primary (e.g. "always include platform fee in eps base regardless of handling") break Mode B's verbatim "their 2.5% on 1,000 = 25.00" line, trading one cell match for another.
+2. **Conservative for the platform.** When EPS actually charges on the gross-up (Mode A-like): calculator predicts 2506, platform collects 2506 from buyer, EPS keeps 2506, platform absorbs the 0 delta. When EPS actually charges on subtotal-only (Mode B-like): calculator predicts 2500, platform collects 2500 from buyer, EPS keeps 2500, platform absorbs the 0 delta. Mode C is the only ambiguous case; calc picks the lower (2500) pass-through amount, so any 6-paisa delta is absorbed by platform (cheaper for buyer trust) rather than charged to organiser without justification.
+3. **The empirically correct answer is unknown until Day 24-25.** Adjusting the calculator before sandbox testing risks shipping a wrong rule twice (once now, once after empirical data). The 6-paisa Mode C delta is operationally tiny pre-launch — zero production tenants.
+
+**Mandatory Day 24-25 EPS sandbox truth gate (non-negotiable):**
+
+When Day 24-25 EPS integration work runs real sandbox transactions, the gate fires:
+
+1. Capture EPS's actual fee on the test order (subtotal 1,000 BDT, platform 0.25% = 25 bps, EPS 2.5% = 250 bps) in each of the 4 handling modes — 4 real sandbox transactions minimum.
+2. Compare to the calculator's predictions (Mode A 2506, B 2500, C 2500, D 2506).
+3. Any delta in any cell is a calculator bug. The calculator is the variable to change, **not** the sandbox observations.
+4. If sandbox data shows EPS uses a different base than the calculator models, both the calculator AND the §14.2 amendment are amended at that time. Re-run the §24.4 fee-mode tests against the new rule.
+5. Day 26 first-sandbox-order-verification cannot pass without this gate clearing.
+
+**Consequences:**
+
+- PR #119 ships as-is. Calculator + 33 unit tests merged to main.
+- §14.2 of CLAUDE.md gets a small clarification line in a separate playbook PR (memory-protocol: spec changes are memory commits). The clarification names the calculator's rule, references this Decision N, and flags the Day 24-25 truth gate.
+- `progress.md` Sprint 3 plan extended with the explicit Day 24-25 truth-gate step (gates Day 26 sandbox-order work).
+- `handoff.md` mentions the gate so any new session reading the handoff sees the open obligation.
+- `gotchas.md` gets a "spec source-of-truth limits" entry: written worked examples are authoritative for intent but not always for arithmetic; for money math, empirical verification against the actual external system is the final arbiter.
+- The §14.2 Mode C primary numbers (1,025.06 / 25.06) become "the parenthetical alternative" by amendment; the calculator's numbers (1,025.00 / 25.00) become the canonical interpretation pending sandbox truth.
+
+**Why a 6-paisa delta matters even though it's tiny:** the calculator is the platform's single source of money truth (§14.3). Regulators, accountants, and tenants reconcile against §14.2 primaries. A "platform math doesn't match documented contract" issue erodes trust if it surfaces externally. The amendment + Day 24-25 gate together prevent this by (a) making the calculator's rule the documented rule going forward and (b) committing to empirical verification before any production money moves.
+
+---
+
 ## 2026-05-19 · Apple Sign-In dropped from MVP scope — Google OAuth only
 
 **Context:** Sprint 2 Day 20 closeout. After PR #104 shipped the OAuth bug fix + bootstrap-staging.sh extension for both Google + Apple OAuth secrets, Moshiur populated the Google OAuth credentials (Client ID + Client Secret → `eventpulse/staging/oauth-google` Secrets Manager entry, created 2026-05-19) and then directed "login with apple is not necesssary, update the memory" — Apple OAuth credentials never provided + explicitly dropped from MVP scope.
