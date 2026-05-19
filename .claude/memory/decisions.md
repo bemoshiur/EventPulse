@@ -32,9 +32,11 @@ Companion updates land in the same PR:
 
 **Context:** Sprint 3 Day 22 pre-flight surfaced two STOP-ASKs against the brief's assumptions: (1) staging cert is 5-SAN, not wildcard — per-tenant subdomain provisioning would require certbot extend per approve; (2) `tenants.preferred_locale` column was referenced by the SES-templates workstream but doesn't exist in the schema. Both are upstream-of-feature-code architectural choices; resolving them before any feature PR lands keeps the dependency chain clean.
 
-### O.1 — Staging cert moves to wildcard (`*.staging.eventpulse.com.bd` SAN added)
+### O.1 — Staging cert moves to wildcard (apex + wildcard 2-SAN form)
 
-**Decision (Moshiur 2026-05-19):** Issue an expanded Let's Encrypt cert including `*.staging.eventpulse.com.bd` alongside the existing 5 explicit SANs. Add a wildcard A record to the Route 53 staging hosted zone pointing at the same Elastic IP. Tenant subdomain provisioning is then **pure-Nginx** with no certbot in the hot path — DNS resolves via wildcard, cert covers via wildcard SAN; the provisioning task writes a vhost file, symlinks it, runs `nginx -t`, and reloads.
+**Decision (Moshiur 2026-05-19):** Reissue the existing Let's Encrypt cert lineage to a **2-SAN form**: apex `staging.eventpulse.com.bd` + wildcard `*.staging.eventpulse.com.bd`. The 4 single-label subdomains (admin/api/app/my.staging.eventpulse.com.bd) previously enumerated as explicit SANs are now covered by the wildcard. Add a wildcard A record to the Route 53 staging hosted zone pointing at the same Elastic IP. Tenant subdomain provisioning is then **pure-Nginx** with no certbot in the hot path — DNS resolves via wildcard, cert covers via wildcard SAN; the provisioning task writes a vhost file, symlinks it, runs `nginx -t`, and reloads.
+
+**Net effect on cert shape:** SAN count 5 → 2; coverage went from 5 fixed subdomains to apex + all current subdomains + all future tenant subdomains. The original v2.2 §17.6 framing ("5 explicit SANs + 1 wildcard SAN = 6 total") that early drafts of this decision used was invalid: Let's Encrypt policy explicitly rejects SAN lists containing both a wildcard and the explicit names the wildcard would cover (the actual rejection text: "Domain name X is redundant with a wildcard domain in the same request"). The correct pattern is apex + wildcard only (2 SANs); apex is required because wildcards do not cover the apex per RFC 6125 §6.4.3 (wildcards match exactly one DNS label, left-most).
 
 **Why this reverses the v2.2 §17.6 "staging deliberately does NOT use a wildcard" stance:**
 
@@ -95,6 +97,16 @@ Discriminated union prevents the caller from passing a `userId` when they mean a
 4. Workstream 1 (bilingual SES templates + locale helper PR) — consumes O.2.
 5. Workstream 2 (tenant subdomain provisioning PR) — consumes O.1; pure-Nginx; staging integration test required before merge.
 6. Workstream 3 (Fix 6b deploy.sh Nginx reload) if time permits.
+
+### O.1 — applied 2026-05-20 (operation log)
+
+Cert reissue + Route 53 wildcard A record completed via SSM SendCommand and Route 53 API:
+
+- **Cert reissue.** First attempt (`certbot certonly --expand` with the original 5 SANs + wildcard added) was rejected by Let's Encrypt: "Domain name admin.staging.eventpulse.com.bd is redundant with a wildcard domain in the same request." Adjusted command dropped to apex + wildcard only (2 SANs) and dropped `--email --agree-tos` since the LE account on this server has no email contact and uses an existing lineage. Second attempt without `--cert-name` succeeded BUT created a sibling lineage `staging.eventpulse.com.bd-0001` because `--expand` requires the new SAN set to be a superset of the existing one — going from 5 SANs to 2 SANs (where 4 of the originals become wildcard-covered but no longer explicitly listed) is not a superset relationship, so certbot disambiguated by making a new lineage. The orphan lineage was deleted with `certbot delete --cert-name staging.eventpulse.com.bd-0001`, then the existing lineage was reissued with `--cert-name staging.eventpulse.com.bd --force-renewal` (no `--expand`, which gets in the way of SAN-set replacements). End state on disk: `/etc/letsencrypt/live/staging.eventpulse.com.bd/fullchain.pem` carries 2 SANs (`*.staging.eventpulse.com.bd`, `staging.eventpulse.com.bd`), Not After Aug 17 2026 (fresh ~90-day expiry from the reissue). `nginx -s reload` picked up the new cert content. 5 external TLS regression checks (admin/api/app/my/staging) all return HTTP 200 + SSL verify 0; the 4 single-label subdomains now serve via wildcard SAN. Wildcard probe via `curl --resolve unseen.staging.eventpulse.com.bd:443:18.141.7.246` returned SSL verify 0 with HTTP 404 from Nginx default server (expected — no vhost for unseen subdomain, TLS handshake itself valid).
+- **Route 53 wildcard A record.** `CREATE *.staging.eventpulse.com.bd A 18.141.7.246 TTL 300` in hosted zone `Z003493917KJX7VCR8ZMR`. ChangeInfo `/change/C02798732EGK3JHL407XV` moved PENDING → INSYNC within ~5 min. Regression check: 5 existing explicit A records still resolve to `18.141.7.246` (explicit records take precedence over wildcard in Route 53 routing). Wildcard probes for `acme-test.staging.eventpulse.com.bd` + `wildcard-2.staging.eventpulse.com.bd` both resolve to `18.141.7.246` via the new wildcard record.
+- **IAM:** no changes required. EC2 role `eventpulse-staging-ec2` inline policy `eventpulse-staging-acme-route53` already grants `route53:ChangeResourceRecordSets` on the whole zone, so certbot's DNS-01 challenge for the wildcard worked without scope adjustment. (See the IAM-scope gotcha for hardening discussion.)
+
+**Infrastructure state post-application:** the staging cert is now the 2-SAN form Decision O.1 specifies; provisioning of new tenant subdomains is pure-Nginx (no certbot in the per-tenant hot path). Workstream 2 can proceed when sequencing reaches it.
 
 ---
 

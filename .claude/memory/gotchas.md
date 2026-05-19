@@ -1060,3 +1060,151 @@ A check that fails because the thing it validates doesn't exist is a broken chec
 - **The Sprint 2 silent-failure pattern's lesson applies here too:** "observability of system state must come from probes that exercise the actual code paths under test, not from layer-of-abstraction shortcuts." For money math, the "code path" is the EPS gateway; the "probe" is the sandbox transaction. Skipping the empirical probe and trusting the spec verbatim is the same anti-pattern at a different layer.
 
 **Cross-references:** Decision N (decisions.md 2026-05-19) "Fee calculator EPS-base rule locked + mandatory Day 24-25 EPS sandbox truth gate"; §14.2 amendment in CLAUDE.md (playbook PR); progress.md "Day 24-25 — Landing page + ticket tier CRUD + MANDATORY EPS sandbox truth gate".
+
+---
+
+## Let's Encrypt rejects SAN lists with both a wildcard and the names it would cover
+
+**Status (2026-05-20):** RESOLVED for Decision O.1 staging cert; remains a general LE policy.
+
+**Symptom:** First `certbot certonly --expand` attempt at Sprint 3 Day 22 included the existing 5 SANs (`staging`, `admin/api/app/my.staging.eventpulse.com.bd`) PLUS the new wildcard `*.staging.eventpulse.com.bd`. LE rejected at request-submit time:
+
+```text
+Error creating new order :: Domain name "admin.staging.eventpulse.com.bd" is
+redundant with a wildcard domain in the same request. Remove one or the other
+from the certificate request.
+```
+
+The cert was NOT modified (LE atomic-swap behaviour preserved the existing 5-SAN cert).
+
+**Why it happens:** LE policy disallows SAN lists where a wildcard and the names it would cover both appear. The wildcard already provides TLS coverage for any one-label-deep subdomain; explicit duplicates add no security value and complicate cert lifecycle (multiple paths to the same name). The rejection is at the ACME API layer, not certbot — no pre-flight check exists on the certbot side. It surfaces only when LE evaluates the new-order request.
+
+**Fix:** Correct SAN list for "apex + wildcard" coverage is exactly **2 SANs**:
+
+- the apex name itself (e.g. `staging.eventpulse.com.bd`) — required because wildcards do not cover the apex per RFC 6125 §6.4.3 (wildcards match exactly one DNS label, left-most)
+- the wildcard (e.g. `*.staging.eventpulse.com.bd`) — covers all single-label subdomains
+
+Single-label subdomains (`admin.staging.eventpulse.com.bd` etc.) are NOT listed explicitly; they're matched by the wildcard via standard RFC 6125 TLS client behaviour.
+
+**How to avoid:** When designing a wildcard cert request, the SAN list is always `apex + *` (or just the wildcard if the apex isn't needed). Never enumerate subdomains the wildcard would cover. The auditability concern this raises (cert SAN list is less explicit) is real but the answer is to shift audit surfaces to DNS records and Nginx vhost configs (which are stronger audit surfaces anyway — see Decision O.1 rationale).
+
+---
+
+## certbot `--expand` requires the new SAN set to be a strict superset of the existing one
+
+**Status (2026-05-20):** RESOLVED for Decision O.1 staging cert; remains a general certbot semantic.
+
+**Symptom:** Second `certbot certonly --expand` attempt at Sprint 3 Day 22 dropped the 4 redundant subdomains, requesting just `staging.eventpulse.com.bd` + `*.staging.eventpulse.com.bd`. Command succeeded BUT created a sibling lineage with `-0001` suffix:
+
+```text
+Successfully received certificate.
+Certificate is saved at: /etc/letsencrypt/live/staging.eventpulse.com.bd-0001/fullchain.pem
+This certificate expires on 2026-08-17.
+```
+
+The existing lineage `staging.eventpulse.com.bd` remained at its 5-SAN cert (no change). The new lineage `-0001` was orphaned (no Nginx vhost referencing it). The TLS regression checks the brief mandated would have returned HTTP 200 + SSL 0 for ALL probes — but for the wrong reason, since they'd be hitting Nginx still serving the old cert.
+
+**Why it happens:** `certbot --expand` is specifically designed for ADDING names to an existing cert lineage. It requires the new `-d` list to be a strict superset of the existing lineage's SAN set. Going from 5 SANs to 2 SANs (where 4 of the originals are now wildcard-covered but no longer explicitly listed) is NOT a superset relationship — it's a different SAN set. certbot interprets this as a different cert request and disambiguates by creating a new sibling lineage with a `-NNNN` suffix.
+
+**Fix:** For SAN-set replacements (where some names are removed AND others added), drop `--expand` AND add `--cert-name <existing-lineage-name>` to pin certbot to the existing lineage. Optionally add `--force-renewal` defensively (certbot may complain that the existing cert is "still valid" otherwise — `--force-renewal` overrides).
+
+Recovery if the orphan was already created:
+
+```bash
+sudo certbot delete --non-interactive --cert-name <orphan-name>  # e.g. staging.eventpulse.com.bd-0001
+sudo certbot certonly --dns-route53 --non-interactive --force-renewal \
+  --cert-name <existing-lineage> \
+  -d <existing-lineage> -d '*.<wildcard>'
+```
+
+After reissue, run `sudo systemctl reload nginx` to pick up the new cert content (even though the file path is unchanged, Nginx workers cache cert content in memory).
+
+**How to avoid:** Default to `--cert-name <existing>` whenever the operation modifies an existing lineage's SAN set in any direction. Use `--expand` ONLY when the change is strictly additive. Symptom check: certbot's "Certificate is saved at:" line should match the existing lineage path; if it has a `-NNNN` suffix, certbot disambiguated.
+
+---
+
+## Nginx vhost configs hardcode the cert lineage path — treat the lineage name as contractual
+
+**Status (2026-05-20):** RESOLVED via Decision O.1; principle applies to all future cert ops.
+
+**Symptom:** When certbot creates a sibling lineage `staging.eventpulse.com.bd-0001` (per the `--expand` gotcha above), Nginx continues serving from the original lineage path `/etc/letsencrypt/live/staging.eventpulse.com.bd/...`. The new cert is on disk but invisible to TLS clients. External probes return success for the wrong reason. Worse: a future "let's rename the new lineage" or "delete the old lineage" operation requires a Nginx vhost edit + reload.
+
+**Why it happens:** Nginx vhost configs use literal cert paths (`ssl_certificate /etc/letsencrypt/live/<lineage-name>/fullchain.pem`). The `<lineage-name>` is part of the path; changing it requires a config edit. Certbot's cert renewal process keeps the file path stable across renewals of the SAME lineage — but creating a different lineage breaks the implicit path contract.
+
+**Fix:** Every cert operation that touches an existing lineage MUST use `--cert-name <existing>` to pin the operation to that lineage's path. Treat the lineage name as **contractual** — any operation that would change the lineage name (or create a sibling lineage) requires a coordinated Nginx vhost edit + PR + deploy.
+
+**How to avoid:** Document the lineage name → vhost path mapping (Sprint 1 cert lineage `staging.eventpulse.com.bd` → 4 Nginx vhost references in `infra/nginx/eventpulse-staging.conf`). When proposing a cert operation, identify the lineage name first, then pin certbot to it. If the operation would create a sibling lineage, surface the implication (Nginx vhost edit required) before running the command.
+
+---
+
+## Let's Encrypt account registered without email — silent expiration risk
+
+**Status (2026-05-20):** ACKNOWLEDGED Sprint 3 Day 22; mitigation deferred to Sprint 3 closeout or Sprint 4.
+
+**Symptom:** `certbot show_account` against the Sprint 1 LE account on staging EC2 returns:
+
+```text
+Account URL: https://acme-v02.api.letsencrypt.org/acme/acct/3342182286
+Account Thumbprint: 5DZr2APdwelNxkcIdxjeliovYAqJqqkIugV9uFgnmtM
+Email contact: none
+```
+
+LE sends expiration warning emails (typically 20, 10, 1 days before expiry) to the registered email. With "none" as the contact, the platform receives NO expiration warnings from LE. Cert auto-renewal via certbot.timer is the only renewal mechanism; if the timer is misconfigured, disabled, or the renewal hooks fail silently, the cert expires without warning.
+
+**Why it happens:** Original Sprint 1 Day 3-4 `certbot register` was either run without `--email` OR with `--register-unsafely-without-email`. The §17.7 staging command in CLAUDE.md DOES include `--email moshiur@publicpulse.com.bd` but `--email` only applies to NEW account registration; if the account already existed (or was created via a different command), the email arg is silently ignored.
+
+**Mitigations (Sprint 3 closeout or Sprint 4):**
+
+1. **Register email post-hoc:** `sudo certbot register --update-registration --email <ops-email>` (or `certbot update_account --email <ops-email>` in newer certbot). One-time fix; LE warnings then flow to the registered inbox.
+2. **External cert-expiry monitoring:** CloudWatch metric on `(cert-not-after-timestamp - now())` from a periodic script (e.g. `openssl x509 -enddate -noout -in fullchain.pem`); alarm at <14 days. Tighter SLA than LE's 20/10/1-day warning cadence; doesn't depend on the LE account having an email at all.
+3. **Verify `certbot.timer` is active:** `sudo systemctl status certbot.timer` should show `Active: active (waiting)`. If `inactive` or `disabled`, auto-renewal isn't running and certs WILL expire silently.
+
+**How to avoid in future cert work:** When provisioning a new LE account, always pass `--email <ops-shared-inbox>` AND verify post-registration with `certbot show_account`. When a new ops mailbox lands (e.g. `security@eventpulse.com.bd` once SES inbound is configured Sprint 3+), update the account email at that time.
+
+---
+
+## IAM policy SID is aspirational — Route 53 ACME role has whole-zone CRUD
+
+**Status (2026-05-20):** ACKNOWLEDGED Sprint 3 Day 22; hardening deferred to Sprint 4 production cutover.
+
+**Symptom:** EC2 staging role `eventpulse-staging-ec2` carries inline policy `eventpulse-staging-acme-route53` with SID `Route53AcmeTxtRecordsInZone` — name implies ACME challenge TXT records only. Actual policy grant:
+
+```json
+{
+  "Sid": "Route53AcmeTxtRecordsInZone",
+  "Effect": "Allow",
+  "Action": ["route53:ChangeResourceRecordSets", "route53:ListResourceRecordSets"],
+  "Resource": "arn:aws:route53:::hostedzone/Z003493917KJX7VCR8ZMR"
+}
+```
+
+No `Condition` block, no record-name scoping. The EC2 staging role has standing authority to mutate ANY record (A, AAAA, MX, TXT, CNAME, ...) in the shared `eventpulse.com.bd.` hosted zone — including future production records that will share the same zone.
+
+**Why it happens:** SID is a free-text identifier; AWS does not enforce semantic alignment between SID names and the actual grant. The Sprint 1 Day 3-4 setup wrote the SID as documentation intent ("this policy is for ACME challenges") but the underlying grant was whole-zone for simplicity. The blast-radius implications surfaced only when Day 22 verification scrutinised the policy doc.
+
+**Why it's not Sprint 3 blocking:** The EC2 staging role is constrained to the staging EC2 instance only (IAM trust policy ties it to that instance ID). An attacker would need EC2-level access (RCE on the staging api, escalation to instance metadata, IMDSv2 token exfiltration) to leverage this; if they have that, they already have a lot. Staging-only blast radius is bounded by the staging environment's overall trust model.
+
+**Mitigations (Sprint 4 production cutover):**
+
+1. **Tighten with `Condition: StringLike` on record names** scoped to ACME challenge patterns:
+
+   ```json
+   "Condition": {
+     "ForAllValues:StringLike": {
+       "route53:ChangeResourceRecordSetsActions": ["UPSERT", "DELETE"],
+       "route53:ChangeResourceRecordSetsRecordTypes": ["TXT"],
+       "route53:ChangeResourceRecordSetsNormalizedRecordNames": [
+         "_acme-challenge.*.staging.eventpulse.com.bd",
+         "_acme-challenge.staging.eventpulse.com.bd"
+       ]
+     }
+   }
+   ```
+
+   Equivalent for the future prod role, scoped to `_acme-challenge.*.eventpulse.com.bd` + `_acme-challenge.eventpulse.com.bd`.
+
+2. **Separate hosted zones for staging vs prod** as part of the Sprint 4 prod cutover. Zone-level isolation is a stronger blast-radius boundary than IAM condition scoping (defense in depth).
+
+3. **Rename the SID** to reflect actual grant (`Route53ChangeResourceRecordSetsInZone`) so it stops being a documentation lie.
+
+**How to avoid in future IAM work:** When writing an inline policy, verify the SID semantics match the grant semantics. SID names that imply a narrower scope than the policy enforces are documentation rot waiting to surface during a security review.
