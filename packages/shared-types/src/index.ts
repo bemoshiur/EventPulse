@@ -7,12 +7,7 @@
  * address forms, future tenant profile forms, future event venue forms).
  */
 
-export {
-  BD_DIVISIONS,
-  BD_DIVISION_LABELS_BN,
-  BD_DIVISION_LABELS_EN,
-  type BdDivision,
-} from './bd'
+export { BD_DIVISIONS, BD_DIVISION_LABELS_BN, BD_DIVISION_LABELS_EN, type BdDivision } from './bd'
 
 export {
   ALLOWED_CONTENT_TYPES,
