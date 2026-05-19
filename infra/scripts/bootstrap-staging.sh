@@ -63,6 +63,7 @@ SM_KYC_CONFIG="${SM_PREFIX}/kyc"
 SM_OAUTH_GOOGLE="${SM_PREFIX}/oauth-google"
 SM_OAUTH_APPLE="${SM_PREFIX}/oauth-apple"
 SM_EPS="${SM_PREFIX}/eps"
+SM_POROCHOY="${SM_PREFIX}/porichoy"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "ERROR: must run as root (use sudo). It needs to write nginx + systemd."
@@ -360,6 +361,37 @@ else
   log "                        --secret-string 'file://path/to/eps-creds.json'"
 fi
 
+# Porichoy NID verification (Day 20 scaffold). JSON-shaped:
+#   eventpulse/staging/porichoy : {"api_key": "...", "base_url": "..."}
+#
+# Scaffold-only today per CHECKPOINT #1 + decisions.md "Platform-wide
+# policy — manual verification only for MVP" (2026-05-19). The
+# PorichoyScaffoldStub at apps/api/src/infra/porichoy/client.ts throws
+# `PorichoyNotImplementedError` on any call regardless of whether the
+# secret is populated. Reading the secret here is forward-compatible
+# scaffolding so the live wiring (Phase 2 trigger fires) is one focused
+# PR away once credentials arrive.
+POROCHOY_API_KEY=""
+POROCHOY_BASE_URL=""
+
+if secret_exists "$SM_POROCHOY"; then
+  log "  fetching $SM_POROCHOY from Secrets Manager"
+  POROCHOY_JSON="$(secret_get "$SM_POROCHOY")"
+  { read -r POROCHOY_API_KEY
+    read -r POROCHOY_BASE_URL
+  } < <(printf '%s' "$POROCHOY_JSON" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+for k in ("api_key", "base_url"):
+    print(d.get(k, ""))
+')
+  unset POROCHOY_JSON
+  log "  Porichoy config materialised (base_url=${POROCHOY_BASE_URL})"
+  log "  NOTE: PorichoyScaffoldStub still throws on call until live wiring lands."
+else
+  log "  INFO: $SM_POROCHOY missing — Porichoy stub will throw PorichoyNotImplementedError on any call (expected)."
+fi
+
 if secret_exists "$SM_OAUTH_APPLE"; then
   log "  fetching $SM_OAUTH_APPLE from Secrets Manager"
   OAUTH_APPLE_JSON="$(secret_get "$SM_OAUTH_APPLE")"
@@ -450,6 +482,13 @@ EPS_HASH_KEY=${EPS_HASH_KEY}
 EPS_MODE=${EPS_MODE}
 STAGING_PAYMENT_BLOCK=1
 
+# Porichoy — sourced from \$SM_POROCHOY. Both vars empty = scaffold stub
+# still throws (intentional per Day 20 scaffold-only directive). When
+# live wiring lands the apps/api factory checks readPorichoyConfig() and
+# constructs the real client.
+POROCHOY_API_KEY=${POROCHOY_API_KEY}
+POROCHOY_BASE_URL=${POROCHOY_BASE_URL}
+
 # Email — staging stays in dry-run until SES sandbox-exit lands.
 MAIL_DRY_RUN=1
 SES_FROM_ADDRESS=no-reply@eventpulse.com.bd
@@ -476,7 +515,8 @@ unset JWT_ACCESS_SECRET JWT_REFRESH_SECRET PG_PASSWORD \
       KYC_BUCKET_NAME KYC_KMS_KEY_ID KYC_KMS_KEY_ARN KYC_KMS_KEY_ALIAS \
       GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET \
       APPLE_OAUTH_CLIENT_ID APPLE_OAUTH_TEAM_ID APPLE_OAUTH_KEY_ID APPLE_OAUTH_PRIVATE_KEY \
-      EPS_MERCHANT_ID EPS_STORE_ID EPS_USERNAME EPS_PASSWORD EPS_HASH_KEY EPS_MODE
+      EPS_MERCHANT_ID EPS_STORE_ID EPS_USERNAME EPS_PASSWORD EPS_HASH_KEY EPS_MODE \
+      POROCHOY_API_KEY POROCHOY_BASE_URL
 log "  $ENV_FILE written (chmod 600 owner $EVENTPULSE_USER:$EVENTPULSE_GROUP)"
 log "  verify Secrets Manager presence: aws secretsmanager describe-secret --secret-id $SM_JWT_ACCESS"
 log "  verify Secrets Manager presence: aws secretsmanager describe-secret --secret-id $SM_JWT_REFRESH"
