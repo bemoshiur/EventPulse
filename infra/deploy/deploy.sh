@@ -109,6 +109,12 @@ export NODE_ENV
 # system. Upsize the cap proportionally if the instance type ever
 # changes (the production-target t3.large in §17.2 doesn't need this).
 export NODE_OPTIONS="--max-old-space-size=1536"
+# Build workspace deps BEFORE apps/api + apps/web. @eventpulse/shared-types
+# went from source-shipping to a real tsc build at the Day 21 verification
+# retry (decisions.md "shared-types real tsc build" 2026-05-19); apps/api
+# consumes from packages/shared-types/dist/. Without this step, apps/api
+# crashes at runtime with ERR_MODULE_NOT_FOUND for shared-types/dist/index.js.
+$PNPM --filter @eventpulse/shared-types build
 $PNPM --filter @eventpulse/web build
 $PNPM --filter @eventpulse/api build
 unset NODE_OPTIONS
@@ -124,13 +130,35 @@ else
 fi
 $PM2 save
 
-# 6) Healthcheck
-sleep 3
-HEALTH_API="$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4000/health)"
-HEALTH_WEB="$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/health || true)"
-echo "api /health=$HEALTH_API  web /health=$HEALTH_WEB"
+# 6) Healthcheck — retry loop with explicit failure capture.
+#
+# The previous shape (single curl with set -euo pipefail) had a race:
+# `pm2 reload` returns before the new process has bound to :4000, the
+# next `curl` exits with code 7 (connection refused), set -e aborts the
+# script BEFORE reaching the if-block + rollback.sh exec — so rollback
+# never fired and the script reported failure even when the new code
+# was live. This loop is the load-bearing fix.
+#
+# The `|| echo "000"` is non-negotiable. Without it, set -e re-asserts
+# its abort behaviour on curl's non-zero exit and the retry never gets
+# a chance to run.
+#
+# Total wait: 5 attempts × 3s = 15s. Plenty for `pm2 reload` to cycle
+# the api process on t3.small. If the api isn't responding 200 after
+# 15s of retries, rollback fires for real.
+HEALTH_API="000"
+for attempt in 1 2 3 4 5; do
+  sleep 3
+  HEALTH_API="$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4000/health || echo "000")"
+  echo "  healthcheck attempt $attempt: api /health=$HEALTH_API"
+  if [[ "$HEALTH_API" == "200" ]]; then
+    break
+  fi
+done
+HEALTH_WEB="$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/health || echo "000")"
+echo "final: api /health=$HEALTH_API  web /health=$HEALTH_WEB"
 if [[ "$HEALTH_API" != "200" ]]; then
-  echo "ERROR: api healthcheck failed (got $HEALTH_API)"
+  echo "ERROR: api healthcheck failed after 5 attempts (got $HEALTH_API)"
   echo "rolling back via rollback.sh"
   exec "$APP_DIR/infra/deploy/rollback.sh"
 fi
