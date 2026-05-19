@@ -1,5 +1,8 @@
 import { Hono } from 'hono'
+import { sql } from 'drizzle-orm'
 
+import { withSuperAdmin } from './db/client.js'
+import { logger } from './lib/logger.js'
 import { authRoutes } from './routes/auth.js'
 import { oauthRoutes } from './routes/oauth-routes.js'
 import { publicLegalRoutes } from './routes/public/legal.js'
@@ -17,15 +20,46 @@ import { meRoutes } from './routes/tenant/me.js'
 export function createApp() {
   const app = new Hono()
 
-  app.get('/health', (c) =>
-    c.json({
-      data: {
-        status: 'ok',
-        service: '@eventpulse/api',
-        timestamp: new Date().toISOString(),
-      },
-    }),
-  )
+  // DB-aware /health (Fix 6 of the Day 21 verification deploy sequence).
+  // Runs a `SELECT 1` to confirm Postgres is reachable. Returns 200 with
+  // db:'ok' when reachable, 503 with db:'unreachable' when not. The
+  // deploy.sh + rollback.sh healthcheck contract is "200 = healthy" —
+  // so a 503 here trips deploy.sh's auto-rollback. Previously the
+  // endpoint returned 200 unconditionally and the Nginx static /health
+  // intercept also returned 200 — the api could be entirely down and
+  // external probes still saw 200. That's the silent-failure pattern
+  // the Sprint 2 closing gotchas.md entry consolidates.
+  app.get('/health', async (c) => {
+    const startedAt = Date.now()
+    try {
+      await withSuperAdmin(async (tx) => {
+        await tx.execute(sql`SELECT 1`)
+      })
+      return c.json({
+        data: {
+          status: 'ok',
+          service: '@eventpulse/api',
+          db: 'ok',
+          checkedMs: Date.now() - startedAt,
+          timestamp: new Date().toISOString(),
+        },
+      })
+    } catch (err) {
+      logger.error({ err, durationMs: Date.now() - startedAt }, 'healthcheck DB ping failed')
+      return c.json(
+        {
+          error: {
+            code: 'DB_UNREACHABLE',
+            service: '@eventpulse/api',
+            db: 'unreachable',
+            checkedMs: Date.now() - startedAt,
+            timestamp: new Date().toISOString(),
+          },
+        },
+        503,
+      )
+    }
+  })
 
   app.route('/api/v1/auth', authRoutes)
   app.route('/api/v1/auth/oauth', oauthRoutes)
