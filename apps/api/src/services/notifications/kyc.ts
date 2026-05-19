@@ -1,50 +1,53 @@
 /**
- * KYC notification stubs — Sprint 2 Day 14 Item 9.
+ * KYC notification handlers — Sprint 2 Day 14 Item 9 stubs upgraded to
+ * real SES sends at Sprint 3 Day 22 Workstream 1 (per Decision O.2).
  *
- * These are scaffolding. Item 16 (Day 20) wires bilingual SES templates
- * + recipient lookup (tenant owner + super admin queue digest). For now,
- * each function logs the event with a `[STUB]` marker and returns a
- * deterministic `NotificationEvent` shape so the route handler can
- * assert "yes, the notification was fired" without depending on SES.
+ * Three fire sites:
+ *   - sendKycSubmittedNotice : POST /tenant/kyc/submissions on success
+ *   - sendKycApprovedNotice  : Item 13 reviewer approve transition
+ *   - sendKycRejectedNotice  : Item 13 reviewer reject transition
  *
- * Why ship stubs at Item 9 instead of waiting for Item 16:
- *   1. The state machine + audit trail are useless if the notification
- *      firing point isn't wired in the same transaction boundary as the
- *      state change. Wiring stubs now means Item 16 just replaces the
- *      stub body with the real SES call — no route changes.
- *   2. The integration test for the submit endpoint asserts that the
- *      stub fires on terminal transitions; that test stays green when
- *      Item 16 lands.
+ * Each function:
+ *   1. Resolves tenant owner email from tenants.owner_user_id → users.email
+ *      (super-admin context; the notification fire may run from a super-
+ *      admin transition where the tenant context can't see the owner row)
+ *   2. Resolves locale via selectLocale({ tenantId })
+ *   3. Renders the matching bilingual template
+ *   4. Calls sesClient.sendEmail() with the rendered payload + tags
+ *   5. Returns a deterministic NotificationEvent shape so the route
+ *      handler test can assert "yes, notification fired" without
+ *      coupling to the eventual SES message-id
  *
- * Fire site map (today):
- *   - sendKycSubmittedNotice : called by POST /tenant/kyc/submissions
- *     after the kyc_submissions row + audit row are inserted in the
- *     same transaction.
- *   - sendKycApprovedNotice  : will be called by Item 13's reviewer
- *     approve action. Stub exists so the Item 13 PR doesn't need to
- *     touch this file beyond replacing the stub body.
- *   - sendKycRejectedNotice  : same as above, on reject.
+ * Error handling: the notification fire is intentionally non-blocking
+ * for the state transition. If SES is down, the audit_log row + state
+ * transition already committed; we log the error + return an event
+ * with `delivered: false`. The route handler's fire-and-forget
+ * `.catch()` (per Item 9 wiring) absorbs any throw, but we'd rather
+ * not throw at all — return the failure shape so future retry logic
+ * has something to read.
  *
- * TODO(Item 16, Day 20):
- *   - Resolve tenant primary email via tenants.owner_user_id → users.email
- *     (under withSuperAdmin since tenant context can't read users.email
- *     for an arbitrary user, only their own — and the notification
- *     trigger may be a super-admin action where the tenant's owner
- *     should be notified).
- *   - Load bilingual template from `apps/api/src/infra/ses/templates/`
- *     (templates land in Item 16); render with subject/preheader/body
- *     in en + bn per §1.3 R12.
- *   - Call sesClient.sendEmail() with the rendered template + tag
- *     `notification_type=kyc_<event>` for engagement tracking.
- *   - Persist a `notification_log` row per §9.10 once that table lands
- *     (also Item 16).
+ * No-PII rule: the returned event carries tenantId + submissionId +
+ * delivered flag. The owner email is resolved at send time and never
+ * persisted into the event. The recipient address is never logged
+ * (per §1.3 R5 + §8.1).
  *
- * No-PII rule: returned events carry only tenantId + submissionId.
- * Recipient email is resolved at send time and never echoed back into
- * the event object (per §1.3 R5).
+ * MAIL_DRY_RUN=1 short-circuits the SES call inside the client wrapper
+ * — for local dev + CI integration tests, the function still flows
+ * through resolveOwnerEmail + selectLocale + render so the path is
+ * fully exercised; only the network call is replaced with a synthetic
+ * messageId.
  */
 
+import { eq } from 'drizzle-orm'
+
+import { withSuperAdmin } from '../../db/client.js'
+import { tenants, users } from '../../db/schema/index.js'
+import { sendEmail } from '../../infra/ses/client.js'
+import { renderKycApproved } from '../../infra/ses/templates/kyc-approved.js'
+import { renderKycRejected } from '../../infra/ses/templates/kyc-rejected.js'
+import { renderKycSubmitted } from '../../infra/ses/templates/kyc-submitted.js'
 import { logger } from '../../lib/logger.js'
+import { selectLocale } from './locale.js'
 
 export type KycNotificationType = 'kyc_submitted' | 'kyc_approved' | 'kyc_rejected'
 
@@ -56,49 +59,152 @@ export interface KycNotificationEvent {
   firedAt: string
   /** Populated only on rejection. */
   reason?: string
-  /** True while Item 16 hasn't landed; lets tests assert the scaffolding
-   *  shape rather than coupling to the eventual SES message-id. */
-  stub: true
+  /** True when sendEmail() returned a message id (or dry-run id);
+   *  false when owner resolution / SES send errored. */
+  delivered: boolean
+  /** SES message id (or dryrun-<ts>) when delivered=true; undefined otherwise. */
+  messageId?: string
+}
+
+interface OwnerLookup {
+  email: string
+  name: string
+  preferredLocale: 'en' | 'bn'
+}
+
+/** Resolve tenant owner email + name + preferred locale in a single
+ *  super-admin tx. Returns null when the tenant or its owner is missing
+ *  (impossible in practice given FK + NOT NULL constraints, but defensive). */
+async function resolveOwnerLookup(tenantId: string): Promise<OwnerLookup | null> {
+  return withSuperAdmin(async (db) => {
+    const [tenant] = await db
+      .select({
+        ownerUserId: tenants.ownerUserId,
+        preferredLocale: tenants.preferredLocale,
+      })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1)
+    if (!tenant || !tenant.ownerUserId) return null
+    const [owner] = await db
+      .select({ email: users.email, fullName: users.fullName })
+      .from(users)
+      .where(eq(users.id, tenant.ownerUserId))
+      .limit(1)
+    if (!owner) return null
+    return {
+      email: owner.email,
+      name: owner.fullName,
+      preferredLocale: tenant.preferredLocale === 'en' ? 'en' : 'bn',
+    }
+  })
+}
+
+function tenantPortalUrl(): string {
+  // Sprint 3 Day 22: subdomain provisioning lands in the next PR. Until
+  // tenant-specific subdomains are live, the dashboard CTA points at
+  // the canonical app subdomain. Provisioning PR will replace this with
+  // tenant.slug-aware lookup.
+  return process.env['TENANT_APP_BASE_URL'] ?? 'https://app.staging.eventpulse.com.bd/dashboard'
+}
+
+function kycResubmitUrl(): string {
+  return process.env['TENANT_KYC_URL'] ?? 'https://app.staging.eventpulse.com.bd/kyc'
 }
 
 function now(): string {
   return new Date().toISOString()
 }
 
+async function sendOrFallback(
+  type: KycNotificationType,
+  tenantId: string,
+  submissionId: string,
+  rendered: { templateId: string; subject: string; text: string; html: string },
+  toEmail: string,
+  reason?: string,
+): Promise<KycNotificationEvent> {
+  try {
+    const result = await sendEmail({
+      to: toEmail,
+      subject: rendered.subject,
+      text: rendered.text,
+      html: rendered.html,
+      tags: {
+        notification_type: type,
+        template_id: rendered.templateId,
+      },
+    })
+    return {
+      type,
+      tenantId,
+      submissionId,
+      firedAt: now(),
+      reason,
+      delivered: true,
+      messageId: result.messageId,
+    }
+  } catch (err) {
+    logger.error(
+      { err, notification: type, tenantId, submissionId, templateId: rendered.templateId },
+      'kyc notification send failed; transition + audit already committed',
+    )
+    return { type, tenantId, submissionId, firedAt: now(), reason, delivered: false }
+  }
+}
+
 export async function sendKycSubmittedNotice(input: {
   tenantId: string
   submissionId: string
 }): Promise<KycNotificationEvent> {
-  const event: KycNotificationEvent = {
-    type: 'kyc_submitted',
-    tenantId: input.tenantId,
-    submissionId: input.submissionId,
-    firedAt: now(),
-    stub: true,
+  const owner = await resolveOwnerLookup(input.tenantId)
+  if (!owner) {
+    logger.warn(
+      { tenantId: input.tenantId },
+      'sendKycSubmittedNotice: owner lookup returned null; skipping send',
+    )
+    return {
+      type: 'kyc_submitted',
+      tenantId: input.tenantId,
+      submissionId: input.submissionId,
+      firedAt: now(),
+      delivered: false,
+    }
   }
-  logger.info(
-    { notification: event },
-    '[STUB] KYC submitted notification fired (Item 16 wires SES template)',
-  )
-  return event
+  const locale = await selectLocale({ tenantId: input.tenantId })
+  const rendered = renderKycSubmitted({
+    tenantName: owner.name,
+    submittedAt: new Date(),
+    locale,
+  })
+  return sendOrFallback('kyc_submitted', input.tenantId, input.submissionId, rendered, owner.email)
 }
 
 export async function sendKycApprovedNotice(input: {
   tenantId: string
   submissionId: string
 }): Promise<KycNotificationEvent> {
-  const event: KycNotificationEvent = {
-    type: 'kyc_approved',
-    tenantId: input.tenantId,
-    submissionId: input.submissionId,
-    firedAt: now(),
-    stub: true,
+  const owner = await resolveOwnerLookup(input.tenantId)
+  if (!owner) {
+    logger.warn(
+      { tenantId: input.tenantId },
+      'sendKycApprovedNotice: owner lookup returned null; skipping send',
+    )
+    return {
+      type: 'kyc_approved',
+      tenantId: input.tenantId,
+      submissionId: input.submissionId,
+      firedAt: now(),
+      delivered: false,
+    }
   }
-  logger.info(
-    { notification: event },
-    '[STUB] KYC approved notification fired (Item 16 wires SES template)',
-  )
-  return event
+  const locale = await selectLocale({ tenantId: input.tenantId })
+  const rendered = renderKycApproved({
+    tenantName: owner.name,
+    tenantPortalUrl: tenantPortalUrl(),
+    locale,
+  })
+  return sendOrFallback('kyc_approved', input.tenantId, input.submissionId, rendered, owner.email)
 }
 
 export async function sendKycRejectedNotice(input: {
@@ -106,17 +212,34 @@ export async function sendKycRejectedNotice(input: {
   submissionId: string
   reason: string
 }): Promise<KycNotificationEvent> {
-  const event: KycNotificationEvent = {
-    type: 'kyc_rejected',
-    tenantId: input.tenantId,
-    submissionId: input.submissionId,
-    firedAt: now(),
-    reason: input.reason,
-    stub: true,
+  const owner = await resolveOwnerLookup(input.tenantId)
+  if (!owner) {
+    logger.warn(
+      { tenantId: input.tenantId },
+      'sendKycRejectedNotice: owner lookup returned null; skipping send',
+    )
+    return {
+      type: 'kyc_rejected',
+      tenantId: input.tenantId,
+      submissionId: input.submissionId,
+      firedAt: now(),
+      reason: input.reason,
+      delivered: false,
+    }
   }
-  logger.info(
-    { notification: event },
-    '[STUB] KYC rejected notification fired (Item 16 wires SES template)',
+  const locale = await selectLocale({ tenantId: input.tenantId })
+  const rendered = renderKycRejected({
+    tenantName: owner.name,
+    reason: input.reason,
+    resubmitUrl: kycResubmitUrl(),
+    locale,
+  })
+  return sendOrFallback(
+    'kyc_rejected',
+    input.tenantId,
+    input.submissionId,
+    rendered,
+    owner.email,
+    input.reason,
   )
-  return event
 }
