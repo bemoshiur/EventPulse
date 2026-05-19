@@ -143,6 +143,12 @@ jobs:
             ${{ runner.os }}-turbo-
 
       - run: pnpm install --frozen-lockfile
+      # Workspace dep — apps/api consumes @eventpulse/shared-types from
+      # its `dist/`. Without this step, the next tsc step fails because
+      # dist/index.d.ts doesn't exist. Was added at Day 21 Fix 1 retry
+      # (the previous source-shipping shape was the original mistake;
+      # see decisions.md "shared-types real tsc build" 2026-05-19).
+      - run: pnpm --filter @eventpulse/shared-types build
       - run: pnpm --filter @eventpulse/api build
 
   integration-tests:
@@ -189,6 +195,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Build workspace deps (shared-types)
+        run: pnpm --filter @eventpulse/shared-types build
+
       - name: Apply migrations
         run: pnpm --filter @eventpulse/api db:migrate
 
@@ -217,6 +226,9 @@ jobs:
 
       - name: Install Playwright browsers (Chromium only)
         run: pnpm --filter @eventpulse/web exec playwright install --with-deps chromium
+
+      - name: Build workspace deps (shared-types)
+        run: pnpm --filter @eventpulse/shared-types build
 
       - run: pnpm --filter @eventpulse/web build
 
