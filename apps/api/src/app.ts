@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 
 import { authRoutes } from './routes/auth.js'
 import { oauthRoutes } from './routes/oauth-routes.js'
+import { publicLegalRoutes } from './routes/public/legal.js'
 import { adminKycRoutes } from './routes/super-admin/kyc.js'
 import { adminLegalRoutes } from './routes/super-admin/legal.js'
 import { accountTypeRoutes } from './routes/tenant/account-type.js'
@@ -28,6 +29,10 @@ export function createApp() {
 
   app.route('/api/v1/auth', authRoutes)
   app.route('/api/v1/auth/oauth', oauthRoutes)
+  // Public Trust Center read endpoints. Unauthenticated; consumed by
+  // apps/web Server Components for the /trust + /privacy/etc pages
+  // (Decision K, 2026-05-19). Edge-cacheable.
+  app.route('/api/v1/public/legal', publicLegalRoutes)
   // Tenant routes — order doesn't matter (Hono routes are matched by
   // exact path prefix), but the `me` + `account-type` mounts deliberately
   // sit alongside `kyc` because they share the /api/v1/tenant/* namespace.
