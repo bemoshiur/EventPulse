@@ -44,7 +44,8 @@
 ### Sprint 3 pre-flight (gating items)
 
 - **§29 #9 (AIT withholding) + #10 (VAT/Mushak) tax opinions** — Moshiur to confirm legal-consult email status before Day 22 (fee calculator math depends on §14 NBR withholding question).
-- **EPS Secrets Manager population** — Day 20 user-action pending (`aws secretsmanager create-secret --name eventpulse/staging/eps`); Sprint 3 Day 21 first session checks for the secret + runs the one-time write if still pending.
+- **EPS Secrets Manager population** — ✅ DONE Day 20 closeout retry. `eventpulse/staging/eps` written via the `mktemp` + `file://` pattern. Tags: `env=staging`, `eps-mode=production`, `sensitivity=payments`. Next deploy materialises into `.env.staging` via bootstrap-staging.sh.
+- **OAuth Secrets Manager population** — ✅ Google DONE (`eventpulse/staging/oauth-google`); Apple DROPPED from MVP per decisions.md 2026-05-19.
 - **OAuth credentials** — Moshiur said "OAuth follows" at Day 20 but values never landed; gates manual happy-path verification of OAuth sign-in. STOP-ASK condition for Sprint 3: if credentials still missing by Day 23, document in handoff as pending Sprint 4.
 - **EPS library decision** — LOCKED at Day 20 (in-house wrapper, no SDK).
 - **Counsel engagement for Trust Center v1.0 drafts** — material to consent gating; tracked as cross-sprint carry.
