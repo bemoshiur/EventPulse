@@ -2359,6 +2359,8 @@ Organiser receives:
 
 **Important note on Mode D:** when EPS fee is absorbed but platform fee is passed through, the EPS fee is charged on the **larger** captured amount (ticket + platform fee). This is documented behaviour, not a bug. The settlement engine reflects this precisely.
 
+**Calculator implementation note (Sprint 3 Day 21):** The fee calculator uses a single consistent rule across all 4 modes — `eps_fee = floor((subtotal + platform_fee_if_passthrough) × eps_bps / 10000)`. This produces 25.00 for Mode C (the "depending on which side" alternative), not 25.06 (the primary line). The Mode C primary line's narrative is arithmetically inconsistent with EPS's stated 2.5% rate (a capture of 1,025.06 at 2.5% yields 25.63, not 25.06). The calculator's choice is conservative and consistent; the spec's primary numbers were authored as worked examples without rigorous arithmetic and will be empirically verified in Day 24-25 EPS sandbox testing. If sandbox data shows EPS computes their fee on a different base than the calculator models, both the calculator and this §14.2 footnote will be amended at that time. See `.claude/memory/decisions.md` "Decision N — Fee calculator EPS-base rule locked + mandatory Day 24-25 EPS sandbox truth gate" (2026-05-19) for full rationale + the truth-gate specification.
+
 ### 14.3 The Money Calculation Function — Single Source of Truth
 
 All money math goes through one pure function in `apps/api/src/domain/payments/fee-calculator.ts`. **Never duplicate this math anywhere else.** If you need a number, call the function.
