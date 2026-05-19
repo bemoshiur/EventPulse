@@ -1,9 +1,13 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-05-19 (Sprint 2 closed; `v0.2.0-sprint-2` tagged)
-**Driver:** Claude Code (Opus 4.7) — sprint boundary; next session opens Sprint 3 Day 21
+**Last update:** 2026-05-19 (Sprint 3 Day 21 — fee calculator shipped + verification-deploy clean)
+**Driver:** Claude Code (Opus 4.7) — Day 21 in flight; next session continues Sprint 3 Day 22
 
 ## State right now
+
+**Sprint 3 Day 21 fee calculator SHIPPED.** `apps/api/src/domain/payments/fee-calculator.ts` (PR #119, 2026-05-19, 33 unit tests). Math review checkpoint passed: 14/16 cells match §14.2 verbatim; Mode C `buyer_total`+`eps_fee` match §14.2's parenthetical alternative ("or 25.00 depending on which side") not the primary line — see Decision N (decisions.md 2026-05-19) for the EPS-base rule + the mandatory Day 24-25 EPS sandbox truth gate that empirically validates the rule against real EPS transactions. §14.2 amended in a separate playbook PR with the calculator implementation note + Decision N reference.
+
+**Sprint 2 silent-partial-failure pattern RESOLVED.** PRs #114 + #115 + #116 + #117 + #118 + e2e Postgres add-on. 16+ consecutive deploys had failed silently for 5 working days because every observability layer above the actual code path returned 'ok' regardless of code-path state. All 5 intersecting gaps now closed: (1) deploy.sh retry-loop + explicit rollback exec; (2) Nginx static `/health` removed, `/nginx-health` is the new Nginx-direct liveness probe; (3) Server Components throw `LegalApiUnavailableError` on fetch failure with structured JSON logging; (4) env-var bootstrap re-run on EC2 with all 28 vars; (5) shared-types switched to real `tsc` build emitting `dist/`. Verification deploy clean: 5 vhost probes + 5 functional probes all return 200; api `/health` returns DB-aware JSON `{data:{status:'ok',db:'ok',checkedMs,…}}`; Trust Center serves real content (18 docs landed). Consolidated `gotchas.md` "Sprint 2 silent partial-failure pattern" documents all 5 gaps + 6 avoidance rules.
 
 **Sprint 2 is closed. The platform now has:**
 
@@ -29,18 +33,29 @@ b502d74           docs: Day 20 EPS library investigation note (#105)
 
 ## Next concrete step
 
-**Sprint 3 Day 21 kick-off session.** First-session work:
+**Sprint 3 Day 22 — Event CRUD + `tenant_fee_config` exposure.** Day 21 main work (fee calculator) shipped. Two Day 21 carry-forwards still pending:
 
-1. **Read CLAUDE.md §11 (EPS), §14 (Settlement engine + fee modes), §6 (API patterns), §17 (Infrastructure) end-to-end** before scoping any items. Day 11-18 of Sprint 2 accumulated 9 §-section amendments because front-load reads were skipped; Sprint 3 doesn't repeat that mistake — see the "What single change would have saved the most time" retro answer.
-2. **Confirm Sprint 3 pre-flight checklist** (see `progress.md` Sprint 3 pre-flight section):
-   - §29 #9 (AIT withholding) + #10 (VAT/Mushak) — tax opinions for fee calculator math (still pending).
-   - `eventpulse/staging/eps` Secrets Manager entry — ✅ DONE Day 20 closeout retry.
-   - `eventpulse/staging/oauth-google` Secrets Manager entry — ✅ DONE Day 20 closeout.
-   - Apple OAuth — DROPPED from MVP per decisions.md 2026-05-19.
-   - EPS library decision LOCKED (in-house wrapper) — no re-litigation.
-3. **AM PR — bilingual SES templates** (Day 20 carry-forward). 5 templates × 2 locales; SES create-template idempotent; notification stubs wired to live `SendTemplatedEmail`.
-4. **First PR — tenant subdomain provisioning** (Day 20 carry-forward, load-bearing for Item 13 approve flow). SSM SendCommand against EC2 → Nginx vhost template → certbot wildcard → audit trail. **Staging integration test REQUIRED before merge** — this was the Day 20 STOP-ASK.
-5. **Main work — fee calculator** (§14.3). Pure function. 12+ unit tests covering every fee-mode combination. Single source of truth for all subsequent money math.
+1. **AM PR — bilingual SES templates** (Day 20 carry, queued at Day 21 AM, slipped). 5 templates × 2 locales; SES create-template idempotent; notification stubs wired to live `SendTemplatedEmail`.
+2. **Day 21 first PR — tenant subdomain provisioning** (Day 20 carry, queued at Day 21 first PR, slipped). SSM SendCommand → Nginx vhost template → certbot wildcard → audit trail. **Staging integration test REQUIRED before merge** — this was the Day 20 STOP-ASK.
+
+Day 22 main work (Event CRUD + `tenant_fee_config` super admin exposure + status state machine) lands alongside these two carries. Pick up whichever opens cleanly first.
+
+**Mandatory non-negotiable Day 24-25 EPS sandbox truth gate (per Decision N 2026-05-19).** Before any Day 26 sandbox-order work begins:
+
+- Run 4 real EPS sandbox transactions covering all §14.2 modes (subtotal 1,000 BDT, platform 0.25%, EPS 2.5%).
+- Capture EPS's actual fee on each.
+- Compare to calculator predictions: Mode A=2506, B=2500, C=2500, D=2506.
+- Any delta in any cell is a calculator bug — adjust the calculator (NOT the sandbox observations), re-run §24.4 fee-mode tests, amend §14.2 to match.
+- Mode C is the most likely-to-shift cell (Decision N picked calc 2500 over §14.2 primary 2506; sandbox is the empirical arbiter).
+- Day 26 first-sandbox-order-verification cannot pass without this gate clearing.
+
+**Sprint 3 pre-flight checklist (unchanged):**
+
+- §29 #9 (AIT withholding) + #10 (VAT/Mushak) — tax opinions for fee calculator math (still pending; calculator ships PRE-WITHHOLDING per file header).
+- `eventpulse/staging/eps` Secrets Manager entry — ✅ DONE Day 20 closeout retry.
+- `eventpulse/staging/oauth-google` Secrets Manager entry — ✅ DONE Day 20 closeout.
+- Apple OAuth — DROPPED from MVP per decisions.md 2026-05-19.
+- EPS library decision LOCKED (in-house wrapper) — no re-litigation.
 
 **Sprint 3 sprint plan** in full at `progress.md` "In flight" section; mirrors §26.1.
 
@@ -51,6 +66,7 @@ b502d74           docs: Day 20 EPS library investigation note (#105)
 - ~~`eventpulse/staging/eps` Secrets Manager entry still missing by Day 26 → halt EPS in-house wrapper integration test, surface.~~ **RESOLVED Day 20 closeout** — secret populated; Sprint 3 EPS work unblocked.
 - Subdomain provisioning staging integration test fails in ways that suggest the SSM + Nginx + certbot chain is fragile → halt subdomain work, build something else, defer to Sprint 4.
 - EPS wrapper finds `STAGING_PAYMENT_BLOCK` doesn't reliably guard against priced orders → halt all EPS work, file critical bug, surface immediately.
+- **Day 24-25 EPS sandbox truth gate fails (any cell delta)** → calculator gets adjusted (not sandbox), §14.2 gets re-amended, fee-mode tests re-run. Day 26 sandbox-order work gates on this clearing. **The calculator is the variable to change, not the sandbox observations** — Decision N 2026-05-19.
 - Counsel returns Trust Center v1.0 drafts mid-sprint → in-scope addition only if drafts arrive before Day 25; later than that, defer to Sprint 4 + consent_records work alongside.
 
 ## Sprint 2 deliverable summary (locked in release notes — see docs/releases/v0.2.0-sprint-2.md)
