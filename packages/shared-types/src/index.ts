@@ -12,14 +12,14 @@ export {
   BD_DIVISION_LABELS_BN,
   BD_DIVISION_LABELS_EN,
   type BdDivision,
-} from './bd.js'
+} from './bd'
 
 export {
   ALLOWED_CONTENT_TYPES,
   KYC_DOCUMENT_TYPES,
   type AllowedContentType,
   type KycDocumentType,
-} from './kyc.js'
+} from './kyc'
 
 // KYC zod schemas — Sprint 2 Day 16 PR 3. Shared between server
 // route validation (apps/api/src/routes/tenant/kyc-drafts.ts) and
@@ -57,7 +57,7 @@ export {
   type OrganisationTierASubmission,
   type OrganisationTierAWizardStep,
   type WizardVariant,
-} from './kyc-schemas.js'
+} from './kyc-schemas'
 
 // KYC reviewer-side schemas — Sprint 2 Day 18 Item 13. Shared between
 // server (apps/api enforces approve-completeness + decision validation)
@@ -83,4 +83,4 @@ export {
   type ReviewerChecklistTogglePatch,
   type ReviewerDecision,
   type ReviewerNotesPatch,
-} from './kyc-reviewer-schemas.js'
+} from './kyc-reviewer-schemas'
