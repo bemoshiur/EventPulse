@@ -43,14 +43,32 @@ HUSKY=0 NODE_ENV=development \
 NODE_ENV=production
 export NODE_ENV
 export NODE_OPTIONS="--max-old-space-size=1536"
+# Build workspace deps first — see deploy.sh comment.
+/usr/bin/pnpm --filter @eventpulse/shared-types build
 /usr/bin/pnpm --filter @eventpulse/web build
 /usr/bin/pnpm --filter @eventpulse/api build
 unset NODE_OPTIONS
 
 $PM2 reload "$APP_DIR/pm2/ecosystem.config.cjs" --update-env
 
-sleep 3
-HEALTH_API="$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4000/health)"
-echo "post-rollback api /health=$HEALTH_API"
+# Same retry-loop healthcheck as deploy.sh — see comment there for the
+# set-e + race rationale. If the rollback itself can't get a healthy
+# response, the script exits non-zero so the operator can see it.
+HEALTH_API="000"
+for attempt in 1 2 3 4 5; do
+  sleep 3
+  HEALTH_API="$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4000/health || echo "000")"
+  echo "  post-rollback healthcheck attempt $attempt: api /health=$HEALTH_API"
+  if [[ "$HEALTH_API" == "200" ]]; then
+    break
+  fi
+done
+echo "post-rollback final: api /health=$HEALTH_API"
+
+if [[ "$HEALTH_API" != "200" ]]; then
+  echo "ERROR: rollback completed but api still not healthy (got $HEALTH_API)"
+  echo "manual intervention required — operator should review pm2 logs api"
+  exit 1
+fi
 
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] rollback ok at=$TARGET"
