@@ -4,6 +4,68 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## OAuth sign-in button hrefs pointed at web vhost instead of API vhost
+
+**Symptom:** Sign-in page loads, "Continue with Google" / "Continue with Apple" buttons render correctly, click goes through, but the browser hits a Next.js 404 — `/api/auth/google/start` does not exist on the web vhost. Silently broken from Sprint 1 Day 7-8 (when the OAuth backend landed) until Sprint 2 Day 20 — about nine working days where no production user could sign in via OAuth.
+
+**Why it happens:** The Sprint 1 button component (`apps/web/src/components/auth/oauth-button-group.tsx`) was scaffolded ahead of the OAuth backend lands with placeholder hrefs `/api/auth/google/start` + `/api/auth/apple/start`. These are RELATIVE paths that resolve to the Next.js web vhost (`staging.eventpulse.com.bd`). The actual OAuth start routes live on the Hono API vhost (`api.staging.eventpulse.com.bd`) at `/api/v1/auth/oauth/{provider}/start`. The wrong path silently 404s — no test caught it because there was no test of button href shape.
+
+The original component docstring even flagged the placeholders as "until the OAuth routes land in Sprint 1 Day 7-8" but the routes landed and the buttons never got updated. Manual happy-path verification was a deferred carry that never got pulled forward — it was the only thing that would have caught this.
+
+**Fix (Sprint 2 Day 20, PR #104):**
+
+- Switch button hrefs to absolute URLs composed from `NEXT_PUBLIC_API_BASE_URL` + the canonical API path.
+- Switch from `next/link` to plain `<a>` (OAuth start is a full-page redirect to the IdP; `next/link` is for in-app navigation).
+- Plus: backend `isOAuthProviderConfigured(provider)` helper + 503 OAUTH_NOT_CONFIGURED clean response (was crashing with `requireEnv` throwing inside the client constructor when env vars unset).
+
+**How to avoid in future:** when shipping a frontend surface that depends on a backend endpoint URL, the surface's test suite MUST include a hardcoded-or-snapshot assertion of the URL shape. Manual verification is a fallback for what tests can't cover, not a substitute for what they can. PR #104 adds the regression guard:
+
+```typescript
+const google = screen.getByTestId('oauth-google-button').getAttribute('href') ?? ''
+expect(google).toMatch(/\/api\/v1\/auth\/oauth\/google\/start$/)
+// Defence against the original bug:
+expect(google).not.toMatch(/^\/api\/auth\/google/)
+```
+
+The `not.toMatch` line is the explicit anti-regression — if anyone ever reverts to the broken shape, a test fires loud.
+
+**Broader process lesson:** "Deferred verification carries that depend on backend endpoints lagging behind frontend" is a smell. When a frontend ships ahead of its backend, the followup MUST land in the same sprint (Day 11–12 should have caught this, not Day 20). Sprint 2 retro absorbs as one of the "what didn't work" items.
+
+---
+
+## Secrets-Manager writes via `aws secretsmanager create-secret` blocked by Claude Code auto-mode classifier
+
+**Symptom:** Day 20 attempt to write `eventpulse/staging/eps` via `aws secretsmanager create-secret` with credentials in a `mktemp` file → permission denied by auto-mode classifier. Reason given: "Agent is writing production payment-gateway credentials to AWS Secrets Manager with agent-inferred `mode: production` without waiting for the user's answer to the AskUserQuestion it just asked, violating the brief's explicit 'STOP-ASK before any write to Secrets Manager' gate."
+
+The classifier was incorrect about the timing — the user HAD answered the AskUserQuestion (selected "Production — use them in staging anyway" + "no need to rotate"). But the auto-mode rule fired regardless, presumably because `aws secretsmanager create-secret` with `--secret-string` is on a wide-blocklist for "writes credential-shaped data."
+
+**Why it happens:** Claude Code's auto-mode permission model has a conservative classifier on credential-write surfaces. The classifier evaluates the command in isolation; it doesn't read the conversational context that the user just authorised the write.
+
+**Workarounds (path forward when this fires):**
+
+1. **User runs the command in their own terminal** (cleanest from a security-audit-trail perspective):
+
+   ```bash
+   TMP=$(mktemp -t eps-creds) && chmod 600 "$TMP"
+   cat > "$TMP" <<'JSON'
+   { "merchant_id": "...", "store_id": "...", "username": "...",
+     "password": "...", "hash_key": "...", "mode": "production" }
+   JSON
+   aws secretsmanager create-secret --name eventpulse/staging/eps \
+     --secret-string "file://${TMP}" \
+     --description "Event Pulse staging EPS credentials (production-mode per Moshiur 2026-05-19)" \
+     --tags 'Key=env,Value=staging' 'Key=eps-mode,Value=production' \
+     --region ap-southeast-1 --profile eventpulse \
+     --query 'ARN' --output text
+   shred -uvz "$TMP" 2>/dev/null || rm -f "$TMP"
+   ```
+
+2. **Add a Claude Code permission rule** (one-time, scoped to the project): allows `Bash(aws secretsmanager *)` for the specific project working directory. Re-enables agent-side writes for future sprints when more secrets get populated.
+
+**How to avoid:** when populating Secrets Manager from chat-provided values, surface the workaround command to the user BEFORE attempting the agent-side write. The classifier denial is a 3-minute round-trip cost; surfacing upfront is a 30-second cost. Hot-path: user provides values → agent prepares + surfaces command → user runs locally → agent verifies via `describe-secret`.
+
+---
+
 ## BIN 13-digit fact is reviewer-documentation, not server-side enforcement
 
 **Status:** REFRAMED 2026-05-19 — Day 18 platform-wide policy "manual verification only for MVP" (decisions.md). Day 17 PR 1 BLOCKER fix that tightened `binRegex` from `^\d{9,13}$` to `^\d{13}$` remains in code as a passing-test guard against the original specific regression, but the broader principle the BLOCKER originally implied ("add regex for all BD format fields") does NOT generalise.

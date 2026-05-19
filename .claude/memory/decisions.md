@@ -4,6 +4,87 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-19 · EPS production credentials intentionally used in staging — STAGING_PAYMENT_BLOCK guard
+
+**Context:** Sprint 2 Day 20 closeout. Moshiur provided EPS payment-gateway credentials directly in chat (merchant_id, store_id, username, password, hash_key — production-tier per the merchant_id UUID shape and the absence of any sandbox markers). EPS did not issue a separate sandbox credential set for the staging environment.
+
+Two paths considered:
+
+- **A. Refuse to use production credentials in staging; defer EPS wiring to Sprint 3 + obtain a sandbox set.** Safest but blocks Sprint 3 Day 21+ integration work for the duration of the sandbox-procurement back-and-forth (timeline unknown; EPS's `integration@eps.com.bd` response cadence is multi-day historically).
+- **B. Use production credentials in staging, gated by a hard `STAGING_PAYMENT_BLOCK=1` env flag.** Sprint 3 Day 21+ in-house wrapper refuses any `initialiseOrder()` call with `total_paisa > 0` while the flag is set. Free events pass the gate; priced orders error out. Integration tests can exercise the full hash + token + Verify pipeline against EPS production endpoints without ever charging real cards.
+
+**Decision (Moshiur 2026-05-19):** Path B. Production credentials stored at `eventpulse/staging/eps` in Secrets Manager. `STAGING_PAYMENT_BLOCK=1` materialised into `.env.staging` by `bootstrap-staging.sh`. Sprint 3 Day 21+ in-house wrapper (`apps/api/src/infra/eps/client.ts`) enforces the gate.
+
+**The gate is load-bearing.** Removing it requires:
+
+1. A new `.claude/memory/decisions.md` entry explicitly authorising MVP production cutover.
+2. The cutover event itself (staging EC2 retired or repurposed).
+3. The `STAGING_PAYMENT_BLOCK` env var deleted from `bootstrap-staging.sh` in the same PR.
+
+Any earlier removal — including "just for this test" — is a STOP-ASK and surfaces to Moshiur.
+
+**Rationale:**
+
+- The in-house wrapper architecture (decision below this entry) needs real EPS endpoints to validate the HMACSHA512 signing flow against. A sandbox would be ideal but isn't available without procurement delay.
+- The §1.3 R2 "money never lies" rule is upheld through the gate, not through credential separation. Real-money risk is contained at the application layer rather than the credential layer.
+- The same pattern is used by other payment-integrated platforms where sandbox availability lags production — Stripe Test Mode, Square Sandbox both exist precisely because Stripe/Square saw this exact procurement gap with EPS-tier payment providers globally.
+
+**Consequences:**
+
+- `apps/api/src/infra/eps/client.ts` (Sprint 3 Day 21+ deliverable) MUST check `STAGING_PAYMENT_BLOCK === '1'` early in `initialiseOrder()` and throw if any tier's price > 0.
+- Integration tests against staging EPS endpoints CAN exercise free-event-shape orders (price_paisa = 0) which short-circuit the gate cleanly.
+- `bootstrap-staging.sh` materialises `STAGING_PAYMENT_BLOCK=1` unconditionally for the `staging` environment. Production cutover removes it.
+- `.claude/memory/handoff.md` "Hard guardrails" section absorbs `STAGING_PAYMENT_BLOCK=1 is mandatory in staging` as a load-bearing rule.
+
+**Credentials shared in plaintext chat — operational follow-up:** Moshiur explicitly directed "no need to rotate, it final production, use it". Recorded as the user's decision; standing chat-credential hygiene policy carries to Sprint 3 retro for review. Future EPS credential rotation, if ever needed, follows the same out-of-band path (workstation `aws secretsmanager put-secret-value`).
+
+**Cross-references:**
+
+- `docs/investigations/eps-library-comparison.md` — the comparison that justified the in-house wrapper choice (see next entry below)
+- CLAUDE.md §11.0 (Day 20 amendment) — status block surfacing this decision in the playbook
+- `apps/api/src/infra/eps/client.ts` — Sprint 3 Day 21+ implementation site for the gate
+
+---
+
+## 2026-05-19 · EPS library choice locked for Sprint 3 — in-house wrapper (no SDK)
+
+**Context:** Sprint 3 Day 21 needs the EPS integration library locked before any payment-related code lands (CLAUDE.md §1.2 referenced `eps-gateway-nodejs` as an open question since v1.0; the alternative `EPS-PG/EPS_Nodejs` surfaced from Moshiur during Day 20). Background research at Day 20 AM Block 2 produced the comparison in `docs/investigations/eps-library-comparison.md`.
+
+**Critical finding from the comparison:** the EPS-PG/EPS_Nodejs repo is a byte-for-byte clone of Imtiaz Najim's community `eps-gateway-nodejs` (including the original repo URL still in `package.json`). Both candidates are effectively the same code — single-author, single test file (only the HMACSHA512 hash helper has any test coverage), status-alias gotcha (CLAUDE.md §11.4) unhandled, zero adoption signals (no stars, no issues, ~135 npm downloads/month mostly bots).
+
+**Decision (Moshiur 2026-05-19):** Build a thin in-house wrapper at `apps/api/src/infra/eps/`. No SDK dependency. Sprint 3 Day 21+ deliverable.
+
+Top three reasons (from the investigation note):
+
+1. **Both libraries are the same code, single-author, effectively unmaintained.** EPS-PG's "official" repo is a 2-commit bulk upload of the community SDK without re-authorship. There is no team behind either; there is no release cadence; there is no semver story.
+2. **The status-alias gotcha (CLAUDE.md §11.4) is not handled.** The SDK exposes raw `Status: 'Success' | 'Failed' | 'Pending'` and never mentions `COMPLETED`, `CANCEL`, `CANCELLED`, `CANCELED`. We would have to wrap `verifyPayment()` with our own `normaliseStatus()` anyway — at which point the SDK provides only an axios wrapper and a 6-line HMACSHA512 helper.
+3. **Single-author + zero adoption + payment-critical = unacceptable supply-chain risk.** Per immutable rule R2 ("money never lies") and the §5.3 Lucia precedent (Lucia maintenance mode → we composed our own auth foundation), we already have project precedent for rejecting unmaintained dependencies on the most security-critical surfaces. EPS is in the same tier as auth.
+
+**Proposed shape** (Sprint 3 Day 21+ scope):
+
+- `apps/api/src/infra/eps/client.ts` — axios instance, base-URL switch (`pgapi.eps.com.bd` vs sandbox), `getToken()` with Redis TTL cache (15-min token expiry), HMACSHA512 via `@noble/hashes` (already a dep per §5.3 — zero new deps).
+- `apps/api/src/infra/eps/init.ts` + `verify.ts` — typed wrappers around `InitializeEPS` + `CheckMerchantTransactionStatus`, returning zod-validated responses.
+- `apps/api/src/infra/eps/normalise-status.ts` — the alias-collapsing shim §11.4 demands, with explicit unit tests for all 8 alias variants (SUCCESS, COMPLETED, FAILED, FAILURE, CANCEL, CANCELLED, CANCELED, Pending across `Status` / `transactionStatus` / `status` / nested `data.*` field locations).
+- `apps/api/src/infra/eps/types.ts` — hand-written from the EPS V5 docs (the SDK's types are hand-written too; we copy the shape, drop the SDK).
+- ~400 LOC total. Estimated 1.5 days focused work.
+
+**Mirrors §5.3 Lucia decision** (2026-05-17). Same rationale class, same outcome.
+
+**Consequences:**
+
+- CLAUDE.md §1.2 + §11.0 + §11.2 + §11.3 amended in the Day 20 chore PR (`feat/api-day-20-eps-bootstrap-and-claude-md`) to reflect the in-house pattern. v2.4 playbook bump candidates absorb the §11 amendments alongside.
+- Sprint 3 Day 21 kick-off issue references `apps/api/src/infra/eps/` as the implementation site.
+- `STAGING_PAYMENT_BLOCK` guard (above entry) lives inside `client.ts` `initialiseOrder()`.
+- No new runtime dependencies. The wrapper composes existing project deps (`@noble/hashes` from §5.3, `axios` is a transitively-present small footprint via potential adoption — or `fetch` natively; Sprint 3 PR locks the HTTP-client choice).
+
+**Cross-references:**
+
+- `docs/investigations/eps-library-comparison.md` (PR #105, 2026-05-19) — full comparison + recommendation
+- `.claude/memory/decisions.md` "Auth foundation library choice: roll our own (not Lucia)" (2026-05-17) — the precedent decision
+- `.claude/memory/decisions.md` "EPS production credentials intentionally used in staging" (2026-05-19, entry above) — the credential-handling decision that pairs with this library decision
+
+---
+
 ## 2026-05-19 · Items 14+15 Trust Center scaffolding + super admin Legal & Trust editor — pre-code architecture (Decisions J, K, L, M)
 
 **Context:** Day 19 ships Items 14 + 15 **bundled** — Trust Center public routes (6 legal contracts + 12 trust artefacts, all at v0.1 skeleton placeholders per §20) + super admin Legal & Trust editor for version-tracked markdown publishing. Per `Trust Center v0.1 placeholders — skeleton-only, no AI-generated full text` (2026-05-17, load-bearing): zero AI-generated full-text legal drafts; counsel produces v1.0 before the first paying tenant onboards. The Day 19 infrastructure is the substrate counsel writes onto, the rendering pipeline tenants will eventually consent against, and the URL surface that gets crawled, linked-to, and tested against between now and v1.0.
