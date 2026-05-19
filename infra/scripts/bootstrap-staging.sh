@@ -60,6 +60,8 @@ SM_PREFIX="eventpulse/staging"
 SM_JWT_ACCESS="${SM_PREFIX}/jwt-access-secret"
 SM_JWT_REFRESH="${SM_PREFIX}/jwt-refresh-secret"
 SM_KYC_CONFIG="${SM_PREFIX}/kyc"
+SM_OAUTH_GOOGLE="${SM_PREFIX}/oauth-google"
+SM_OAUTH_APPLE="${SM_PREFIX}/oauth-apple"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "ERROR: must run as root (use sudo). It needs to write nginx + systemd."
@@ -275,6 +277,74 @@ else
   log "        Run infra/scripts/setup-kyc-bucket.sh from a workstation with admin AWS perms first."
 fi
 
+# OAuth secrets (Day 20). Two JSON-shaped secrets:
+#   eventpulse/staging/oauth-google : {"client_id": "...", "client_secret": "..."}
+#   eventpulse/staging/oauth-apple  : {"client_id": "...", "team_id": "...",
+#                                       "key_id": "...", "private_key": "..."}
+#
+# Created by a developer with admin AWS perms via `aws secretsmanager
+# create-secret` after the Google Cloud / Apple Developer credentials are
+# obtained — credentials NEVER come from this script. If a secret is
+# missing, the matching env vars are left unset; the API's `start` route
+# returns 503 OAUTH_NOT_CONFIGURED cleanly per
+# `apps/api/src/auth/oauth.ts isOAuthProviderConfigured()`.
+GOOGLE_OAUTH_CLIENT_ID=""
+GOOGLE_OAUTH_CLIENT_SECRET=""
+APPLE_OAUTH_CLIENT_ID=""
+APPLE_OAUTH_TEAM_ID=""
+APPLE_OAUTH_KEY_ID=""
+APPLE_OAUTH_PRIVATE_KEY=""
+
+if secret_exists "$SM_OAUTH_GOOGLE"; then
+  log "  fetching $SM_OAUTH_GOOGLE from Secrets Manager"
+  OAUTH_GOOGLE_JSON="$(secret_get "$SM_OAUTH_GOOGLE")"
+  { read -r GOOGLE_OAUTH_CLIENT_ID
+    read -r GOOGLE_OAUTH_CLIENT_SECRET
+  } < <(printf '%s' "$OAUTH_GOOGLE_JSON" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+for k in ("client_id", "client_secret"):
+    print(d.get(k, ""))
+')
+  unset OAUTH_GOOGLE_JSON
+  log "  Google OAuth materialised (client_id=${GOOGLE_OAUTH_CLIENT_ID:0:12}…)"
+else
+  log "  INFO: $SM_OAUTH_GOOGLE missing — Google sign-in will return 503 OAUTH_NOT_CONFIGURED."
+  log "        Populate via: aws secretsmanager create-secret --name $SM_OAUTH_GOOGLE \\"
+  log "                        --secret-string '{\"client_id\":\"...\",\"client_secret\":\"...\"}'"
+fi
+
+if secret_exists "$SM_OAUTH_APPLE"; then
+  log "  fetching $SM_OAUTH_APPLE from Secrets Manager"
+  OAUTH_APPLE_JSON="$(secret_get "$SM_OAUTH_APPLE")"
+  # Apple's `private_key` is a PEM with embedded newlines; python's json
+  # round-trips them as `\n` in the wire format and back to literal
+  # newlines in the parsed value. We base64 the value on its way through
+  # the bash boundary to keep embedded newlines from corrupting the
+  # `read` reader, then base64 -d on the consumer side at API boot.
+  { read -r APPLE_OAUTH_CLIENT_ID
+    read -r APPLE_OAUTH_TEAM_ID
+    read -r APPLE_OAUTH_KEY_ID
+    read -r APPLE_OAUTH_PRIVATE_KEY
+  } < <(printf '%s' "$OAUTH_APPLE_JSON" | python3 -c '
+import json, sys, base64
+d = json.load(sys.stdin)
+print(d.get("client_id", ""))
+print(d.get("team_id", ""))
+print(d.get("key_id", ""))
+# Encode the multi-line PEM as base64 to survive the bash boundary;
+# decoded back on the API side via Buffer.from(env, "base64").toString().
+pk = d.get("private_key", "")
+print(base64.b64encode(pk.encode("utf-8")).decode("ascii") if pk else "")
+')
+  unset OAUTH_APPLE_JSON
+  log "  Apple OAuth materialised (client_id=${APPLE_OAUTH_CLIENT_ID})"
+else
+  log "  INFO: $SM_OAUTH_APPLE missing — Apple sign-in will return 503 OAUTH_NOT_CONFIGURED."
+  log "        Populate via: aws secretsmanager create-secret --name $SM_OAUTH_APPLE \\"
+  log "                        --secret-string '{\"client_id\":\"...\",\"team_id\":\"...\",\"key_id\":\"...\",\"private_key\":\"-----BEGIN PRIVATE KEY-----\\\\n...\"}'"
+fi
+
 # Sanity check — non-empty, ≥ 32 chars (jwt.ts secret() enforces this).
 if [[ -z "$JWT_ACCESS_SECRET" || ${#JWT_ACCESS_SECRET} -lt 32 ]]; then
   log "ERROR: JWT_ACCESS_SECRET empty or too short"; exit 1
@@ -305,15 +375,21 @@ REDIS_URL=redis://localhost:6379
 JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
 JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
 
-# OAuth — placeholder until Secrets Manager entries are populated.
-# Routes will 500 if called without these; routes that don't touch OAuth
-# (password/login, magic-link/*) still work.
-# GOOGLE_OAUTH_CLIENT_ID=
-# GOOGLE_OAUTH_CLIENT_SECRET=
-# APPLE_OAUTH_CLIENT_ID=
-# APPLE_OAUTH_TEAM_ID=
-# APPLE_OAUTH_KEY_ID=
-# APPLE_OAUTH_PRIVATE_KEY=
+# OAuth — sourced from \$SM_OAUTH_GOOGLE + \$SM_OAUTH_APPLE in Secrets
+# Manager. Empty values are fine: \`isOAuthProviderConfigured()\` in the
+# API turns the corresponding \`start\` route into a clean 503
+# OAUTH_NOT_CONFIGURED response (no crash). Other auth routes
+# (password/login, magic-link/*) are unaffected by OAuth absence.
+#
+# APPLE_OAUTH_PRIVATE_KEY is base64-encoded here (Apple's PEM has
+# multi-line newlines that don't survive a flat env file); the API
+# auto-decodes both forms.
+GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
+GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
+APPLE_OAUTH_CLIENT_ID=${APPLE_OAUTH_CLIENT_ID}
+APPLE_OAUTH_TEAM_ID=${APPLE_OAUTH_TEAM_ID}
+APPLE_OAUTH_KEY_ID=${APPLE_OAUTH_KEY_ID}
+APPLE_OAUTH_PRIVATE_KEY=${APPLE_OAUTH_PRIVATE_KEY}
 
 # Email — staging stays in dry-run until SES sandbox-exit lands.
 MAIL_DRY_RUN=1
@@ -338,7 +414,9 @@ chmod 600 "$ENV_FILE"
 # the shell exits right after. KYC_* values are non-secret (bucket name +
 # key ARN) but unset for cleanliness.
 unset JWT_ACCESS_SECRET JWT_REFRESH_SECRET PG_PASSWORD \
-      KYC_BUCKET_NAME KYC_KMS_KEY_ID KYC_KMS_KEY_ARN KYC_KMS_KEY_ALIAS
+      KYC_BUCKET_NAME KYC_KMS_KEY_ID KYC_KMS_KEY_ARN KYC_KMS_KEY_ALIAS \
+      GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET \
+      APPLE_OAUTH_CLIENT_ID APPLE_OAUTH_TEAM_ID APPLE_OAUTH_KEY_ID APPLE_OAUTH_PRIVATE_KEY
 log "  $ENV_FILE written (chmod 600 owner $EVENTPULSE_USER:$EVENTPULSE_GROUP)"
 log "  verify Secrets Manager presence: aws secretsmanager describe-secret --secret-id $SM_JWT_ACCESS"
 log "  verify Secrets Manager presence: aws secretsmanager describe-secret --secret-id $SM_JWT_REFRESH"

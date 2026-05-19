@@ -29,6 +29,36 @@ function baseUrl(): string {
   return process.env['EVENTPULSE_API_BASE_URL'] ?? 'http://localhost:4000'
 }
 
+/**
+ * Returns true when all env vars required to construct the OAuth client
+ * for `provider` are present + non-empty.
+ *
+ * The `start` route handlers in `routes/oauth-routes.ts` use this to
+ * decide whether to return a clean 503 OAUTH_NOT_CONFIGURED — instead
+ * of crashing the request with `requireEnv` throwing inside the client
+ * constructor. Lets the sign-in surface ship before credential
+ * procurement completes; the buttons hit the start endpoint, the
+ * endpoint returns 503, the frontend can surface a friendly message.
+ *
+ * Day 20 added this guard so OAuth credential provisioning could lag
+ * behind the sign-in UI without breaking the staging deploy. See
+ * `.claude/memory/gotchas.md` "OAuth button hrefs pointed at web vhost
+ * instead of API vhost" for the wider context.
+ */
+export function isOAuthProviderConfigured(provider: 'google' | 'apple'): boolean {
+  if (provider === 'google') {
+    return Boolean(
+      process.env['GOOGLE_OAUTH_CLIENT_ID'] && process.env['GOOGLE_OAUTH_CLIENT_SECRET'],
+    )
+  }
+  return Boolean(
+    process.env['APPLE_OAUTH_CLIENT_ID'] &&
+    process.env['APPLE_OAUTH_TEAM_ID'] &&
+    process.env['APPLE_OAUTH_KEY_ID'] &&
+    process.env['APPLE_OAUTH_PRIVATE_KEY'],
+  )
+}
+
 export function googleClient(): Google {
   if (_google) return _google
   _google = new Google(
@@ -39,6 +69,25 @@ export function googleClient(): Google {
   return _google
 }
 
+/**
+ * Decode the Apple private key from APPLE_OAUTH_PRIVATE_KEY.
+ *
+ * Two accepted forms — auto-detected by the leading bytes:
+ *   - Raw PEM (starts with `-----BEGIN`): used in local dev where the
+ *     env file is hand-edited and multi-line PEM values can be pasted
+ *     in via shell-quoting.
+ *   - Base64-encoded PEM: used in staging/prod, where the env file is
+ *     materialised by `bootstrap-staging.sh` from Secrets Manager.
+ *     Single-line representation survives the bash cat-heredoc + Node
+ *     env-file parse safely; multi-line PEMs would break either of
+ *     those layers.
+ */
+function decodeApplePrivateKey(): string {
+  const raw = requireEnv('APPLE_OAUTH_PRIVATE_KEY')
+  if (raw.startsWith('-----BEGIN')) return raw
+  return Buffer.from(raw, 'base64').toString('utf-8')
+}
+
 export function appleClient(): Apple {
   if (_apple) return _apple
   // arctic's Apple expects: clientId (Services ID), teamId, keyId, certificate (private key PEM)
@@ -46,7 +95,7 @@ export function appleClient(): Apple {
     requireEnv('APPLE_OAUTH_CLIENT_ID'),
     requireEnv('APPLE_OAUTH_TEAM_ID'),
     requireEnv('APPLE_OAUTH_KEY_ID'),
-    new TextEncoder().encode(requireEnv('APPLE_OAUTH_PRIVATE_KEY')),
+    new TextEncoder().encode(decodeApplePrivateKey()),
     `${baseUrl()}/api/v1/auth/oauth/apple/callback`,
   )
   return _apple
