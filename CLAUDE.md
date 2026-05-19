@@ -111,7 +111,7 @@ These decisions are final. Do not propose alternatives without asking.
 | Custom domains | Cloudflare for SaaS | n/a | Tenant custom hostnames + per-domain SSL; fronts the EC2 |
 | Email | AWS SES | n/a | Plus tenant-domain DKIM in white-label tier |
 | SMS | SSL Wireless API (Bangladesh) | n/a | Primary; secondary fallback TBD |
-| Payments | EPS Bangladesh (`eps-gateway-nodejs` npm) | latest | Production from day one |
+| Payments | EPS Bangladesh — **in-house wrapper at `apps/api/src/infra/eps/`** | n/a | Production from day one. **Both candidate SDKs rejected at Sprint 2 Day 20 closeout** (community + EPS-PG fork are the same single-author code with the `Status` alias gotcha unhandled — see `docs/investigations/eps-library-comparison.md` + `.claude/memory/decisions.md` "EPS library choice locked for Sprint 3 — in-house wrapper" 2026-05-19). Mirrors §5.3 Lucia decision. |
 | Auth core | Rolled-our-own (in-repo) | n/a | `@noble/hashes` argon2id + `jose` JWT (HS256, 15-min access + 7-day refresh) + `arctic` for OAuth providers + custom Postgres session adapter (`sessions` table). Three audiences (super-admin, tenant, attendee). **Lucia was the original pick (v1.0–v2.1) but is in maintenance mode as of 2026; we composed the same surface ourselves.** Decision rationale: `.claude/memory/decisions.md` "Auth foundation library choice" (2026-05-17). |
 | Auth providers | Email/password, Email magic link, Google OAuth 2.0, Apple Sign-In | n/a | All four available from day one (see §5) |
 | Validation | zod | latest | Every API input |
@@ -2004,6 +2004,14 @@ All webhook endpoints verify signature, enqueue to SQS, return 200 fast. Workers
 
 ## §11 — EPS Integration
 
+### 11.0 Status (Day 20 closeout)
+
+> **Library choice locked: in-house wrapper at `apps/api/src/infra/eps/`.** Both candidate SDKs (`eps-gateway-nodejs` on npm + `EPS-PG/EPS_Nodejs` on GitHub) were rejected at Sprint 2 Day 20 closeout. Full comparison + rationale: `docs/investigations/eps-library-comparison.md`. Decision: `.claude/memory/decisions.md` "EPS library choice locked for Sprint 3 — in-house wrapper" (2026-05-19). Mirrors the §5.3 Lucia → roll-our-own auth decision.
+>
+> **Staging credentials are production-tier** per Moshiur Day 20 directive (no sandbox set issued by EPS for staging). The in-house wrapper MUST enforce `STAGING_PAYMENT_BLOCK=1` as a hard gate refusing any initialisation request with `total_paisa > 0` — see `apps/api/src/infra/eps/client.ts` (Sprint 3 Day 21+). This guard exists to prevent staging integration tests from charging real cards. Removing the guard requires an explicit `.claude/memory/decisions.md` entry alongside MVP production cutover.
+>
+> **EPS adapter ships Sprint 3 Day 21+.** The §11.2 skeleton below is rewritten for the in-house pattern (axios + `@noble/hashes` HMACSHA512 + zod-validated responses + the `normaliseStatus()` shim for the §11.4 alias gotcha).
+
 ### 11.1 Flow (Source of Truth)
 
 ```
@@ -2023,42 +2031,60 @@ All webhook endpoints verify signature, enqueue to SQS, return 200 fast. Workers
 11. Server also receives EPS server-to-server webhook in parallel; webhook handler also calls Verify and reconciles. Idempotency handled via merchantTransactionId.
 ```
 
-### 11.2 Implementation Skeleton
+### 11.2 Implementation Skeleton (in-house wrapper, Sprint 3 Day 21+)
 
 ```typescript
 // apps/api/src/infra/eps/client.ts
-import { EpsGateway } from 'eps-gateway-nodejs'
+import { hmac } from '@noble/hashes/hmac'
+import { sha512 } from '@noble/hashes/sha2'
+import { bytesToHex } from '@noble/hashes/utils'
+import axios, { type AxiosInstance } from 'axios'
 
-export const eps = new EpsGateway({
-  merchantId: process.env.EPS_MERCHANT_ID!,
-  storeId: process.env.EPS_STORE_ID!,
-  username: process.env.EPS_USERNAME!,
-  password: process.env.EPS_PASSWORD!,
-  hashKey: process.env.EPS_HASH_KEY!,
-  mode: (process.env.EPS_MODE ?? 'production') as 'production' | 'sandbox',
-})
+import { normaliseStatus, type NormalisedStatus } from './normalise-status.js'
 
-export async function initialiseOrder(order: Order): Promise<string> {
-  const init = await eps.initializeEPS({
-    merchantTransactionId: order.merchant_transaction_id,
-    transactionTypeId: 1, // Web
-    totalAmount: order.total_paisa / 100,
-    successUrl: `${BASE_URL}/api/v1/public/orders/eps-return/success`,
-    failUrl: `${BASE_URL}/api/v1/public/orders/eps-return/fail`,
-    cancelUrl: `${BASE_URL}/api/v1/public/orders/eps-return/cancel`,
-    customerName: order.buyer_name,
-    customerEmail: order.buyer_email,
-    customerMobile: order.buyer_phone,
-    customerAddress: 'Bangladesh',
-  })
-  return init.RedirectURL
+const BASE_URLS = {
+  production: 'https://pgapi.eps.com.bd',
+  sandbox: 'https://sandbox-pgapi.eps.com.bd',
+} as const
+
+function cfg() {
+  const merchantId = process.env['EPS_MERCHANT_ID']
+  const storeId = process.env['EPS_STORE_ID']
+  const username = process.env['EPS_USERNAME']
+  const password = process.env['EPS_PASSWORD']
+  const hashKey = process.env['EPS_HASH_KEY']
+  const mode = (process.env['EPS_MODE'] ?? 'production') as 'production' | 'sandbox'
+  if (!merchantId || !storeId || !username || !password || !hashKey) {
+    throw new Error('EPS env vars not set')
+  }
+  return { merchantId, storeId, username, password, hashKey, mode }
 }
 
-export async function verifyOrder(merchantTransactionId: string) {
-  const result = await eps.checkMerchantTransactionStatus({ merchantTransactionId })
-  // Handle field aliases: Status / transactionStatus / status / nested data.*
-  // Values: SUCCESS, COMPLETED, FAILED, FAILURE, CANCEL, CANCELLED, CANCELED, Pending
-  return normaliseStatus(result)
+function http(): AxiosInstance {
+  return axios.create({ baseURL: BASE_URLS[cfg().mode], timeout: 15_000 })
+}
+
+/** Per-endpoint hash mechanism per §11.4 — pass the right field. */
+function signHash(value: string): string {
+  return bytesToHex(hmac(sha512, cfg().hashKey, new TextEncoder().encode(value)))
+}
+
+export async function initialiseOrder(order: Order): Promise<string> {
+  // Staging-payment-block guard per §11.0 — production credentials in
+  // staging MUST refuse any priced order until MVP cutover.
+  if (process.env['STAGING_PAYMENT_BLOCK'] === '1' && order.total_paisa > 0n) {
+    throw new Error('STAGING_PAYMENT_BLOCK refuses priced orders; set STAGING_PAYMENT_BLOCK=0 to bypass (production cutover only)')
+  }
+  // …rest of the call: GetToken (cached in Redis), then InitializeEPS,
+  // hashing merchantTransactionId per §11.4. Returns the RedirectURL.
+}
+
+export async function verifyOrder(merchantTransactionId: string): Promise<NormalisedStatus> {
+  // CheckMerchantTransactionStatus, hashing merchantTransactionId.
+  // normaliseStatus() collapses SUCCESS|COMPLETED|FAILED|FAILURE|
+  // CANCEL|CANCELLED|CANCELED|Pending across the Status / transactionStatus
+  // / status / nested data.* field aliases (§11.4 gotcha) — single
+  // source of truth, fully unit-tested.
 }
 ```
 
@@ -2070,11 +2096,14 @@ EPS_STORE_ID=
 EPS_USERNAME=
 EPS_PASSWORD=
 EPS_HASH_KEY=
-EPS_MODE=production
+EPS_MODE=production                 # 'production' | 'sandbox'
+STAGING_PAYMENT_BLOCK=1              # gate refusing priced orders in staging; remove only at MVP cutover
 EPS_SUCCESS_URL=https://app.eventpulse.com.bd/api/v1/public/orders/eps-return/success
 EPS_FAIL_URL=https://app.eventpulse.com.bd/api/v1/public/orders/eps-return/fail
 EPS_CANCEL_URL=https://app.eventpulse.com.bd/api/v1/public/orders/eps-return/cancel
 ```
+
+Sourced from Secrets Manager entry `eventpulse/<env>/eps` (JSON-shaped: `merchant_id`, `store_id`, `username`, `password`, `hash_key`, `mode`). Materialised into `.env.staging` by `infra/scripts/bootstrap-staging.sh` per the per-secret-fetch pattern established for KYC + OAuth in Sprint 2.
 
 ### 11.4 Known Gotchas (DO NOT IGNORE)
 

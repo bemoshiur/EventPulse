@@ -62,6 +62,7 @@ SM_JWT_REFRESH="${SM_PREFIX}/jwt-refresh-secret"
 SM_KYC_CONFIG="${SM_PREFIX}/kyc"
 SM_OAUTH_GOOGLE="${SM_PREFIX}/oauth-google"
 SM_OAUTH_APPLE="${SM_PREFIX}/oauth-apple"
+SM_EPS="${SM_PREFIX}/eps"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "ERROR: must run as root (use sudo). It needs to write nginx + systemd."
@@ -314,6 +315,51 @@ else
   log "                        --secret-string '{\"client_id\":\"...\",\"client_secret\":\"...\"}'"
 fi
 
+# EPS payment-gateway credentials (Day 20). One JSON-shaped secret:
+#   eventpulse/staging/eps : {"merchant_id", "store_id", "username",
+#                              "password", "hash_key", "mode"}
+#
+# Created out-of-band (one-shot `aws secretsmanager create-secret` from a
+# developer workstation with admin perms). Sprint 2 closeout: production-
+# mode credentials in staging per Moshiur 2026-05-19 (no sandbox set
+# issued); the in-house EPS wrapper (Sprint 3 Day 21+) MUST refuse to
+# run when STAGING_PAYMENT_BLOCK=1 OR price_paisa > 0 — see
+# `.claude/memory/decisions.md` "EPS production credentials intentionally
+# used in staging for in-house wrapper testing (Day 20)".
+EPS_MERCHANT_ID=""
+EPS_STORE_ID=""
+EPS_USERNAME=""
+EPS_PASSWORD=""
+EPS_HASH_KEY=""
+EPS_MODE=""
+
+if secret_exists "$SM_EPS"; then
+  log "  fetching $SM_EPS from Secrets Manager"
+  EPS_JSON="$(secret_get "$SM_EPS")"
+  { read -r EPS_MERCHANT_ID
+    read -r EPS_STORE_ID
+    read -r EPS_USERNAME
+    read -r EPS_PASSWORD
+    read -r EPS_HASH_KEY
+    read -r EPS_MODE
+  } < <(printf '%s' "$EPS_JSON" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+for k in ("merchant_id", "store_id", "username", "password", "hash_key", "mode"):
+    print(d.get(k, ""))
+')
+  unset EPS_JSON
+  log "  EPS credentials materialised (merchant=${EPS_MERCHANT_ID:0:8}…, mode=${EPS_MODE})"
+  if [[ "$EPS_MODE" == "production" ]]; then
+    log "  WARN: EPS_MODE=production in staging — STAGING_PAYMENT_BLOCK must be set"
+    log "        to prevent real-money transactions. See decisions.md Day 20."
+  fi
+else
+  log "  INFO: $SM_EPS missing — EPS integration will fail at runtime."
+  log "        Populate via: aws secretsmanager create-secret --name $SM_EPS \\"
+  log "                        --secret-string 'file://path/to/eps-creds.json'"
+fi
+
 if secret_exists "$SM_OAUTH_APPLE"; then
   log "  fetching $SM_OAUTH_APPLE from Secrets Manager"
   OAUTH_APPLE_JSON="$(secret_get "$SM_OAUTH_APPLE")"
@@ -391,6 +437,19 @@ APPLE_OAUTH_TEAM_ID=${APPLE_OAUTH_TEAM_ID}
 APPLE_OAUTH_KEY_ID=${APPLE_OAUTH_KEY_ID}
 APPLE_OAUTH_PRIVATE_KEY=${APPLE_OAUTH_PRIVATE_KEY}
 
+# EPS payment-gateway credentials — sourced from \$SM_EPS. EPS_MODE is
+# production per Moshiur Day 20 directive (no sandbox set issued). The
+# in-house wrapper (Sprint 3 Day 21+) MUST gate real-money transactions
+# behind STAGING_PAYMENT_BLOCK=1 to prevent staging tests from charging
+# real cards. \`apps/api/src/infra/eps/client.ts\` enforces this guard.
+EPS_MERCHANT_ID=${EPS_MERCHANT_ID}
+EPS_STORE_ID=${EPS_STORE_ID}
+EPS_USERNAME=${EPS_USERNAME}
+EPS_PASSWORD=${EPS_PASSWORD}
+EPS_HASH_KEY=${EPS_HASH_KEY}
+EPS_MODE=${EPS_MODE}
+STAGING_PAYMENT_BLOCK=1
+
 # Email — staging stays in dry-run until SES sandbox-exit lands.
 MAIL_DRY_RUN=1
 SES_FROM_ADDRESS=no-reply@eventpulse.com.bd
@@ -416,7 +475,8 @@ chmod 600 "$ENV_FILE"
 unset JWT_ACCESS_SECRET JWT_REFRESH_SECRET PG_PASSWORD \
       KYC_BUCKET_NAME KYC_KMS_KEY_ID KYC_KMS_KEY_ARN KYC_KMS_KEY_ALIAS \
       GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET \
-      APPLE_OAUTH_CLIENT_ID APPLE_OAUTH_TEAM_ID APPLE_OAUTH_KEY_ID APPLE_OAUTH_PRIVATE_KEY
+      APPLE_OAUTH_CLIENT_ID APPLE_OAUTH_TEAM_ID APPLE_OAUTH_KEY_ID APPLE_OAUTH_PRIVATE_KEY \
+      EPS_MERCHANT_ID EPS_STORE_ID EPS_USERNAME EPS_PASSWORD EPS_HASH_KEY EPS_MODE
 log "  $ENV_FILE written (chmod 600 owner $EVENTPULSE_USER:$EVENTPULSE_GROUP)"
 log "  verify Secrets Manager presence: aws secretsmanager describe-secret --secret-id $SM_JWT_ACCESS"
 log "  verify Secrets Manager presence: aws secretsmanager describe-secret --secret-id $SM_JWT_REFRESH"
