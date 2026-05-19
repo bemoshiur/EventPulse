@@ -41,6 +41,14 @@ describe('schema/identity tables', () => {
     expect(t.columns.find((c) => c.name === 'owner_user_id')).toBeDefined()
   })
 
+  it('tenants table has preferred_locale (NOT NULL, default bn) per Decision O.2', () => {
+    const t = getTableConfig(tenants)
+    const col = t.columns.find((c) => c.name === 'preferred_locale')
+    expect(col, 'preferred_locale column missing — migration 0009 dropped').toBeDefined()
+    expect(col?.notNull).toBe(true)
+    expect(col?.default).toBe('bn')
+  })
+
   it('tenants.slug and users.handle share the same data type for cross-namespace lookup', () => {
     const tenantsSlug = getTableConfig(tenants).columns.find((c) => c.name === 'slug')!
     const usersHandle = getTableConfig(users).columns.find((c) => c.name === 'handle')!

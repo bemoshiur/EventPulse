@@ -97,6 +97,12 @@ export const tenants = pgTable(
     brandColorPrimary: text('brand_color_primary'),
     brandColorAccent: text('brand_color_accent'),
     monthlyGmvPaisa: bigint('monthly_gmv_paisa', { mode: 'bigint' }).notNull().default(0n),
+    // Per migration 0009 (Sprint 3 Day 22 Decision O.2). Tenant-organisation
+    // communications locale; tenant-level, not owner-individual. Notification
+    // helper for KYC-event templates reads from here; user-targeted templates
+    // (magic link, OAuth) read users.locale instead. Default 'bn' per §1.3 R12
+    // + §16.2 BD-market reality.
+    preferredLocale: text('preferred_locale').notNull().default('bn'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -125,6 +131,13 @@ export const tenants = pgTable(
     check(
       'tenants_personal_owner_chk',
       sql`(${t.isPersonal} = false) OR (${t.ownerUserId} IS NOT NULL)`,
+    ),
+    check(
+      'tenants_preferred_locale_chk',
+      // Two-value enum at the DB layer per migration 0009. Future additions
+      // (e.g. 'hi', 'ur') require a deliberate migration. Default 'bn' set
+      // at column level; CHECK enforces explicit-write conformance.
+      sql`${t.preferredLocale} IN ('en','bn')`,
     ),
     index('idx_tenants_owner_personal')
       .on(t.ownerUserId)
