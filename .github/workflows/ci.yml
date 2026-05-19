@@ -210,6 +210,36 @@ jobs:
     if: needs.detect-scope.outputs.has_e2e == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Postgres service container added at Day 21 Fix 6 — the DB-aware
+    # /health endpoint (apps/api/src/app.ts) now does a `SELECT 1` against
+    # the DB on every probe, and Playwright's `webServer.url` waits for
+    # /health to return 200 before running tests. Without DATABASE_URL,
+    # /health returns 503 → 120s webserver timeout → e2e job fails.
+    # Mirrors the integration-tests job's service setup exactly.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: eventpulse
+          POSTGRES_PASSWORD: eventpulse
+          POSTGRES_DB: eventpulse_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://eventpulse:eventpulse@localhost:5432/eventpulse_test
+      REDIS_URL: redis://localhost:6379
     steps:
       - uses: actions/checkout@v4
 
@@ -229,6 +259,12 @@ jobs:
 
       - name: Build workspace deps (shared-types)
         run: pnpm --filter @eventpulse/shared-types build
+
+      - name: Apply migrations
+        # Required for DB-aware /health to succeed — the api needs the
+        # eventpulse_app / eventpulse_admin roles + table grants from
+        # the migration set before `withSuperAdmin(SELECT 1)` works.
+        run: pnpm --filter @eventpulse/api db:migrate
 
       - run: pnpm --filter @eventpulse/web build
 
