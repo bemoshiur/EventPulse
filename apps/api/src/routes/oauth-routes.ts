@@ -36,6 +36,7 @@ import {
   appleClient,
   decideAutoLink,
   googleClient,
+  isOAuthProviderConfigured,
   verifyAppleIdToken,
   verifyGoogleIdToken,
   type AppleIdClaims,
@@ -83,6 +84,18 @@ function fail(reason: string, requestId: string | undefined) {
 // ─── GOOGLE ──────────────────────────────────────────────────────────────
 
 oauth.get('/google/start', (c) => {
+  if (!isOAuthProviderConfigured('google')) {
+    return c.json(
+      {
+        error: {
+          code: 'OAUTH_NOT_CONFIGURED',
+          message:
+            'Google sign-in is not configured for this environment. Credentials are still being provisioned.',
+        },
+      },
+      503,
+    )
+  }
   const state = generateState()
   const codeVerifier = generateCodeVerifier()
   const url = googleClient().createAuthorizationURL(state, codeVerifier, GOOGLE_SCOPES)
@@ -188,6 +201,18 @@ oauth.get('/google/callback', async (c) => {
 // ─── APPLE ───────────────────────────────────────────────────────────────
 
 oauth.get('/apple/start', (c) => {
+  if (!isOAuthProviderConfigured('apple')) {
+    return c.json(
+      {
+        error: {
+          code: 'OAUTH_NOT_CONFIGURED',
+          message:
+            'Apple sign-in is not configured for this environment. Credentials are still being provisioned.',
+        },
+      },
+      503,
+    )
+  }
   const state = generateState()
   const url = appleClient().createAuthorizationURL(state, APPLE_SCOPES)
   // Apple needs response_mode=form_post to return the user's name on

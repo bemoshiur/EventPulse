@@ -75,6 +75,42 @@ describe('OAuth /start routes', () => {
   })
 })
 
+describe('OAuth /start 503 when provider not configured (Day 20)', () => {
+  it('GET google/start returns 503 OAUTH_NOT_CONFIGURED when client id missing', async () => {
+    const saved = process.env['GOOGLE_OAUTH_CLIENT_ID']
+    delete process.env['GOOGLE_OAUTH_CLIENT_ID']
+    _resetOAuthClients()
+    try {
+      const app = createApp()
+      const res = await app.request('/api/v1/auth/oauth/google/start')
+      expect(res.status).toBe(503)
+      const body = (await res.json()) as { error: { code: string; message: string } }
+      expect(body.error.code).toBe('OAUTH_NOT_CONFIGURED')
+      expect(body.error.message).toMatch(/Google sign-in is not configured/)
+    } finally {
+      if (saved !== undefined) process.env['GOOGLE_OAUTH_CLIENT_ID'] = saved
+      _resetOAuthClients()
+    }
+  })
+
+  it('GET apple/start returns 503 OAUTH_NOT_CONFIGURED when team id missing', async () => {
+    const saved = process.env['APPLE_OAUTH_TEAM_ID']
+    delete process.env['APPLE_OAUTH_TEAM_ID']
+    _resetOAuthClients()
+    try {
+      const app = createApp()
+      const res = await app.request('/api/v1/auth/oauth/apple/start')
+      expect(res.status).toBe(503)
+      const body = (await res.json()) as { error: { code: string; message: string } }
+      expect(body.error.code).toBe('OAUTH_NOT_CONFIGURED')
+      expect(body.error.message).toMatch(/Apple sign-in is not configured/)
+    } finally {
+      if (saved !== undefined) process.env['APPLE_OAUTH_TEAM_ID'] = saved
+      _resetOAuthClients()
+    }
+  })
+})
+
 describe('OAuth /callback failure-closed paths', () => {
   it('GET google/callback with NO state cookie → 400', async () => {
     const app = createApp()
