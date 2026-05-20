@@ -4,6 +4,35 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## GitHub repo transfer breaks OIDC trust policies + moves billing to a new entity (2026-05-20)
+
+**Symptom 1 — deploys fail at OIDC AssumeRole.** First auto-deploy after the Pre-Day-23 GHA outage resolved failed with `Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity`. CI itself ran fine — only the deploy job's `aws-actions/configure-aws-credentials@v4` step failed. Investigation: the EventPulse repo had been transferred from a personal account `publicpulseagency` to a new GitHub organisation `The-Public-Pulse-Agency` during the outage window. GitHub HTTP-redirects `publicpulseagency/EventPulse/*` URLs to the new path so `git push`, `gh pr`, and browser links keep working — but the OIDC tokens GitHub mints for Actions jobs carry the **new canonical org login** in both `sub` and `job_workflow_ref` claims, and the IAM trust policy was pinned to the old login.
+
+**Symptom 2 — Actions billing moved silently.** During the outage, Moshiur raised the Actions spending limit to $20 on his personal account. After the repo transfer, that limit no longer applies — the new org is a separate billing entity with its own 2,000-min Free-tier allowance and its own (Free-tier default $0) spending limit. CI started working again because the new org had fresh free minutes, NOT because the personal-account limit raise took effect. **The outage pattern recurs once the new org's monthly minutes exhaust**, unless a non-zero spending limit is set on the org itself.
+
+**Why it happens:** Two layers move independently when a repo transfers:
+
+1. **OIDC identity claims** use the canonical (URL-path) org login, NOT the display name. The canonical login changes the instant the transfer completes, even though redirects mask the change at the HTTP layer. Both `sub` (`repo:OWNER/REPO:environment:NAME`) and `job_workflow_ref` (`OWNER/REPO/.github/workflows/FILE@refs/heads/BRANCH`) carry this value. Exact-match trust policies (which is the canonical project standard per CLAUDE.md §17.9.1) reject the AssumeRole call cleanly.
+2. **Billing entities are per-account.** Personal-account spending limits don't follow a repo when it transfers to an org. Org-level Actions consumption is metered against the org's own quota + spending limit, configured independently at `/organizations/<org>/settings/billing/summary`.
+
+**Fix (load-bearing — both layers):**
+
+1. **IAM trust policy update.** For every `eventpulse-deploy-<env>` role that exists in AWS, edit the trust policy's `Condition.StringEquals` to use the new canonical org login on both `sub` and `job_workflow_ref` claims. Use Option A (replace, not arrays) — the old name will never authenticate again. `aws iam update-assume-role-policy --role-name <name> --policy-document file://<json>`. Apply the same fix to `eventpulse-deploy-prod` whenever it's created (Sprint 4 carry).
+2. **Update provisioning script.** `infra/scripts/setup-github-oidc.sh` usage docs default `GITHUB_REPO` to the new org login so a future re-run doesn't regress.
+3. **Update CLAUDE.md §17.9.1 example JSON** to the new org login. Add a dated amendment blockquote pointing at the decisions.md entry + this gotcha.
+4. **Set a non-zero org-level Actions spending limit.** Browser-only path: <https://github.com/organizations/The-Public-Pulse-Agency/settings/billing/summary>. The legacy `GET /orgs/{org}/settings/billing/actions` REST endpoint returns 410 Gone (moved per <https://gh.io/billing-api-updates-org>); the new API also requires the `admin:org` scope, which `gh auth refresh -h github.com -s admin:org` adds. Tracked as a pending user action in handoff.md.
+
+**How to avoid future occurrences:**
+
+- **Before any repo transfer:** audit OIDC trust policies for every `eventpulse-deploy-*` role + any external CI that uses GitHub-OIDC into AWS. Plan the trust-policy update as part of the transfer runbook, not as a post-hoc fix.
+- **After any repo transfer:** check the new owner's billing entity. Spending limits, payment methods, and Actions minute consumption all reset.
+- **Don't rely on HTTP redirects to mask org-name changes** — they only help layers that talk to the GitHub API/web. OIDC, webhooks-to-3rd-parties using `${{ github.repository }}` strings, scripts pinning the org name, and IAM trust policies all break silently.
+- **Org login vs display name:** the canonical login is the lowercase URL-path identifier; the display name is the human-friendly title. OIDC uses the canonical login. Always copy from the URL, never from the org's display name.
+
+**Cross-reference:** `.claude/memory/decisions.md` "Org migration — publicpulseagency → The-Public-Pulse-Agency" (2026-05-20, canonical source) + the prior canonical OIDC pattern (decisions.md 2026-05-17 "Canonical GitHub Actions → AWS OIDC trust pattern (project standard)") which the org-migration leaves intact at the pattern level (still three claims, still exact-match, still no arrays — only the org-login value moves).
+
+---
+
 ## GitHub Actions org-wide failure — runs fail in ~3s right after runner pickup, no step logs (2026-05-20 pre-Day-23)
 
 **Symptom:** Every GHA workflow (`ci.yml`, `commitlint.yml`, `deploy-staging.yml`) started failing at 19:01 UTC on 2026-05-19. Failure pattern: runner picks up the job ("Job is about to start running on the hosted runner: GitHub Actions 1000001774"), then immediate failure ~2 seconds later, conclusion=`failure`, **zero steps recorded**, no step-level logs available (`gh run view --log-failed` returns `log not found`). Last successful run was PR #126 CI at 18:58 UTC; first failure was PR #127 CI at 19:01 UTC. Affects `push`, `pull_request`, and `workflow_dispatch` events equally. Re-running a failed run does not queue a new attempt — the same run remains in `failure` state.

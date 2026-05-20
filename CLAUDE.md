@@ -2941,8 +2941,8 @@ All GitHub Actions → AWS role-assumption trust policies in this project follow
     "Condition": {
       "StringEquals": {
         "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-        "token.actions.githubusercontent.com:sub": "repo:publicpulseagency/EventPulse:environment:staging",
-        "token.actions.githubusercontent.com:job_workflow_ref": "publicpulseagency/EventPulse/.github/workflows/deploy-staging.yml@refs/heads/main"
+        "token.actions.githubusercontent.com:sub": "repo:The-Public-Pulse-Agency/EventPulse:environment:staging",
+        "token.actions.githubusercontent.com:job_workflow_ref": "The-Public-Pulse-Agency/EventPulse/.github/workflows/deploy-staging.yml@refs/heads/main"
       }
     }
   }]
@@ -2973,7 +2973,10 @@ The `ec2:instance/i-X` ARN form alone fails the IAM check because AWS evaluates 
 
 **Applications:**
 
-- **First application:** `eventpulse-deploy-staging` (Sprint 2 Day 13, role ARN `arn:aws:iam::739275468267:role/eventpulse-deploy/eventpulse-deploy-staging`). Verified end-to-end via workflow_dispatch run [25988575225](https://github.com/publicpulseagency/EventPulse/actions/runs/25988575225) — all 10 steps green, EC2-side `deploy.sh` returned exit 0.
+- **First application:** `eventpulse-deploy-staging` (Sprint 2 Day 13, role ARN `arn:aws:iam::739275468267:role/eventpulse-deploy/eventpulse-deploy-staging`). Verified end-to-end via workflow_dispatch run [25988575225](https://github.com/The-Public-Pulse-Agency/EventPulse/actions/runs/25988575225) — all 10 steps green, EC2-side `deploy.sh` returned exit 0.
+
+> **2026-05-20 — org migration amendment.** Repo moved from personal account `publicpulseagency` to org `The-Public-Pulse-Agency`. The trust policy above shows the **post-migration** canonical org login on both `sub` and `job_workflow_ref`. The OIDC `sub` + `job_workflow_ref` claims use the canonical (URL-path) org login, not the display name — and they update the instant the repo transfers, even though GitHub HTTP redirects `publicpulseagency/EventPulse` → `The-Public-Pulse-Agency/EventPulse` for old links. See `.claude/memory/decisions.md` "Org migration — publicpulseagency → The-Public-Pulse-Agency" (2026-05-20) + `.claude/memory/gotchas.md` "GitHub repo transfer breaks OIDC trust policies + moves billing to a new entity".
+
 - **Next application:** `eventpulse-deploy-prod` (Sprint 4) follows this exact pattern with `environment:production` and `deploy-prod.yml@refs/heads/prod`. No code review needed beyond confirming the three-claim shape; that's the whole point of the pattern.
 - **All future per-environment / per-service deploy roles** (Phase 3+ — payouts worker, KYC reviewer assist agent, future per-team roles) inherit the same shape. PRs that introduce a new GitHub-OIDC trust policy diverging from this shape (e.g. using `StringLike`, wildcards, ref-format `sub` while the workflow declares an environment, single-ARN-form SSM resource lists) are rejected during `/review`.
 

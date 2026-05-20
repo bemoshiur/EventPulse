@@ -43,7 +43,7 @@
 # Usage:
 #   ENVIRONMENT=staging \
 #   AWS_PROFILE=eventpulse \
-#   GITHUB_REPO=publicpulseagency/EventPulse \
+#   GITHUB_REPO=The-Public-Pulse-Agency/EventPulse \
 #   BRANCH=main \
 #   INSTANCE_ID=i-02e4fddeb923c14f9 \
 #     ./infra/scripts/setup-github-oidc.sh
@@ -54,7 +54,15 @@
 # Required env:
 #   ENVIRONMENT   — `staging` or `prod` (informs role name + tags)
 #   AWS_PROFILE   — local AWS CLI profile with admin perms
-#   GITHUB_REPO   — `owner/name` of the repo authorised to assume the role
+#   GITHUB_REPO   — `owner/name` of the repo authorised to assume the role.
+#                   Use the canonical org login (lowercase login as it appears
+#                   in the URL path), NOT the org display name. GitHub OIDC
+#                   tokens use the canonical login in both `sub` and
+#                   `job_workflow_ref` claims; mismatches reject with
+#                   "Not authorized to perform sts:AssumeRoleWithWebIdentity".
+#                   2026-05-20: org migrated from personal `publicpulseagency`
+#                   to org `The-Public-Pulse-Agency`; see decisions.md
+#                   "Org migration — publicpulseagency → The-Public-Pulse-Agency".
 #   BRANCH        — git ref to authorise (typically `main` for staging,
 #                   `prod` for production)
 #   INSTANCE_ID   — EC2 instance id the role can SSM-SendCommand to
