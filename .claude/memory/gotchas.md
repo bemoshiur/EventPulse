@@ -4,6 +4,60 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## GitHub Actions org-wide failure — runs fail in ~3s right after runner pickup, no step logs (2026-05-20 pre-Day-23)
+
+**Symptom:** Every GHA workflow (`ci.yml`, `commitlint.yml`, `deploy-staging.yml`) started failing at 19:01 UTC on 2026-05-19. Failure pattern: runner picks up the job ("Job is about to start running on the hosted runner: GitHub Actions 1000001774"), then immediate failure ~2 seconds later, conclusion=`failure`, **zero steps recorded**, no step-level logs available (`gh run view --log-failed` returns `log not found`). Last successful run was PR #126 CI at 18:58 UTC; first failure was PR #127 CI at 19:01 UTC. Affects `push`, `pull_request`, and `workflow_dispatch` events equally. Re-running a failed run does not queue a new attempt — the same run remains in `failure` state.
+
+**Diagnostic shape:** System log (downloadable via `curl -L /actions/runs/<id>/attempts/1/logs`) shows only:
+
+```text
+Evaluating deploy.if
+Result: true
+Requested labels: ubuntu-latest
+Job defined at: …/deploy-staging.yml@refs/heads/main
+Waiting for a runner to pick up this job...
+Job is about to start running on the hosted runner: GitHub Actions 1000001774
+```
+
+…then nothing. No `actions/checkout@v4` step start, no setup logs. The runner is allocated but then the job dies before the first step's container can execute.
+
+**Confirmed cause: GitHub Free-tier 2,000-minute org-level Actions quota exhausted with the spending limit pinned at $0.** PublicPulseAgency is an organisation on Free tier; the Sprint 2 + early Sprint 3 push volume exhausted the included 2,000 monthly minutes mid-billing-cycle. With the spending limit at the Free-tier default of $0, GitHub's billing layer rejected every job at runner-allocation time — exactly matching the 3-second-failure-with-no-steps pattern. The deploy + CI workflows queue, the scheduler tries to allocate a runner, then billing aborts before any step container starts.
+
+**Resolved (2026-05-19/20):** Moshiur raised the Actions spending limit to **$20/month**. Overage minutes beyond the 2,000-minute free allowance are now billed against this cap. CI + deploy workflows started succeeding again immediately after the limit raise; subsequent runs (Dependabot Updates 03:48 UTC; CodeQL on `7caf7d9` 20:37 UTC) ran cleanly.
+
+**Recurrence risk + long-term mitigation:** The 2,000-minute Free-tier allowance resets each billing cycle. If monthly Actions consumption keeps exceeding 2,000 min (Sprint 2 + 3 trajectory suggests it will), the failure pattern returns the moment cumulative overage burns through the $20 cap. Long-term mitigation options:
+
+1. **CI consumption reduction via path-filters** — `.github/workflows/ci.yml` currently runs the full pipeline on every push regardless of which files changed. Adding `paths:` filters so docs-only / memory-only changes skip the integration + e2e + build jobs would cut consumption substantially. Memory commits (`memory:` prefix) make up a meaningful slice of pushes.
+2. **Accept the overage** — leave the $20 cap, accept monthly billing variance, treat it as cost-of-velocity.
+3. **Raise the cap further** — only meaningful as a panic move if a sprint goes unexpectedly active.
+
+The `gh api /orgs/publicpulseagency/settings/billing/actions` endpoint requires the `admin:org` scope (returns 404 otherwise). Surface this when scoping any future "watch the meter" automation.
+
+**Why this is load-bearing:** All deploy + CI gates fail. The brief's Workstream 1 Phase 2 (consolidation deploy via empty commit) cannot complete; Workstream 2.1 (merging the 5 remaining Day 22 PRs) creates more failed CI runs without landing the code on staging; Dependabot fix PRs cannot merge through CI gates. Each merge to main does NOT deploy to staging — the EC2 stays on the last-successfully-deployed commit (95355aa from PR #124 yesterday). The mismatch between origin/main and the running staging code grows with each merge.
+
+**Mitigations until resolved:**
+
+- **Direct smoke tests bypass CI** — staging EC2 itself is healthy (verified via direct curl: 5 vhosts SSL=0, API `/health` DB-aware ok, Trust Center renders, Nginx `/nginx-health` ok). The infrastructure is fine; only the deploy pipeline is broken.
+- **Manual SSM-based deploys are still possible** — `aws ssm send-command` invoking `infra/deploy/deploy.sh` directly works the same way as the CI-driven version. This is the legitimate fallback if staging code needs to update before billing is resolved.
+- **DO NOT mass-merge PRs while CI is broken** — each merge adds a failed CI run with no code-on-staging update, growing the origin/main vs staging drift silently.
+
+**Fix:** User action required.
+
+1. Verify GitHub org billing state at <https://github.com/organizations/publicpulseagency/settings/billing>.
+2. If quota exhausted on Free plan → upgrade to Team plan (USD 4/user/month per the user) OR enable Actions on a per-runner-minute pay-as-you-go basis. The day-second-developer-joins move to GitHub Pro (already documented as a carry) would not solve this — Pro is per-user; Team is the org-level upgrade.
+3. After billing restored, fire `gh workflow run deploy-staging.yml --ref main` to land the accumulated main commits on staging.
+4. Resume Workstream 2.1 PR merges in sequence with each merge's deploy verified.
+
+**Cross-reference:** This is the second org-level GitHub gotcha after "GitHub Environments override the OIDC `sub` claim" — both flow from the org being on Free tier and discovering the constraints empirically.
+
+**Recovery state-of-the-world (2026-05-20):**
+
+- `origin/main` HEAD = `7caf7d9` (PR #122 squash merged 2026-05-20 in pre-Day-23 consolidation, memory-only change).
+- Staging EC2 deployed code = commit `95355aa` (PR #124, Day 22 migration 0009).
+- Drift = memory-only. Safe to leave until next successful deploy.
+
+---
+
 ## Porichoy procurement status — credentials not yet obtained
 
 **Status (2026-05-19):** Porichoy NID verification (`api.porichoy.gov.bd`) is still in the procurement gap. Credentials were not obtained during Sprint 2. The PorichoyScaffoldStub at `apps/api/src/infra/porichoy/client.ts` throws `PorichoyNotImplementedError` on every call regardless of env var state.

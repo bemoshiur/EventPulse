@@ -1,9 +1,23 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-05-19 (Sprint 3 Day 21 — fee calculator shipped + verification-deploy clean)
-**Driver:** Claude Code (Opus 4.7) — Day 21 in flight; next session continues Sprint 3 Day 22
+**Last update:** 2026-05-20 (pre-Day-23 consolidation session — partially blocked on GitHub Actions org-wide failure)
+**Driver:** Claude Code (Opus 4.7) — pre-Day-23 consolidation work; next session resumes after GHA billing resolved + 5 held PRs land
 
-## State right now
+## State right now (2026-05-20 pre-Day-23 consolidation)
+
+**Pre-Day-23 consolidation BLOCKED on GitHub Actions org-wide failure.** All GHA workflows (CI, deploy-staging, commitlint) started failing at 19:01 UTC on 2026-05-19. Failure pattern is consistent across `push`, `pull_request`, and `workflow_dispatch` events: runner picks up → "Job is about to start running on the hosted runner" appears in system log → ~2s later conclusion=`failure`, zero steps recorded, no step logs available. Most likely cause: org-level Actions quota/billing cutover (PublicPulseAgency is an org on Free tier; private repos get finite monthly minutes). User action required: verify billing at github.com/organizations/publicpulseagency/settings/billing — see `.claude/memory/gotchas.md` "GitHub Actions org-wide failure" for full recovery procedure.
+
+**Staging EC2 itself is healthy** — verified via direct curl smoke tests during this session: 5 vhosts SSL=0 (cert 2-SAN apex+wildcard, expires Aug 17 2026); API `/health` returns DB-aware JSON `{db: 'ok', checkedMs: 11}`; Trust Center renders with DRAFT banner on Privacy; Nginx `/nginx-health` returns ok; PM2 api+web online. Migrations 0001-0009 applied; `tenants.preferred_locale` column present with CHECK constraint. Secrets Manager has 5 staging entries (jwt-access-secret, jwt-refresh-secret, kyc, oauth-google, eps). Pre-existing: OAuth `/start` returns 503 OAUTH_NOT_CONFIGURED — `eventpulse/staging/oauth-google` secret exists but bootstrap-staging.sh has not been re-run to materialise it into `.env.staging`. This is the same gap documented in the Day 20 handoff.
+
+**Pre-Day-23 consolidation session — what landed (partial):**
+
+- Workstream 1 Phase 1 — pre-flight state audit (10 checks all green or expected)
+- Workstream 2.1 PR #122 (Decision O memory) squash-merged to main (commit `7caf7d9`)
+- Workstream 2.2 Issue #52 (Sprint 2 kickoff) closed with reference to v0.2.0-sprint-2 tag
+- Workstream 2.3 alert classification (3 medium Dependabot dev-tooling: postcss/vite/esbuild — no production runtime impact; 9 Dependabot fix PRs inventoried — 2 majors needing careful review (`@noble/hashes` 1→2, `jose` 5→6, both security-critical), 1 major frontend (`hookform/resolvers` 3→5), 6 patch/minor)
+- Workstream 3 README professional rewrite (~340 lines covering overview/architecture/sprint structure/memory protocol/playbook pointer/development setup/deployment/testing/operational notes/repo structure/free-plan workflow/DoD/contact; no leaked secrets/IPs/instance IDs)
+
+**Held until GHA restored:** the 5 remaining Day 22 PRs (#123 wildcard cert memory + 5 gotchas; #125 SES templates + selectLocale; #126 subdomain provisioning + migration 0010; #127 deploy.sh Fix 6b; #128 Day 22 EOD memory carrying the Day 22 closure content) + 9 Dependabot fix PRs + this session's own EOD memory PR (which carries the pre-Day-23 closeout commits). Drift between `origin/main` (now `7caf7d9`, PR #122 merged) and the staging-deployed code (`95355aa`, PR #124) is memory-only and safe to leave until next successful deploy.
 
 **Sprint 3 Day 21 fee calculator SHIPPED.** `apps/api/src/domain/payments/fee-calculator.ts` (PR #119, 2026-05-19, 33 unit tests). Math review checkpoint passed: 14/16 cells match §14.2 verbatim; Mode C `buyer_total`+`eps_fee` match §14.2's parenthetical alternative ("or 25.00 depending on which side") not the primary line — see Decision N (decisions.md 2026-05-19) for the EPS-base rule + the mandatory Day 24-25 EPS sandbox truth gate that empirically validates the rule against real EPS transactions. §14.2 amended in a separate playbook PR with the calculator implementation note + Decision N reference.
 
@@ -33,12 +47,28 @@ b502d74           docs: Day 20 EPS library investigation note (#105)
 
 ## Next concrete step
 
-**Sprint 3 Day 22 — Event CRUD + `tenant_fee_config` exposure.** Day 21 main work (fee calculator) shipped. Two Day 21 carry-forwards still pending:
+**Resolve GHA org billing FIRST, then resume PR consolidation, then start Day 23 work.** Day 23 cannot start until the deploy pipeline is functional — every merge to main would otherwise create silent main-vs-staging drift. Order of operations:
 
-1. **AM PR — bilingual SES templates** (Day 20 carry, queued at Day 21 AM, slipped). 5 templates × 2 locales; SES create-template idempotent; notification stubs wired to live `SendTemplatedEmail`.
-2. **Day 21 first PR — tenant subdomain provisioning** (Day 20 carry, queued at Day 21 first PR, slipped). SSM SendCommand → Nginx vhost template → certbot wildcard → audit trail. **Staging integration test REQUIRED before merge** — this was the Day 20 STOP-ASK.
+1. **User action: verify GHA org billing** at github.com/organizations/publicpulseagency/settings/billing. If Actions minutes exhausted on the Free private-repo allowance, upgrade to Team (USD 4/user/month for org-level Actions minutes) OR enable pay-as-you-go billing. **Pro is per-user and does NOT solve org-level quota**.
+2. **Fire one verification deploy:** `gh workflow run deploy-staging.yml --ref main`. Expected: runs steps cleanly (not 3-second failure), catches up the memory-only PR #122 commit (`7caf7d9`) to staging.
+3. **Resume held PR merges in dependency sequence:**
+   - PR #123 (memory: cert wildcard applied + 5 gotchas) — memory-only
+   - PR #125 (feat: bilingual SES templates + selectLocale helper) — code; deploy after merge
+   - PR #126 (feat: tenant subdomain provisioning + migration 0010) — code + migration; deploy after merge; first run exercises Fix 6b retroactively
+   - PR #127 (fix: deploy.sh Nginx reload on vhost change) — exercised by #126
+   - PR #128 (memory: Day 22 EOD)
+   - This pre-Day-23 PR (README + memory + GHA gotcha) — last
+4. **Verify each merge's deploy goes green** before merging the next. If any fails for reasons NOT related to billing (e.g. migration 0010 hits an unexpected state), HALT and surface.
+5. **Day 23 main work — Event CRUD + `tenant_fee_config` exposure** (deferred from original Day 22-23 slot):
+   - Event CRUD API (`apps/api/src/routes/tenant/events.ts`) — POST/GET/PATCH/DELETE; event slug generation (citext unique, reserved-handles guard, 3-30 chars); status state machine (`draft → published → on_sale → sold_out → live → completed → archived`) per §2.4.
+   - `tenant_fee_config` exposed in super admin tenant detail view — fee-override modal + `fee_override_log` audit (4-eyes principle for changes > 10 bps per §14.4).
+   - Fixed form template per event type — hardcoded React forms (full builder is Sprint 5+).
+   - Pre-flight reads: §2.4 (event lifecycle), §9.3 (events schema), §14.4 (tenant fee override workflow), §6 (API patterns).
 
-Day 22 main work (Event CRUD + `tenant_fee_config` super admin exposure + status state machine) lands alongside these two carries. Pick up whichever opens cleanly first.
+**Post-GHA-restoration verification (carried from original Day 23 pre-flight):**
+
+- Confirm staging-deploy after the held-PR merges picks up the new vhost — first deploy that touches `infra/nginx/**` exercises Fix 6b's reload path.
+- Verify Item 13 subdomain provisioning fires on next KYC approve in staging — create a fixture tenant, submit KYC, approve, watch logs for `provisionTenantSubdomain: success` + new vhost serving at `<slug>.staging.eventpulse.com.bd/nginx-health` returning 200.
 
 **Mandatory non-negotiable Day 24-25 EPS sandbox truth gate (per Decision N 2026-05-19).** Before any Day 26 sandbox-order work begins:
 
@@ -123,6 +153,7 @@ Days 11-20 shipped:
 
 ## Pending user actions
 
+- **🔴 NEW (2026-05-20) — GHA org billing verification + restoration.** All GHA workflows failing since 19:01 UTC on 2026-05-19. Pre-Day-23 consolidation work partially blocked. See `.claude/memory/gotchas.md` "GitHub Actions org-wide failure" for full diagnostic + recovery procedure. Likely Free-plan org-level Actions quota exhausted; Team-plan upgrade or pay-as-you-go billing restores. Until restored: no PR merges (creates main-vs-staging drift); manual SSM-based deploy is the legitimate fallback if staging code needs updating urgently.
 - **`eventpulse/staging/eps` Secrets Manager entry** — ✅ DONE 2026-05-19 (Day 20 closeout retry). EPS production credentials written via the same `mktemp` + `--secret-string file://` pattern that worked for Google OAuth. Tags: `env=staging`, `eps-mode=production`, `sensitivity=payments`. Next staging deploy materialises into `.env.staging` via bootstrap-staging.sh extension shipped in PR #106. **STAGING_PAYMENT_BLOCK=1 still mandatory** to prevent priced orders from charging real cards — guard enforced in Sprint 3 Day 26+ in-house wrapper at `apps/api/src/infra/eps/client.ts`.
 - **Google OAuth credentials** — ✅ DONE 2026-05-19. `eventpulse/staging/oauth-google` Secrets Manager entry created with Moshiur-supplied Client ID + Client Secret. Manual happy-path verification gated on next staging deploy materialising the secret into `.env.staging` via bootstrap-staging.sh.
 - **Apple OAuth credentials** — DROPPED from MVP scope per Moshiur 2026-05-19. See `.claude/memory/decisions.md` "Apple Sign-In dropped from MVP scope — Google OAuth only". Scaffolding stays in code (cost-neutral); 503 OAUTH_NOT_CONFIGURED handles missing-credentials state. v2.4 playbook bump candidate: amend §1.2 + §5.2 + §19.2 references to "all four auth methods" → "three at MVP launch".
