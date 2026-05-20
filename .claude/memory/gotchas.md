@@ -21,9 +21,17 @@ Job is about to start running on the hosted runner: GitHub Actions 1000001774
 
 …then nothing. No `actions/checkout@v4` step start, no setup logs. The runner is allocated but then the job dies before the first step's container can execute.
 
-**Most likely cause: GitHub Actions billing/quota cutover at the org level.** Private repos on the GitHub Free plan get a finite monthly allowance of Actions minutes (2,000 minutes for personal accounts; 0 for organizations on Free). PublicPulseAgency is an organisation; the Sprint 2 + early Sprint 3 push volume may have exhausted whatever seed/trial credit was active. The 3-second-failure pattern matches GitHub's documented quota-exhaustion behaviour: the workflow queues, the scheduler tries to allocate a runner, and then billing rejects execution before any step container starts.
+**Confirmed cause: GitHub Free-tier 2,000-minute org-level Actions quota exhausted with the spending limit pinned at $0.** PublicPulseAgency is an organisation on Free tier; the Sprint 2 + early Sprint 3 push volume exhausted the included 2,000 monthly minutes mid-billing-cycle. With the spending limit at the Free-tier default of $0, GitHub's billing layer rejected every job at runner-allocation time — exactly matching the 3-second-failure-with-no-steps pattern. The deploy + CI workflows queue, the scheduler tries to allocate a runner, then billing aborts before any step container starts.
 
-**Could not confirm via API:** `GET /orgs/publicpulseagency/settings/billing/actions` returns 404 with the current `gh auth` scope set. Requires the `admin:org` scope or browser-only Settings → Billing & plans inspection.
+**Resolved (2026-05-19/20):** Moshiur raised the Actions spending limit to **$20/month**. Overage minutes beyond the 2,000-minute free allowance are now billed against this cap. CI + deploy workflows started succeeding again immediately after the limit raise; subsequent runs (Dependabot Updates 03:48 UTC; CodeQL on `7caf7d9` 20:37 UTC) ran cleanly.
+
+**Recurrence risk + long-term mitigation:** The 2,000-minute Free-tier allowance resets each billing cycle. If monthly Actions consumption keeps exceeding 2,000 min (Sprint 2 + 3 trajectory suggests it will), the failure pattern returns the moment cumulative overage burns through the $20 cap. Long-term mitigation options:
+
+1. **CI consumption reduction via path-filters** — `.github/workflows/ci.yml` currently runs the full pipeline on every push regardless of which files changed. Adding `paths:` filters so docs-only / memory-only changes skip the integration + e2e + build jobs would cut consumption substantially. Memory commits (`memory:` prefix) make up a meaningful slice of pushes.
+2. **Accept the overage** — leave the $20 cap, accept monthly billing variance, treat it as cost-of-velocity.
+3. **Raise the cap further** — only meaningful as a panic move if a sprint goes unexpectedly active.
+
+The `gh api /orgs/publicpulseagency/settings/billing/actions` endpoint requires the `admin:org` scope (returns 404 otherwise). Surface this when scoping any future "watch the meter" automation.
 
 **Why this is load-bearing:** All deploy + CI gates fail. The brief's Workstream 1 Phase 2 (consolidation deploy via empty commit) cannot complete; Workstream 2.1 (merging the 5 remaining Day 22 PRs) creates more failed CI runs without landing the code on staging; Dependabot fix PRs cannot merge through CI gates. Each merge to main does NOT deploy to staging — the EC2 stays on the last-successfully-deployed commit (95355aa from PR #124 yesterday). The mismatch between origin/main and the running staging code grows with each merge.
 
