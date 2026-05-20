@@ -64,14 +64,14 @@ Why this shape: it is small enough to debug end-to-end, costs under USD 30/month
 
 ## Sprint structure
 
-| Sprint   | Window       | Scope                                                                                 |
-| -------- | ------------ | ------------------------------------------------------------------------------------- |
+| Sprint   | Window       | Scope                                                                                  |
+| -------- | ------------ | -------------------------------------------------------------------------------------- |
 | Sprint 1 | Days 1–10    | Foundation: monorepo + design system, EC2 + Route 53 + TLS, identity + RLS, auth flows |
 | Sprint 2 | Days 11–20   | KYC pipeline, super admin review queue, Trust Center v0.1 placeholders, OAuth wiring   |
 | Sprint 3 | Days 21–30   | **Active.** Fee calculator, Event CRUD, EPS in-house wrapper, sandbox truth gate       |
 | Sprint 4 | Days 31–40   | Attendees, check-in, refunds, manual disbursement, public marketing, launch readiness  |
-| Phase 2  | Sprints 5–8  | Form/landing builders, automated disbursement, attendee portal, self-service hosting    |
-| Phase 3  | Sprints 9–12 | White-label, email campaigns, wallet passes, mobile check-in, discovery search          |
+| Phase 2  | Sprints 5–8  | Form/landing builders, automated disbursement, attendee portal, self-service hosting   |
+| Phase 3  | Sprints 9–12 | White-label, email campaigns, wallet passes, mobile check-in, discovery search         |
 | Phase 4  | Sprints 13+  | Marketplace recommendations, fraud ML, social layer, alternative payment gateways      |
 
 Sprint scope and per-day deliverables live in **CLAUDE.md §26**. Current sprint state — Done / In flight / Blocked — lives in **[.claude/memory/progress.md](./.claude/memory/progress.md)**. The annotated git tag `v0.X.0-sprint-N` ships at sprint end with a release notes file under [docs/releases/](./docs/releases/) carrying the retro.
@@ -82,13 +82,13 @@ Sprint scope and per-day deliverables live in **CLAUDE.md §26**. Current sprint
 
 `.claude/` is the committed persistent brain shared across teammates and AI sessions. Every meaningful decision, every gotcha, every sprint boundary persists here so the next reader — whether a future you, a teammate, or an AI session — picks up where the last one stopped.
 
-| File                                          | Purpose                                                                            |
-| --------------------------------------------- | ---------------------------------------------------------------------------------- |
-| [.claude/memory/MEMORY.md](./.claude/memory/MEMORY.md)       | One-line index of every other memory file                                          |
-| [.claude/memory/handoff.md](./.claude/memory/handoff.md)     | Session exit state — the first file to read at session start                       |
-| [.claude/memory/progress.md](./.claude/memory/progress.md)   | Current sprint — Done / In flight / Blocked                                        |
-| [.claude/memory/decisions.md](./.claude/memory/decisions.md) | Append-only architectural and product decision log                                 |
-| [.claude/memory/gotchas.md](./.claude/memory/gotchas.md)     | Things that broke or surprised us, with the avoid-next-time recipe                 |
+| File                                                         | Purpose                                                            |
+| ------------------------------------------------------------ | ------------------------------------------------------------------ |
+| [.claude/memory/MEMORY.md](./.claude/memory/MEMORY.md)       | One-line index of every other memory file                          |
+| [.claude/memory/handoff.md](./.claude/memory/handoff.md)     | Session exit state — the first file to read at session start       |
+| [.claude/memory/progress.md](./.claude/memory/progress.md)   | Current sprint — Done / In flight / Blocked                        |
+| [.claude/memory/decisions.md](./.claude/memory/decisions.md) | Append-only architectural and product decision log                 |
+| [.claude/memory/gotchas.md](./.claude/memory/gotchas.md)     | Things that broke or surprised us, with the avoid-next-time recipe |
 
 Protocols enforcing how these files get written and read live in **[.claude/rules/](./.claude/rules/)** — `memory-protocol.md`, `session-protocol.md`, `handoff-protocol.md`. Read them once before opening any session that will write code or memory.
 
@@ -102,23 +102,23 @@ The cardinal rules: memory is committed in its own commits prefixed `memory:` so
 
 Most-referenced sections:
 
-| Section | Topic                                                       |
-| ------- | ----------------------------------------------------------- |
-| §1.2    | Locked tech stack (versions are immutable)                  |
-| §1.3    | Twelve immutable rules                                      |
-| §1.5    | Design system tokens, glassmorphism utilities, motion       |
+| Section | Topic                                                           |
+| ------- | --------------------------------------------------------------- |
+| §1.2    | Locked tech stack (versions are immutable)                      |
+| §1.3    | Twelve immutable rules                                          |
+| §1.5    | Design system tokens, glassmorphism utilities, motion           |
 | §4.2.1  | Postgres role hierarchy (`eventpulse_app` ← `eventpulse_admin`) |
-| §5      | Authentication (three audiences, rolled-our-own composition) |
-| §6      | API patterns (envelope, error codes, idempotency, pagination) |
-| §9      | Complete database schema (Phase 1 + Phase 2)                |
-| §11     | EPS integration (flow + per-endpoint hash mechanism + gotchas) |
-| §13     | KYC engine + platform-wide manual-verification policy        |
-| §14     | Settlement engine + fee modes + single source of money truth |
-| §17     | Infrastructure (single-EC2 architecture + scaling triggers)  |
-| §20     | Trust Center                                                |
-| §21     | Legal positioning (hosting-space doctrine + AUP enforcement) |
-| §26     | Sprint plan                                                 |
-| §29     | Open decisions (Claude Code halts on these)                  |
+| §5      | Authentication (three audiences, rolled-our-own composition)    |
+| §6      | API patterns (envelope, error codes, idempotency, pagination)   |
+| §9      | Complete database schema (Phase 1 + Phase 2)                    |
+| §11     | EPS integration (flow + per-endpoint hash mechanism + gotchas)  |
+| §13     | KYC engine + platform-wide manual-verification policy           |
+| §14     | Settlement engine + fee modes + single source of money truth    |
+| §17     | Infrastructure (single-EC2 architecture + scaling triggers)     |
+| §20     | Trust Center                                                    |
+| §21     | Legal positioning (hosting-space doctrine + AUP enforcement)    |
+| §26     | Sprint plan                                                     |
+| §29     | Open decisions (Claude Code halts on these)                     |
 
 ---
 
@@ -243,7 +243,7 @@ eventpulse/
 └── tsconfig.base.json
 ```
 
-Naming conventions (CLAUDE.md §3.1): kebab-case filenames; PascalCase React components matching the export; snake_case table + column names; SCREAMING_SNAKE_CASE constants; `EVENTPULSE_*` env var prefix for app-owned variables.
+Naming conventions (CLAUDE.md §3.1): kebab-case filenames; PascalCase React components matching the export; snake*case table + column names; SCREAMING_SNAKE_CASE constants; `EVENTPULSE*\*` env var prefix for app-owned variables.
 
 Module boundaries: `apps/web` and `apps/api` never import from each other; both pull from `packages/*`; shared types live in `packages/shared-types`.
 
@@ -264,12 +264,12 @@ To pick up live work in flight, start at:
 
 Event Pulse is a **private repo on GitHub Free**. UI-level branch protection isn't available on this tier, so the same outcomes get enforced through local tooling and CI gates:
 
-| Concern                                | What enforces it                                                                                                              |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Don't push to `main` / `prod` directly | Local pre-push hook (`.husky/pre-push`) — installed automatically via `pnpm install`                                          |
-| Don't merge broken code                | `ci.yml` runs typecheck / lint / unit / integration / RLS / Playwright on every PR; merge gate is "never click Merge anyway"  |
+| Concern                                | What enforces it                                                                                                               |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Don't push to `main` / `prod` directly | Local pre-push hook (`.husky/pre-push`) — installed automatically via `pnpm install`                                           |
+| Don't merge broken code                | `ci.yml` runs typecheck / lint / unit / integration / RLS / Playwright on every PR; merge gate is "never click Merge anyway"   |
 | Don't accidentally deploy to prod      | `deploy-prod.yml` is `workflow_dispatch`-only and requires a typed input gate (`confirm_target=production` + semver tag match) |
-| Self-review honesty                    | PR template ships a solo-review banner + the full §25 Definition-of-Done checklist                                            |
+| Self-review honesty                    | PR template ships a solo-review banner + the full §25 Definition-of-Done checklist                                             |
 
 Override the pre-push hook in genuinely exceptional cases with `git push --no-verify`, and immediately log the override (date + reason) in `.claude/memory/gotchas.md`. The day a second engineer joins, the move is to upgrade to GitHub Pro (~USD 48/year) so UI-enforced branch protection comes back. Full rationale in `.claude/memory/decisions.md` "GitHub free plan — branch protection via local hooks + CI" (2026-05-16).
 
