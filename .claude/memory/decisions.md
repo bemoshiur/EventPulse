@@ -4,6 +4,30 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-20 · Org migration — `publicpulseagency` (personal) → `The-Public-Pulse-Agency` (org); OIDC trust policy updated to Option A
+
+**Context:** Pre-Day-23 consolidation resumption discovered that the first auto-deploy after GHA was restored failed at the OIDC AssumeRole step with `Not authorized to perform sts:AssumeRoleWithWebIdentity`. Investigation surfaced two simultaneous changes that landed during the GHA outage window: (1) Moshiur's personal GitHub username `publicpulseagency` was changed; (2) a new GitHub organisation `The-Public-Pulse-Agency` was created and the EventPulse repo was transferred from the personal account into the new org. Nothing was deleted; HTTP redirects keep `publicpulseagency/EventPulse` URLs working, but the OIDC `sub` and `job_workflow_ref` claims carry the new canonical org login (`The-Public-Pulse-Agency`) — and the IAM trust policy on `eventpulse-deploy-staging` was pinned to the old name. Three claims, exact-match per the canonical pattern: both `sub` and `job_workflow_ref` mismatched, AssumeRole rejected.
+
+**Decision:** Update the `eventpulse-deploy-staging` IAM trust policy via Option A — replace the old org login `publicpulseagency` with the new org login `The-Public-Pulse-Agency` on both `sub` and `job_workflow_ref` claims. No defensive arrays (`StringEquals` with both old + new values). Old name will never authenticate again — the personal account it came from no longer owns the repo. The three-claim exact-match canonical pattern (§17.9.1 + 2026-05-17 decision) is preserved unchanged; only the org-login value moves.
+
+Companion updates land in the same PR:
+
+1. `infra/scripts/setup-github-oidc.sh` — default `GITHUB_REPO` in usage docs flipped to `The-Public-Pulse-Agency/EventPulse`; comment added explaining the canonical-login vs display-name distinction.
+2. `CLAUDE.md` §17.9.1 — example JSON updated to new org name; post-amendment blockquote pointing at this decisions entry + the new gotcha.
+3. `.claude/memory/gotchas.md` — new entry "GitHub repo transfer breaks OIDC trust policies + moves billing to a new entity" with the two-claim mismatch failure pattern + recovery procedure + the billing-separation finding.
+
+**Consequences:**
+
+- **Deploys work again.** Post-fix `gh workflow run deploy-staging.yml --ref main` resumes catching up `origin/main` onto staging EC2.
+- **`eventpulse-deploy-prod` (Sprint 4 carry) will be created via setup-github-oidc.sh against the new org login from day one** — no migration step needed for prod.
+- **Billing surface moved.** The new org `The-Public-Pulse-Agency` is a separate billing entity from the previous personal account. The $20 Actions spending limit Moshiur set during the GHA outage was on the personal account and does NOT carry over. The new org gets its own 2,000-min Free-tier allowance + own spending limit (Free-tier default $0). If org-level consumption exceeds 2,000 min/cycle without a non-zero org-level spending limit, the GHA outage pattern recurs. Browser-only inspection at <https://github.com/organizations/The-Public-Pulse-Agency/settings/billing/summary> (REST endpoint deprecated → 410; `admin:org` scope needed for new API). Tracked as a pending user action in handoff.md.
+- **Canonical pattern unchanged.** §17.9.1 three-claim shape stays exact-match-no-arrays. Org login is a stable value (changes only when a repo transfers to a new owner); arrays would erode the "exact" guarantee for a change that's both rare and not load-bearing-after-the-fact.
+- **Cross-reference:** all `publicpulseagency/EventPulse` paths in old PR descriptions, commit messages, gotchas + decisions stay as-historical-record (those URLs still work via HTTP redirect). Only forward-looking values (trust policies, provisioning script defaults, CLAUDE.md examples) flip to the new org. The old gotcha (Sprint 1 Day 9-10) about CI failing because OIDC role didn't exist remains valid history; the new entry layers on top.
+
+---
+
+---
+
 ## 2026-05-19 · Decision O — Day 22 architectural choices: staging cert moves to wildcard + tenants.preferred_locale column
 
 **Context:** Sprint 3 Day 22 pre-flight surfaced two STOP-ASKs against the brief's assumptions: (1) staging cert is 5-SAN, not wildcard — per-tenant subdomain provisioning would require certbot extend per approve; (2) `tenants.preferred_locale` column was referenced by the SES-templates workstream but doesn't exist in the schema. Both are upstream-of-feature-code architectural choices; resolving them before any feature PR lands keeps the dependency chain clean.
