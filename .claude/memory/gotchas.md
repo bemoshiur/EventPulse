@@ -4,32 +4,112 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
-## GitHub repo transfer breaks OIDC trust policies + moves billing to a new entity (2026-05-20)
+## GitHub repo transfer cascades through THREE owner-scoped trust relationships (2026-05-20 / -21)
 
-**Symptom 1 — deploys fail at OIDC AssumeRole.** First auto-deploy after the Pre-Day-23 GHA outage resolved failed with `Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity`. CI itself ran fine — only the deploy job's `aws-actions/configure-aws-credentials@v4` step failed. Investigation: the EventPulse repo had been transferred from a personal account `publicpulseagency` to a new GitHub organisation `The-Public-Pulse-Agency` during the outage window. GitHub HTTP-redirects `publicpulseagency/EventPulse/*` URLs to the new path so `git push`, `gh pr`, and browser links keep working — but the OIDC tokens GitHub mints for Actions jobs carry the **new canonical org login** in both `sub` and `job_workflow_ref` claims, and the IAM trust policy was pinned to the old login.
+**TL;DR.** Transferring a repo to a new GitHub org breaks **three** independent owner-scoped trust relationships in sequence. Fix one, the next surfaces. The three are: **(1) OIDC trust policy** (`sub` + `job_workflow_ref` carry the owner name; AWS IAM rejects AssumeRole until updated); **(2) Actions billing entity** (new org has its own 2,000-min Free-tier allowance + its own Free-tier default $0 spending limit; a limit set on the previous owner does NOT carry over); **(3) Deploy keys** (org-level policy can disable deploy keys; transferred keys can land in a stale-metadata state that authenticates on the SSH greeting but rejects `git-upload-pack`). When migrating a repo to a new org, check + fix all three before expecting deploys to work. Each surfaces only after the prior is resolved, so a one-at-a-time debugging session burns hours; the runbook below is the consolidated three-layer fix.
 
-**Symptom 2 — Actions billing moved silently.** During the outage, Moshiur raised the Actions spending limit to $20 on his personal account. After the repo transfer, that limit no longer applies — the new org is a separate billing entity with its own 2,000-min Free-tier allowance and its own (Free-tier default $0) spending limit. CI started working again because the new org had fresh free minutes, NOT because the personal-account limit raise took effect. **The outage pattern recurs once the new org's monthly minutes exhaust**, unless a non-zero spending limit is set on the org itself.
+**Context.** Pre-Day-23 consolidation resumption discovered the cascade after the GHA quota outage resolved. Repo was transferred from personal account `publicpulseagency` to new org `The-Public-Pulse-Agency` during the outage window. GitHub HTTP-redirects URLs at the API/web layer so `git push`, `gh`, and browser links kept working without ceremony — but three lower layers carry the owner name as a verbatim claim or as a separate-entity reference, and each broke independently:
 
-**Why it happens:** Two layers move independently when a repo transfers:
+### Layer 1 — OIDC trust policy
 
-1. **OIDC identity claims** use the canonical (URL-path) org login, NOT the display name. The canonical login changes the instant the transfer completes, even though redirects mask the change at the HTTP layer. Both `sub` (`repo:OWNER/REPO:environment:NAME`) and `job_workflow_ref` (`OWNER/REPO/.github/workflows/FILE@refs/heads/BRANCH`) carry this value. Exact-match trust policies (which is the canonical project standard per CLAUDE.md §17.9.1) reject the AssumeRole call cleanly.
-2. **Billing entities are per-account.** Personal-account spending limits don't follow a repo when it transfers to an org. Org-level Actions consumption is metered against the org's own quota + spending limit, configured independently at `/organizations/<org>/settings/billing/summary`.
+**Symptom:** Deploy job fails at `aws-actions/configure-aws-credentials@v4` with `Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity`. CI itself runs fine — only AWS-touching jobs fail.
 
-**Fix (load-bearing — both layers):**
+**Why it happens.** The OIDC tokens GitHub mints for Actions jobs use the **new canonical org login** in both `sub` (`repo:OWNER/REPO:environment:NAME`) and `job_workflow_ref` (`OWNER/REPO/.github/workflows/FILE@refs/heads/BRANCH`) claims. The canonical login is the lowercase URL-path identifier, NOT the display name. It updates the instant the transfer completes. Exact-match trust policies (the project's canonical three-claim pattern per CLAUDE.md §17.9.1) reject the mismatched claims cleanly. HTTP redirects only mask the change at the API/web layer; OIDC consumes the new value directly.
 
-1. **IAM trust policy update.** For every `eventpulse-deploy-<env>` role that exists in AWS, edit the trust policy's `Condition.StringEquals` to use the new canonical org login on both `sub` and `job_workflow_ref` claims. Use Option A (replace, not arrays) — the old name will never authenticate again. `aws iam update-assume-role-policy --role-name <name> --policy-document file://<json>`. Apply the same fix to `eventpulse-deploy-prod` whenever it's created (Sprint 4 carry).
-2. **Update provisioning script.** `infra/scripts/setup-github-oidc.sh` usage docs default `GITHUB_REPO` to the new org login so a future re-run doesn't regress.
-3. **Update CLAUDE.md §17.9.1 example JSON** to the new org login. Add a dated amendment blockquote pointing at the decisions.md entry + this gotcha.
-4. **Set a non-zero org-level Actions spending limit.** Browser-only path: <https://github.com/organizations/The-Public-Pulse-Agency/settings/billing/summary>. The legacy `GET /orgs/{org}/settings/billing/actions` REST endpoint returns 410 Gone (moved per <https://gh.io/billing-api-updates-org>); the new API also requires the `admin:org` scope, which `gh auth refresh -h github.com -s admin:org` adds. Tracked as a pending user action in handoff.md.
+**Fix.** For every `eventpulse-deploy-<env>` role in AWS, replace the old owner name with the new owner name on both `sub` and `job_workflow_ref` claims:
 
-**How to avoid future occurrences:**
+```bash
+TMP=$(mktemp -t trust-policy) && cat > "$TMP" <<'JSON'
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Sid": "GitHubActionsOIDCStagingDeployWorkflowOnMain",
+    "Effect": "Allow",
+    "Principal": { "Federated": "arn:aws:iam::739275468267:oidc-provider/token.actions.githubusercontent.com" },
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": {
+      "StringEquals": {
+        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+        "token.actions.githubusercontent.com:sub": "repo:The-Public-Pulse-Agency/EventPulse:environment:staging",
+        "token.actions.githubusercontent.com:job_workflow_ref": "The-Public-Pulse-Agency/EventPulse/.github/workflows/deploy-staging.yml@refs/heads/main"
+      }
+    }
+  }]
+}
+JSON
+aws iam update-assume-role-policy --role-name eventpulse-deploy-staging --policy-document "file://${TMP}" --profile eventpulse --region ap-southeast-1
+rm -f "$TMP"
+```
 
-- **Before any repo transfer:** audit OIDC trust policies for every `eventpulse-deploy-*` role + any external CI that uses GitHub-OIDC into AWS. Plan the trust-policy update as part of the transfer runbook, not as a post-hoc fix.
-- **After any repo transfer:** check the new owner's billing entity. Spending limits, payment methods, and Actions minute consumption all reset.
-- **Don't rely on HTTP redirects to mask org-name changes** — they only help layers that talk to the GitHub API/web. OIDC, webhooks-to-3rd-parties using `${{ github.repository }}` strings, scripts pinning the org name, and IAM trust policies all break silently.
-- **Org login vs display name:** the canonical login is the lowercase URL-path identifier; the display name is the human-friendly title. OIDC uses the canonical login. Always copy from the URL, never from the org's display name.
+Option A (replace, not arrays) — the old owner name will never authenticate again. Pattern stays exact-match, no `StringEquals` arrays, no `StringLike`. Apply identically to `eventpulse-deploy-prod` whenever it's created.
 
-**Cross-reference:** `.claude/memory/decisions.md` "Org migration — publicpulseagency → The-Public-Pulse-Agency" (2026-05-20, canonical source) + the prior canonical OIDC pattern (decisions.md 2026-05-17 "Canonical GitHub Actions → AWS OIDC trust pattern (project standard)") which the org-migration leaves intact at the pattern level (still three claims, still exact-match, still no arrays — only the org-login value moves).
+Also update `infra/scripts/setup-github-oidc.sh` so a re-run doesn't regress to the old owner name in its default `GITHUB_REPO`. And update `CLAUDE.md` §17.9.1 example JSON to match the new owner.
+
+### Layer 2 — Actions billing entity
+
+**Symptom.** CI works again after the layer 1 fix, but the underlying quota concern is hidden. The new org gets its own fresh 2,000-min Free-tier allowance the instant the repo lands in it — making the immediate post-transfer state appear "fine" — but any spending limit set on the prior owner's account does NOT follow the repo. Once the new org's monthly minutes exhaust, the 3-second-failure-on-runner-pickup pattern from the prior GHA outage gotcha recurs.
+
+**Why it happens.** Billing entities are per-account. Personal-account spending limits, payment methods, and consumption metering all stay with the personal account when a repo transfers out. Org-level Actions billing is configured independently. The Free-tier default for orgs is $0 spending limit — meaning the moment the org's 2,000 included minutes burn through, every job fails at runner-allocation time.
+
+**Fix.** Set a non-zero spending limit on the new org. Browser-only path:
+
+```text
+https://github.com/organizations/NEW-ORG/settings/billing/summary
+```
+
+The legacy `GET /orgs/{org}/settings/billing/actions` REST endpoint returns 410 Gone (moved per <https://gh.io/billing-api-updates-org>). The new API also requires the `admin:org` scope. `gh auth refresh -h github.com -s admin:org` adds it for future automation.
+
+### Layer 3 — Deploy keys
+
+**Symptom A:** `git-upload-pack` returns `ERROR: Repository not found` from the EC2 even though `ssh -T git@github.com` reports `Hi ORG/REPO! You've successfully authenticated`. (The greeting is a "what does this key belong to" RPC that completes against the deploy-key metadata; the upload-pack endpoint actually checks per-repo permission grants and rejects.)
+
+**Symptom B:** Attempting to delete + re-add the same public key returns `Validation Failed - Deploy keys are disabled for this repository` (HTTP 422) — pointing at an org-level policy, not a repo-level one.
+
+**Why it happens.** When a repo transfers to a new org, two things can go wrong with deploy keys independently:
+
+1. **The org may have `deploy_keys_enabled_for_repositories: false`.** This is an org-level security policy (Settings → Member privileges → Deploy keys). If the policy is disabled, NO repo in the org can have deploy keys — the SSH-greeting auth path still works (it's not feature-gated by this flag) but `git-upload-pack` rejects per-repo because the per-repo permission grant requires the feature to be enabled.
+2. **The transferred key metadata can land in a stale, non-functional state.** GitHub carries the deploy-key entry over (visible via `gh api /repos/NEW-ORG/REPO/keys`) but the underlying permission grant doesn't actually transfer cleanly. The key appears present + verified but fails real git operations. Delete + re-add of the same public key restores the permission grant — but only if the org-level feature is enabled.
+
+**Fix (two-step).**
+
+1. **Enable deploy keys at the org level.** Browser: Settings → Member privileges → Deploy keys → enable → Save. Or API (needs `admin:org` scope):
+
+   ```bash
+   gh api -X PATCH /orgs/NEW-ORG -F deploy_keys_enabled_for_repositories=true
+   ```
+
+   Verify: `gh api /orgs/NEW-ORG --jq .deploy_keys_enabled_for_repositories` returns `true`.
+
+2. **Delete the stale key entry, re-add the same public key fresh.** The public key is unchanged; only the per-repo grant needs to be recreated. Stale entries surface via `gh api /repos/NEW-ORG/REPO/keys` as present-but-non-functional. Sketch (substitute real owner/repo + key body):
+
+   ```bash
+   gh api /repos/NEW-ORG/REPO/keys --jq '.[].id' | while read id; do
+     gh api -X DELETE /repos/NEW-ORG/REPO/keys/$id
+   done
+   # Then POST a fresh entry with the same public key body.
+   # Avoid heredoc-inside-heredoc rendering issues: build the JSON payload
+   # in a temp file with mktemp, then `gh api -X POST ... --input "$TMP"`.
+   ```
+
+3. **Update the EC2's git remote URL** to the new owner (`git remote set-url origin git@github.com:NEW-ORG/REPO.git`). Old URL is dead even though HTTP redirects mask it for browser/CLI; SSH-protocol git operations bypass the redirect.
+
+**Real test (not `ssh -T`).** `ssh -T git@github.com` reports auth-success even when the actual permission grant is broken. The truth-revealing test is from the EC2 itself:
+
+```bash
+sudo -u eventpulse git -C /home/eventpulse/app ls-remote origin HEAD
+```
+
+A real SHA in stdout = working. Anything else = layer 3 still broken.
+
+### How to avoid future occurrences
+
+- **Before any repo transfer:** audit all THREE layers explicitly. Don't assume any of them survives the transfer cleanly. Document the layer-by-layer state pre-transfer so the post-transfer recovery script is one-pass.
+- **After any repo transfer:** treat the first deploy attempt as a controlled probe of all three layers. The OIDC error surfaces first (loudest); fix it and the billing concern is silent until the org's first quota cycle; the deploy-keys break hides behind the OIDC fix and surfaces only on the first auto-deploy.
+- **Test each layer with the truth-revealing call**, not the friendly one. OIDC: the actual deploy run, not a workflow_dispatch on an unrelated workflow. Billing: the org's `/settings/billing/summary` page directly, not "is CI running today?" Deploy keys: `git ls-remote origin HEAD` from the EC2, not `ssh -T git@github.com`.
+- **Org login vs display name.** Always copy from the URL path (lowercase canonical login), never from the org's display name. OIDC + git remote URLs + `${{ github.repository }}` substitutions all use the canonical login. Display names are decorative.
+- **Don't rely on GitHub HTTP redirects to mask owner-name changes.** They only help layers that talk to the GitHub API/web/git-over-HTTPS. SSH-protocol git operations, OIDC tokens, IAM trust policies, webhook payloads using `${{ github.repository }}` strings, and scripts pinning the owner name all break silently.
+
+**Cross-reference:** `.claude/memory/decisions.md` "Org migration — publicpulseagency → The-Public-Pulse-Agency" (2026-05-20, canonical source) + the prior canonical OIDC pattern (decisions.md 2026-05-17 "Canonical GitHub Actions → AWS OIDC trust pattern (project standard)") which the org-migration leaves intact at the pattern level (still three claims, still exact-match, still no arrays — only the owner-login value moves).
 
 ---
 
