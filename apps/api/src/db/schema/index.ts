@@ -586,3 +586,92 @@ export const legalDocumentVersions = pgTable(
     index('idx_legal_versions_document').on(t.documentId, t.effectiveAt),
   ],
 )
+
+// ─────────────────────────────────────────────────────────────────────────
+// EVENTS — Sprint 3 Day 23 Workstream 1 per CLAUDE.md §9.3.
+//
+// 27 columns: §9.3 spec minus primary_domain_id (deferred to Sprint 7 when
+// custom_domains lands per Phase 2 white-label scope; 2026-05-24 Day 23
+// pre-flight decision). MVP routing relies on tenant subdomain
+// (provisionTenantSubdomain) + path-mode URLs.
+//
+// Status CHECK enforces value-set membership only; the linear transition
+// chain (§2.4) is validated by apps/api/src/domain/event-state-machine.ts
+// as a pure function (mirrors fee-calculator.ts purity discipline).
+//
+// Fee handling defaults to 'pass_through' per §14.1. Service layer
+// snapshots the per-event values at event-create from tenant_fee_config.
+// fee-calculator (Sprint 3 Day 21) reads the snapshot from the event +
+// order, NOT from tenant_fee_config at order time — see decisions.md
+// 2026-05-24 "EPS fee is NOT per-tenant configurable" for the rule.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const events = pgTable(
+  'events',
+  {
+    id: uuid()
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    slug: citext().notNull(),
+    type: text().notNull(),
+    status: text().notNull().default('draft'),
+    visibility: text().notNull().default('public'),
+    isListedPublicly: boolean('is_listed_publicly').notNull().default(false),
+    title: text().notNull(),
+    titleBn: text('title_bn'),
+    description: text(),
+    descriptionBn: text('description_bn'),
+    startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+    endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+    timezone: text().notNull().default('Asia/Dhaka'),
+    venue: jsonb().notNull(),
+    capacity: integer(),
+    bannerImageUrl: text('banner_image_url'),
+    ogImageUrl: text('og_image_url'),
+    // primary_domain_id intentionally deferred to Sprint 7 (custom_domains
+    // is Phase 2 white-label scope) — MVP routing via tenant subdomain +
+    // path-mode. 2026-05-24 Day 23 pre-flight decision.
+    epsFeeHandling: text('eps_fee_handling').notNull().default('pass_through'),
+    platformFeeHandling: text('platform_fee_handling').notNull().default('pass_through'),
+    refundPolicy: jsonb('refund_policy')
+      .notNull()
+      .default(sql`'{"allowed":false}'::jsonb`),
+    settings: jsonb()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    check(
+      'events_status_chk',
+      sql`${t.status} IN ('draft','published','on_sale','sold_out','live','completed','archived')`,
+    ),
+    check('events_visibility_chk', sql`${t.visibility} IN ('public','unlisted','private')`),
+    check(
+      'events_type_chk',
+      sql`${t.type} IN ('concert','alumni','standup','conference','workshop','community','sports','other')`,
+    ),
+    check('events_eps_fee_handling_chk', sql`${t.epsFeeHandling} IN ('absorb','pass_through')`),
+    check(
+      'events_platform_fee_handling_chk',
+      sql`${t.platformFeeHandling} IN ('absorb','pass_through')`,
+    ),
+    check('events_capacity_chk', sql`${t.capacity} IS NULL OR ${t.capacity} > 0`),
+    check('events_ends_after_starts_chk', sql`${t.endsAt} >= ${t.startsAt}`),
+    unique('events_tenant_slug_uq').on(t.tenantId, t.slug),
+    index('idx_events_tenant_status').on(t.tenantId, t.status, t.startsAt),
+    // Partial index for /discover + admin upcoming-events widget queries.
+    index('idx_events_starts_at_active')
+      .on(t.startsAt)
+      .where(sql`${t.status} IN ('published','on_sale','live')`),
+  ],
+)
