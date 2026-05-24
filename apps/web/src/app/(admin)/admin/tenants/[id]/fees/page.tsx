@@ -150,7 +150,7 @@ export default function AdminTenantFeesPage({ params }: { params: Promise<{ id: 
       <section className="rounded-2xl border border-[var(--ep-line)] bg-white/60 p-6 shadow-sm">
         <h3 className="text-xl font-semibold text-[var(--ep-ink)]">Set / update override</h3>
         <p className="mt-1 text-sm text-[var(--ep-graphite)]">
-          Reason is required — it's logged to fee_override_log + audit_logs.
+          Reason is required — it&apos;s logged to fee_override_log + audit_logs.
         </p>
         <form onSubmit={onOverrideSubmit} className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>

@@ -42,10 +42,7 @@ import { withTenant } from '../../db/client.js'
 import { events, tenantFeeConfig } from '../../db/schema/index.js'
 import type { EventType, FeeHandlingMode } from '@eventpulse/shared-types'
 
-import {
-  type EventStatus,
-  validateTransition,
-} from '../../domain/event-state-machine.js'
+import { type EventStatus, validateTransition } from '../../domain/event-state-machine.js'
 import { logger } from '../../lib/logger.js'
 import {
   writeEventCreated,
@@ -165,8 +162,7 @@ export async function createEvent(input: CreateEventInput): Promise<CreatedEvent
         .from(tenantFeeConfig)
         .where(eq(tenantFeeConfig.tenantId, input.tenantId))
         .limit(1)
-      const fallback =
-        (cfg[0]?.defaultFeeMode as FeeHandlingMode | undefined) ?? 'pass_through'
+      const fallback = (cfg[0]?.defaultFeeMode as FeeHandlingMode | undefined) ?? 'pass_through'
       if (!input.platformFeeHandling) platformFeeHandling = fallback
       if (!input.epsFeeHandling) epsFeeHandling = fallback
     }
@@ -200,8 +196,7 @@ export async function createEvent(input: CreateEventInput): Promise<CreatedEvent
             ogImageUrl: input.ogImageUrl ?? null,
             epsFeeHandling,
             platformFeeHandling,
-            refundPolicy:
-              (input.refundPolicy as object | undefined) ?? { allowed: false },
+            refundPolicy: (input.refundPolicy as object | undefined) ?? { allowed: false },
             createdBy: input.actorUserId,
           })
           .returning({ id: events.id, slug: events.slug })
@@ -209,7 +204,18 @@ export async function createEvent(input: CreateEventInput): Promise<CreatedEvent
         inserted = rows[0]!
       } catch (err) {
         lastError = err
-        if (err instanceof Error && /events_tenant_slug_uq/.test(err.message)) {
+        // Drizzle wraps the original pg.DatabaseError; the wrapped
+        // Error's message may or may not include the constraint name
+        // depending on driver + version. Check both: pg.code 23505
+        // (unique_violation) on err or on err.cause, AND the constraint-
+        // name substring on the message text. Catches all the shapes the
+        // node-postgres + drizzle stack throws for a slug collision.
+        const errAny = err as { code?: string; cause?: { code?: string }; message?: string }
+        const pgCode = errAny?.code ?? errAny?.cause?.code
+        const messageHit =
+          err instanceof Error &&
+          (/events_tenant_slug_uq/.test(err.message) || /duplicate key value/i.test(err.message))
+        if (pgCode === '23505' || messageHit) {
           attempt += 1
           continue
         }
@@ -243,8 +249,7 @@ export async function createEvent(input: CreateEventInput): Promise<CreatedEvent
           ogImageUrl: input.ogImageUrl ?? null,
           epsFeeHandling,
           platformFeeHandling,
-          refundPolicy:
-            (input.refundPolicy as object | undefined) ?? { allowed: false },
+          refundPolicy: (input.refundPolicy as object | undefined) ?? { allowed: false },
           createdBy: input.actorUserId,
         })
         .returning({ id: events.id, slug: events.slug })
@@ -367,7 +372,8 @@ export async function listEvents(input: ListEventsInput): Promise<ListEventsResu
     const hasMore = rows.length > limit
     const page = rows.slice(0, limit)
     const last = page[page.length - 1]
-    const nextCursor = hasMore && last ? encodeCursor({ startsAt: last.startsAt, id: last.id }) : null
+    const nextCursor =
+      hasMore && last ? encodeCursor({ startsAt: last.startsAt, id: last.id }) : null
 
     return {
       items: page.map((r) => ({
@@ -519,8 +525,7 @@ export async function updateEvent(input: UpdateEventInput): Promise<void> {
     if ('platformFeeHandling' in input.patch)
       setObj['platformFeeHandling'] = input.patch.platformFeeHandling
     if ('epsFeeHandling' in input.patch) setObj['epsFeeHandling'] = input.patch.epsFeeHandling
-    if ('isListedPublicly' in input.patch)
-      setObj['isListedPublicly'] = input.patch.isListedPublicly
+    if ('isListedPublicly' in input.patch) setObj['isListedPublicly'] = input.patch.isListedPublicly
 
     setObj['updatedAt'] = new Date()
 
@@ -574,9 +579,7 @@ export interface TransitionedEvent {
   publishedAt: Date | null
 }
 
-export async function transitionEvent(
-  input: TransitionEventInput,
-): Promise<TransitionedEvent> {
+export async function transitionEvent(input: TransitionEventInput): Promise<TransitionedEvent> {
   return withTenant(input.tenantId, async (tx) => {
     const current = await tx
       .select({ status: events.status, publishedAt: events.publishedAt })
