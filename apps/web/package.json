@@ -15,7 +15,7 @@
   "dependencies": {
     "@eventpulse/shared-types": "workspace:*",
     "@eventpulse/shared-utils": "workspace:*",
-    "@hookform/resolvers": "^5.2.2",
+    "@hookform/resolvers": "^5.4.0",
     "@tanstack/react-query": "^5.100.14",
     "clsx": "^2.1.1",
     "framer-motion": "^11.13.5",
