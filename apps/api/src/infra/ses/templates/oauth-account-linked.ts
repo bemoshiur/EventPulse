@@ -18,7 +18,11 @@
  * already in display-safe form).
  */
 
-export type OAuthProvider = 'google' | 'apple'
+/** Google-only at MVP per decisions.md "Apple Sign-In dropped from MVP
+ *  scope" (Sprint 3 Day 23). Type retains the literal-union shape so
+ *  future providers re-introduced via dedicated PR can be added here
+ *  without rewriting every call site. */
+export type OAuthProvider = 'google'
 
 export interface OAuthAccountLinkedVars {
   /** User's display name. */
@@ -51,8 +55,12 @@ function formatDate(d: Date, locale: 'en' | 'bn'): string {
 
 function providerLabel(p: OAuthProvider, locale: 'en' | 'bn'): string {
   // Provider names are brand-canonical; don't translate.
+  void locale
   if (p === 'google') return 'Google'
-  return 'Apple'
+  // Exhaustive guard: TS narrows to never; the throw documents intent
+  // for future providers (re-introduced Apple, Microsoft, etc.) so the
+  // omission surfaces at runtime rather than silently rendering empty.
+  throw new Error(`Unknown OAuth provider: ${p as string}`)
 }
 
 export function renderOAuthAccountLinked(vars: OAuthAccountLinkedVars): RenderedEmail {

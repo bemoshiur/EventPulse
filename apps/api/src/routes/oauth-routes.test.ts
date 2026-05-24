@@ -5,13 +5,18 @@ import { _resetOAuthClients } from '../auth/oauth.js'
 
 /**
  * Route-shape tests for OAuth callbacks. Focus is on the predicates we
- * own — state cookie verification, Apple's response-mode (POST), the
- * failure-closed contract on missing/bad state.
+ * own — state cookie verification, the failure-closed contract on
+ * missing/bad state.
  *
- * Successful end-to-end flows require Google/Apple as live IdPs and
- * are tested manually in staging once the OAuth credentials are
- * configured. Mocking arctic + JWKS here would be more scaffolding
- * than signal.
+ * Successful end-to-end flows require Google as a live IdP and are
+ * tested manually in staging once the OAuth credentials are configured.
+ * Mocking arctic + JWKS here would be more scaffolding than signal.
+ *
+ * Apple Sign-In was DROPPED from MVP scope Sprint 3 Day 23 — see
+ * decisions.md "Apple Sign-In dropped from MVP scope". Apple route +
+ * Apple-specific test cases removed. Reachability of the (now-removed)
+ * paths is verified by the "apple routes are gone" guard test below
+ * so a future copy-paste regression that re-adds them surfaces here.
  *
  * What this file DOES NOT test:
  *   - validateAuthorizationCode against a real IdP (manual staging)
@@ -21,21 +26,11 @@ import { _resetOAuthClients } from '../auth/oauth.js'
  */
 
 beforeAll(() => {
-  // The /start handlers require OAuth env to construct the arctic
-  // clients. Set test values so the lazy construction doesn't throw —
+  // The /start handler requires OAuth env to construct the arctic
+  // client. Set test values so the lazy construction doesn't throw —
   // these are never sent to a real IdP in these tests.
   process.env['GOOGLE_OAUTH_CLIENT_ID'] = 'test-google-client-id'
   process.env['GOOGLE_OAUTH_CLIENT_SECRET'] = 'test-google-client-secret'
-  process.env['APPLE_OAUTH_CLIENT_ID'] = 'com.eventpulse.test'
-  process.env['APPLE_OAUTH_TEAM_ID'] = 'TESTTEAM01'
-  process.env['APPLE_OAUTH_KEY_ID'] = 'TESTKEY001'
-  // arctic's Apple wants a PEM-formatted private key. We supply a
-  // syntactically-valid PEM so the constructor doesn't blow up.
-  // It will never sign anything in these tests (we only exercise
-  // /start which builds a URL, and /callback failure paths that
-  // bail before signing).
-  process.env['APPLE_OAUTH_PRIVATE_KEY'] =
-    '-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIBzWcVS4kF8VMz3FEX9rqoH8h6Ml+VgQVl4FNQz0BIv4\n-----END PRIVATE KEY-----'
   process.env['JWT_ACCESS_SECRET'] = 'x'.repeat(64)
   process.env['EVENTPULSE_API_BASE_URL'] = 'http://localhost:4000'
 })
@@ -60,19 +55,6 @@ describe('OAuth /start routes', () => {
     expect(setCookie!).toContain('HttpOnly')
     expect(setCookie!).toContain('SameSite=Lax')
   })
-
-  it('GET /api/v1/auth/oauth/apple/start returns 302 to Apple with response_mode=form_post', async () => {
-    const app = createApp()
-    const res = await app.request('/api/v1/auth/oauth/apple/start')
-    expect(res.status).toBe(302)
-    const location = res.headers.get('location')
-    expect(location).toMatch(/^https:\/\/appleid\.apple\.com\/auth\/authorize/)
-    expect(location).toContain('response_mode=form_post')
-    expect(location).toContain('state=')
-    const setCookie = res.headers.get('set-cookie')
-    expect(setCookie).not.toBeNull()
-    expect(setCookie!).toContain('oauth_state_apple=')
-  })
 })
 
 describe('OAuth /start 503 when provider not configured (Day 20)', () => {
@@ -89,23 +71,6 @@ describe('OAuth /start 503 when provider not configured (Day 20)', () => {
       expect(body.error.message).toMatch(/Google sign-in is not configured/)
     } finally {
       if (saved !== undefined) process.env['GOOGLE_OAUTH_CLIENT_ID'] = saved
-      _resetOAuthClients()
-    }
-  })
-
-  it('GET apple/start returns 503 OAUTH_NOT_CONFIGURED when team id missing', async () => {
-    const saved = process.env['APPLE_OAUTH_TEAM_ID']
-    delete process.env['APPLE_OAUTH_TEAM_ID']
-    _resetOAuthClients()
-    try {
-      const app = createApp()
-      const res = await app.request('/api/v1/auth/oauth/apple/start')
-      expect(res.status).toBe(503)
-      const body = (await res.json()) as { error: { code: string; message: string } }
-      expect(body.error.code).toBe('OAUTH_NOT_CONFIGURED')
-      expect(body.error.message).toMatch(/Apple sign-in is not configured/)
-    } finally {
-      if (saved !== undefined) process.env['APPLE_OAUTH_TEAM_ID'] = saved
       _resetOAuthClients()
     }
   })
@@ -147,41 +112,6 @@ describe('OAuth /callback failure-closed paths', () => {
     expect(res.status).toBe(400)
   })
 
-  it('POST apple/callback with NO state cookie → 400', async () => {
-    const app = createApp()
-    const form = new URLSearchParams({ code: 'test', state: 'foo' })
-    const res = await app.request('/api/v1/auth/oauth/apple/callback', {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: form.toString(),
-    })
-    expect(res.status).toBe(400)
-    const body = (await res.json()) as { error: { _internal_reason?: string } }
-    expect(body.error._internal_reason).toMatch(/^state:/)
-  })
-
-  it('POST apple/callback?error=user_cancelled_authorize → 400 (IdP-side failure)', async () => {
-    const app = createApp()
-    const form = new URLSearchParams({ error: 'user_cancelled_authorize' })
-    const res = await app.request('/api/v1/auth/oauth/apple/callback', {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: form.toString(),
-    })
-    expect(res.status).toBe(400)
-    const body = (await res.json()) as { error: { _internal_reason?: string } }
-    expect(body.error._internal_reason).toBe('idp_error:user_cancelled_authorize')
-  })
-
-  it('GET to /apple/callback (wrong method — Apple uses POST) returns 404', async () => {
-    // Hono returns 404 when the method doesn't match. This documents
-    // that Apple callbacks are POST-only — a GET shouldn't accidentally
-    // start a flow.
-    const app = createApp()
-    const res = await app.request('/api/v1/auth/oauth/apple/callback?code=test&state=foo')
-    expect(res.status).toBe(404)
-  })
-
   it('callback clears the state cookie on failure (single-use enforcement)', async () => {
     const app = createApp()
     const res = await app.request('/api/v1/auth/oauth/google/callback')
@@ -189,5 +119,28 @@ describe('OAuth /callback failure-closed paths', () => {
     expect(setCookie).not.toBeNull()
     expect(setCookie!).toContain('oauth_state_google=')
     expect(setCookie!).toContain('Max-Age=0')
+  })
+})
+
+describe('Apple Sign-In removal guard (Sprint 3 Day 23)', () => {
+  // Locks in the "Apple is gone" decision against future copy-paste
+  // regressions. If a future PR re-adds Apple routes piecemeal, these
+  // tests fail — at which point the re-introduction has to be a
+  // deliberate decision recorded in decisions.md, not an accident.
+
+  it('GET /api/v1/auth/oauth/apple/start returns 404 (route removed)', async () => {
+    const app = createApp()
+    const res = await app.request('/api/v1/auth/oauth/apple/start')
+    expect(res.status).toBe(404)
+  })
+
+  it('POST /api/v1/auth/oauth/apple/callback returns 404 (route removed)', async () => {
+    const app = createApp()
+    const res = await app.request('/api/v1/auth/oauth/apple/callback', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: 'code=test&state=foo',
+    })
+    expect(res.status).toBe(404)
   })
 })

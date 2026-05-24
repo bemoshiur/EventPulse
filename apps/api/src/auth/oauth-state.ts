@@ -29,10 +29,12 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 export interface OAuthStatePayload {
   /** Random nonce we'll match against the IdP's `state` query param. */
   state: string
-  /** PKCE code verifier (Google only). Empty string for Apple. */
+  /** PKCE code verifier (Google). */
   codeVerifier: string
-  /** Which provider this state was minted for. */
-  provider: 'google' | 'apple'
+  /** Which provider this state was minted for. Google-only at MVP per
+   *  decisions.md "Apple Sign-In dropped from MVP scope" (Sprint 3 Day 23);
+   *  the union shape stays open for forward-compat re-introduction. */
+  provider: 'google'
   /** Unix seconds at which this payload becomes invalid. */
   exp: number
 }
@@ -41,7 +43,7 @@ export interface OAuthStatePayload {
 export const DEFAULT_STATE_TTL_SEC = 600
 
 /** Cookie name per provider. */
-export function stateCookieName(provider: 'google' | 'apple'): string {
+export function stateCookieName(provider: 'google'): string {
   return `oauth_state_${provider}`
 }
 
@@ -108,7 +110,7 @@ export type VerifyStateResult = VerifyStateOk | VerifyStateErr
  */
 export function verifyState(
   cookieValue: string | undefined | null,
-  expectedProvider: 'google' | 'apple',
+  expectedProvider: 'google',
   expectedState: string | undefined | null,
   opts: { nowSec?: number; key?: Buffer } = {},
 ): VerifyStateResult {
@@ -145,7 +147,7 @@ export function verifyState(
     typeof payload?.state !== 'string' ||
     typeof payload?.codeVerifier !== 'string' ||
     typeof payload?.exp !== 'number' ||
-    (payload.provider !== 'google' && payload.provider !== 'apple')
+    payload.provider !== 'google'
   ) {
     return { ok: false, error: 'invalid_payload' }
   }
