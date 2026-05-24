@@ -9,6 +9,7 @@ import { publicLegalRoutes } from './routes/public/legal.js'
 import { adminKycRoutes } from './routes/super-admin/kyc.js'
 import { adminLegalRoutes } from './routes/super-admin/legal.js'
 import { accountTypeRoutes } from './routes/tenant/account-type.js'
+import { eventsRoutes } from './routes/tenant/events.js'
 import { kycDraftRoutes } from './routes/tenant/kyc-drafts.js'
 import { kycRoutes } from './routes/tenant/kyc.js'
 import { meRoutes } from './routes/tenant/me.js'
@@ -81,6 +82,11 @@ export function createApp() {
   // independently — kycRoutes' middleware doesn't compose down into a
   // child route group in Hono's current routing model.
   app.route('/api/v1/tenant/kyc/drafts', kycDraftRoutes)
+  // Events router — Sprint 3 Day 23 Workstream 1 per §10.2. Gated by
+  // requireTenantAuth + requireTenantType inside the router. No KYC
+  // gate — self-service free-events publish without KYC per §13.5;
+  // KYC requirement layers in at "add paid tier" (Day 25+).
+  app.route('/api/v1/tenant/events', eventsRoutes)
 
   // Super admin routes — Sprint 2 Day 18 Item 13 + Day 19 Item 15.
   // Mounted under /api/v1/admin/* per §10.4. requireSuperAdminAuth
