@@ -24,7 +24,7 @@
     "next": "^15.1.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-hook-form": "^7.76.0",
+    "react-hook-form": "^7.76.1",
     "tailwind-merge": "^2.5.5",
     "zod": "^3.23.8"
   },
