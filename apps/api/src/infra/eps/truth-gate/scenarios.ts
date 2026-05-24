@@ -128,12 +128,5 @@ export const TRUTH_GATE_SCENARIOS: ReadonlyArray<TruthGateScenario> = [
     'pass_through',
     2506n, // §14.2 PRIMARY; calculator says 2500. Decision N pending sandbox truth.
   ),
-  buildScenario(
-    'D',
-    'PT,AB',
-    'Platform pass-through, EPS absorb',
-    'pass_through',
-    'absorb',
-    2506n,
-  ),
+  buildScenario('D', 'PT,AB', 'Platform pass-through, EPS absorb', 'pass_through', 'absorb', 2506n),
 ]

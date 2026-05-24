@@ -65,8 +65,7 @@ describe('truth-gate scenarios — calculator predictions (pinned per Decision N
       expect(mode.spec14_2_primaryEpsFeePaisa).toBe(2506n)
     })
     it('the 6-paisa divergence is the truth-gate target — sandbox will arbitrate', () => {
-      const delta =
-        mode.spec14_2_primaryEpsFeePaisa - mode.calculatorPrediction.epsFeePaisa
+      const delta = mode.spec14_2_primaryEpsFeePaisa - mode.calculatorPrediction.epsFeePaisa
       expect(delta).toBe(6n)
     })
     it('calculator buyer_total = 102,500 paisa (matches §14.2 parenthetical "or 25.00")', () => {
