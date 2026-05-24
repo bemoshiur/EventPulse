@@ -50,9 +50,7 @@ function baseUrl(): string {
  */
 export function isOAuthProviderConfigured(provider: 'google'): boolean {
   void provider
-  return Boolean(
-    process.env['GOOGLE_OAUTH_CLIENT_ID'] && process.env['GOOGLE_OAUTH_CLIENT_SECRET'],
-  )
+  return Boolean(process.env['GOOGLE_OAUTH_CLIENT_ID'] && process.env['GOOGLE_OAUTH_CLIENT_SECRET'])
 }
 
 export function googleClient(): Google {
