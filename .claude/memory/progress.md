@@ -4,31 +4,63 @@
 
 **Sprint 3 (Days 21-30) — Events + Fee Calculator + EPS + Orders (per §26.1 Sprint plan).** Planned scope, opens with Day 21 kick-off session. Sprint 2 closed at v0.2.0-sprint-2 (Day 20).
 
-### Pre-Day-23 consolidation session (2026-05-20)
+### Pre-Day-23 consolidation — ✅ COMPLETE (2026-05-20 → 2026-05-24, 4 sessions)
 
-Partial completion — GHA infra failure (gotchas.md "GitHub Actions org-wide failure") blocked Workstreams 1 Phase 2-4 and Workstream 2.1 PR-merge sequence. Workstreams that don't depend on CI completed.
+The "consolidation" started as a routine queue-clearing task on 2026-05-20 and unfolded into a multi-session cascade because of an org-level infrastructure migration that broke three independent trust relationships in sequence. All resolved; staging now pristine; Day 23 ready.
 
-**Completed:**
+**Final state (2026-05-24 EOD):**
 
-- ✅ Workstream 1 Phase 1 — pre-flight state audit (10 checks): cert 2-SAN apex+wildcard expires Aug 17 2026; all DNS records resolve; migrations 0001-0009 applied; tenants.preferred_locale present with CHECK; secrets manager 5/5 present; PM2 healthy; CI runs on main green (historical).
-- ✅ Direct staging smoke tests (replacement for Phase 3): 5 vhosts SSL=0; API `/health` returns DB-aware JSON with `db: ok`; Nginx `/nginx-health` returns ok; Trust Center renders with DRAFT banner on Privacy. Pre-existing: OAuth `/start` returns 503 OAUTH_NOT_CONFIGURED (bootstrap-staging.sh has not been re-run since Google OAuth secret was created Day 20).
-- ✅ Workstream 2.1 partial — PR #122 (Decision O memory) squash-merged to main. 5 remaining Day 22 PRs (#123, #125, #126, #127, #128) held until GHA restored.
-- ✅ Workstream 2.2 — Issues classified: #110 keep open (active sprint tracker); #52 closed (Sprint 2 done) with reference to v0.2.0-sprint-2 tag.
-- ✅ Workstream 2.3 — alerts inventoried + classified. 3 medium-severity Dependabot alerts (postcss/vite/esbuild — all dev-tooling only, no production runtime impact). 9 Dependabot fix PRs queued: 2 majors needing careful review (`@noble/hashes` 1→2, `jose` 5→6 — both security-critical auth libs), 1 major frontend (`hookform/resolvers` 3→5), 6 patch/minor. Fix-PR merges held until GHA restored. CodeQL not enabled (acceptable; can revisit Sprint 4).
-- ✅ Workstream 3 — README professional rewrite shipped. ~340 lines covering overview, architecture, sprint structure, memory protocol, playbook pointer, development setup, deployment, testing, operational notes, repo structure, active sprint tracker, free-plan workflow, definition of done, contact. No leaked secrets/IPs/instance IDs.
+- `origin/main` HEAD = `013446f` (#142, `@hookform/resolvers` 5.2.2 merge)
+- Staging EC2 deployed code = `013446f` — **zero drift**
+- Migrations 0001-0010 applied (`0010_tenants_subdomain_provisioning.sql` applied 2026-05-24 13:26:49)
+- 5 vhosts: cert 2-SAN apex+wildcard valid through Aug 17 2026; all SSL=0; 4 return 200, 1 returns 404 on `/` (api app, no route at root — expected)
+- API `/health`: DB-aware JSON `{db: ok, checkedMs: 11}`; `/nginx-health`: `ok` (distinct)
+- Trust Center: 18 v0.1 docs serving with DRAFT banner
 
-**Blocked:**
+**Cascade timeline:**
 
-- ❌ Workstream 1 Phase 2 — empty-commit consolidation deploy. Both pre-push hook blocked direct push to main (correctly) AND `workflow_dispatch` failed in 3s after runner pickup. Pivoted to merging PR #122 (push-event deploy on memory-only PR), which also failed identically. Root cause: GHA org-wide quota/billing cutover at 19:01 UTC.
-- ❌ Workstream 1 Phase 3 — post-deploy smoke tests. Replaced by direct curl smoke tests since deploy never fired. Staging EC2 verified healthy directly.
-- ❌ Workstream 1 Phase 4 — staging consolidation memory PR. Folded into the single pre-Day-23 closeout PR (this one).
-- ❌ Workstream 2.1 — 5 remaining Day 22 PR merges. Held to prevent main-vs-staging drift growing silently on each failed deploy.
-- ❌ Workstream 2.3 fix-PR merges — held; CI is the merge gate.
+1. **2026-05-19/20 GHA quota outage** — Free-tier org allowance exhausted with $0 spending limit; all workflows failed for ~12 hours. Resolved by Moshiur raising spending limit to $20 on personal account.
+2. **2026-05-21 repo org migration discovered** — repo moved from personal `publicpulseagency` to new org `The-Public-Pulse-Agency`. Cascade: (a) IAM trust policy mismatch on OIDC `sub` + `job_workflow_ref` claims → updated via Option A replace (`aws iam update-assume-role-policy`); (b) billing entity moved silently to new org with own $0 limit → Moshiur set $20 org-level limit on 2026-05-24; (c) deploy keys disabled org-wide + transferred key in stale state → Moshiur enabled org-level policy, key deleted + re-added.
+3. **2026-05-24 consolidation session** — staging confirmed pristine + spending limit confirmed; held-PR merge sequence executed in dependency order.
 
-**User action required (Sprint 3 carry):**
+**Held PR queue cleared:**
 
-- Verify GHA org billing state at github.com/organizations/publicpulseagency/settings/billing. Likely Free-tier private-repo quota exhausted.
-- After billing restored: fire `gh workflow run deploy-staging.yml --ref main`, then resume Workstream 2.1 PR merges in sequence (#123 → #125 → #126 → #127 → #128 → this pre-Day-23 PR last).
+- ✅ #123 — wildcard cert memory + 5 gotchas; rebased (cherry-pick auto-skipped duplicate Decision O commit) + merged as `51ab4ec`
+- ✅ #125 — bilingual SES templates + selectLocale helper; merged as `1cafd40`
+- ✅ #126 — tenant subdomain provisioning + migration 0010; merged as `d1d9b87`; migration 0010 applied cleanly (1 applied, 9 already in place)
+- ✅ #127 — Fix 6b deploy.sh Nginx reload; merged as `01207a4`; skip-path verified via workflow_dispatch on `01207a4..01207a4` empty-diff (`no nginx vhost changes; skipping nginx reload`)
+- 🟡 #128 — Day 22 EOD memory; closed as superseded (stale handoff content from pre-cascade prediction; rewritten in this PR)
+- ✅ #135 — IAM trust policy + docs for org migration; merged as `bc59747`
+- ✅ #136 — combined aws-sdk client-s3 + s3-request-presigner coupled bump + dependabot grouping config; merged as `0301f36`; **#131 + #133 closed as superseded** (peerdep type-coupling — TS2345 "separate declarations of private property 'handlers'")
+- 🟡 #134 — `@aws-sdk/client-sesv2` standalone; auto-closed by Dependabot when #136's grouping config landed (consolidates into aws-sdk group); **REOPENED as #137 by Dependabot's next cycle as a grouped aws-sdk PR** (confirms grouping works)
+- ✅ 4 safe Dependabot bumps merged: #96 (@tanstack/react-query patch), #98 (pg minor), #130 (hono patch), #132 (dev-deps group: tsx + react-query-devtools + @types/react)
+- ✅ #73 — `jose` 5→6 major; merged as `0e8e83e`; v6 breaking changes mapped clean against narrow `SignJWT/jwtVerify/createRemoteJWKSet` usage
+- 🟡 #93 — `@hookform/resolvers` 3→5 major; auto-closed by Dependabot during the safe-batch lockfile cascade; **manually recreated as #142 with same bump**; #142 merged as `013446f`; local + CI typecheck passed
+- 🟡 **#72 — `@noble/hashes` 1→2 major; DEFERRED to post-Days-24-25-EPS-truth-gate.** Labelled `deferred-post-eps-truth-gate`. See decisions.md "@noble/hashes 1.8.0 → 2.2.0 deferred to post-Days-24-25-EPS-truth-gate" (2026-05-24). PR remains OPEN.
+
+**New gotchas captured (3):**
+
+1. `.claude/memory/gotchas.md` "GitHub repo transfer cascades through THREE owner-scoped trust relationships" (2026-05-20/21) — the full org-migration runbook
+2. `.claude/memory/gotchas.md` "AWS SDK v3 packages share smithy internal Client types — must bump together" (2026-05-24) — TS2345 + grouping config recipe
+3. `.claude/memory/gotchas.md` "Self-modifying deploy/bootstrap scripts don't take effect on the deploy that ships them" (2026-05-24) — needs TWO deploys to verify a deploy.sh change
+
+**CLAUDE.md amendment:**
+
+- §11.2 EPS wrapper skeleton now carries a `@noble/hashes` v2 `.js`-suffix note (subpath imports require explicit `.js` extension in v2; current v1.8.0 imports use bare specifiers; transition will rewrite all `@noble/hashes/*` imports when #72 is reopened)
+
+**Net-new Dependabot PRs that arrived mid-session (out of scope for this consolidation, deferred to next session's triage):**
+
+- #137 — aws-sdk grouped (sesv2 + ???; confirms grouping works)
+- #138 — `@tanstack/react-query` 5.100.11 → 5.100.14 (further patch beyond merged #96)
+- #139 — `@hookform/resolvers` 3.10.0 → 5.4.0 (Dependabot doesn't yet know #142 landed 5.2.2; will recompute next cycle)
+- #140 — `react-hook-form` 7.76.0 → 7.76.1 (patch)
+- #141 — `geist` 1.7.0 → 1.7.1 (patch)
+
+**User action carry (low urgency):**
+
+- Org-level Actions spending limit confirmed set at >$0 on 2026-05-24. Periodic re-check at <https://github.com/organizations/The-Public-Pulse-Agency/settings/billing/summary> if consumption pattern changes.
+- Counsel engagement for Trust Center v1.0 drafts (cross-sprint, first paying tenant gated).
+- §29 #9 (AIT withholding) + #10 (VAT/Mushak) — tax opinions for fee calculator math (still pending; calculator ships PRE-WITHHOLDING per file header; gates Day 24-25 truth gate).
 
 ### Sprint 3 scope (In Flight as Planned)
 

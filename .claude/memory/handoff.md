@@ -1,76 +1,77 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-05-20 (pre-Day-23 consolidation session — partially blocked on GitHub Actions org-wide failure)
-**Driver:** Claude Code (Opus 4.7) — pre-Day-23 consolidation work; next session resumes after GHA billing resolved + 5 held PRs land
+**Last update:** 2026-05-24 (pre-Day-23 consolidation COMPLETE — held queue cleared, org-migration cascade closed, staging pristine, Day 23 ready)
+**Driver:** Claude Code (Opus 4.7) — pre-Day-23 consolidation closeout; next session opens Sprint 3 Day 23 fresh
 
-## State right now (2026-05-20 pre-Day-23 consolidation)
+## State right now (2026-05-24 EOD)
 
-**Pre-Day-23 consolidation BLOCKED on GitHub Actions org-wide failure.** All GHA workflows (CI, deploy-staging, commitlint) started failing at 19:01 UTC on 2026-05-19. Failure pattern is consistent across `push`, `pull_request`, and `workflow_dispatch` events: runner picks up → "Job is about to start running on the hosted runner" appears in system log → ~2s later conclusion=`failure`, zero steps recorded, no step logs available. Most likely cause: org-level Actions quota/billing cutover (PublicPulseAgency is an org on Free tier; private repos get finite monthly minutes). User action required: verify billing at github.com/organizations/publicpulseagency/settings/billing — see `.claude/memory/gotchas.md` "GitHub Actions org-wide failure" for full recovery procedure.
+**Pre-Day-23 consolidation COMPLETE.** What started as a routine queue-clearing task on 2026-05-20 unfolded across four sessions because of an org-level infrastructure migration that broke three independent trust relationships in sequence. All resolved; held PR queue cleared; staging pristine; Day 23 ready to begin.
 
-**Staging EC2 itself is healthy** — verified via direct curl smoke tests during this session: 5 vhosts SSL=0 (cert 2-SAN apex+wildcard, expires Aug 17 2026); API `/health` returns DB-aware JSON `{db: 'ok', checkedMs: 11}`; Trust Center renders with DRAFT banner on Privacy; Nginx `/nginx-health` returns ok; PM2 api+web online. Migrations 0001-0009 applied; `tenants.preferred_locale` column present with CHECK constraint. Secrets Manager has 5 staging entries (jwt-access-secret, jwt-refresh-secret, kyc, oauth-google, eps). Pre-existing: OAuth `/start` returns 503 OAUTH_NOT_CONFIGURED — `eventpulse/staging/oauth-google` secret exists but bootstrap-staging.sh has not been re-run to materialise it into `.env.staging`. This is the same gap documented in the Day 20 handoff.
+**Staging EC2 verified pristine:**
 
-**Pre-Day-23 consolidation session — what landed (partial):**
+- `origin/main` HEAD = `013446f` (#142, `@hookform/resolvers` 5.2.2 merge)
+- Staging EC2 deployed code = `013446f` — **zero drift**
+- Migrations 0001-0010 applied (`0010_tenants_subdomain_provisioning.sql` applied 2026-05-24 13:26:49 UTC)
+- 5 vhosts: cert 2-SAN apex+wildcard valid through Aug 17 2026; all SSL=0; 4 return 200, api returns 404 on `/` (no route at root — expected; `/health` works)
+- API `/health`: DB-aware JSON `{db: ok, checkedMs: 11}`
+- Nginx `/nginx-health`: distinct, returns plain `ok`
+- Trust Center: 18 v0.1 DRAFT-banner docs serving cleanly
+- Pre-existing: OAuth `/start` returns 503 OAUTH_NOT_CONFIGURED — `eventpulse/staging/oauth-google` secret exists but bootstrap-staging.sh has not been re-run to materialise it into `.env.staging`. Same gap as the Day 20 handoff; not blocking anything.
 
-- Workstream 1 Phase 1 — pre-flight state audit (10 checks all green or expected)
-- Workstream 2.1 PR #122 (Decision O memory) squash-merged to main (commit `7caf7d9`)
-- Workstream 2.2 Issue #52 (Sprint 2 kickoff) closed with reference to v0.2.0-sprint-2 tag
-- Workstream 2.3 alert classification (3 medium Dependabot dev-tooling: postcss/vite/esbuild — no production runtime impact; 9 Dependabot fix PRs inventoried — 2 majors needing careful review (`@noble/hashes` 1→2, `jose` 5→6, both security-critical), 1 major frontend (`hookform/resolvers` 3→5), 6 patch/minor)
-- Workstream 3 README professional rewrite (~340 lines covering overview/architecture/sprint structure/memory protocol/playbook pointer/development setup/deployment/testing/operational notes/repo structure/free-plan workflow/DoD/contact; no leaked secrets/IPs/instance IDs)
+**Cascade timeline (full archeology):**
 
-**Held until GHA restored:** the 5 remaining Day 22 PRs (#123 wildcard cert memory + 5 gotchas; #125 SES templates + selectLocale; #126 subdomain provisioning + migration 0010; #127 deploy.sh Fix 6b; #128 Day 22 EOD memory carrying the Day 22 closure content) + 9 Dependabot fix PRs + this session's own EOD memory PR (which carries the pre-Day-23 closeout commits). Drift between `origin/main` (now `7caf7d9`, PR #122 merged) and the staging-deployed code (`95355aa`, PR #124) is memory-only and safe to leave until next successful deploy.
+1. **2026-05-19/20 GHA quota outage** — Free-tier org allowance exhausted with $0 spending limit; all GHA workflows failed for ~12 hours. Resolved by Moshiur raising the personal-account Actions spending limit to $20.
+2. **2026-05-21 repo org migration discovered** — repo had moved from personal `publicpulseagency` to new org `The-Public-Pulse-Agency`. Cascade of three failures: (a) IAM trust policy mismatch on OIDC `sub` + `job_workflow_ref` claims (canonical login changed); (b) billing entity moved silently — personal-account spending limit doesn't carry to the new org; (c) deploy keys disabled org-wide + transferred key in stale state that authenticated on SSH greeting but rejected `git-upload-pack`.
+3. **2026-05-24 consolidation session** — staging confirmed pristine; spending limit confirmed >$0 on the new org; held-PR merge sequence executed in dependency order; all queue items resolved.
 
-**Sprint 3 Day 21 fee calculator SHIPPED.** `apps/api/src/domain/payments/fee-calculator.ts` (PR #119, 2026-05-19, 33 unit tests). Math review checkpoint passed: 14/16 cells match §14.2 verbatim; Mode C `buyer_total`+`eps_fee` match §14.2's parenthetical alternative ("or 25.00 depending on which side") not the primary line — see Decision N (decisions.md 2026-05-19) for the EPS-base rule + the mandatory Day 24-25 EPS sandbox truth gate that empirically validates the rule against real EPS transactions. §14.2 amended in a separate playbook PR with the calculator implementation note + Decision N reference.
+**Held PR queue cleared (sequence executed 2026-05-24):**
 
-**Sprint 2 silent-partial-failure pattern RESOLVED.** PRs #114 + #115 + #116 + #117 + #118 + e2e Postgres add-on. 16+ consecutive deploys had failed silently for 5 working days because every observability layer above the actual code path returned 'ok' regardless of code-path state. All 5 intersecting gaps now closed: (1) deploy.sh retry-loop + explicit rollback exec; (2) Nginx static `/health` removed, `/nginx-health` is the new Nginx-direct liveness probe; (3) Server Components throw `LegalApiUnavailableError` on fetch failure with structured JSON logging; (4) env-var bootstrap re-run on EC2 with all 28 vars; (5) shared-types switched to real `tsc` build emitting `dist/`. Verification deploy clean: 5 vhost probes + 5 functional probes all return 200; api `/health` returns DB-aware JSON `{data:{status:'ok',db:'ok',checkedMs,…}}`; Trust Center serves real content (18 docs landed). Consolidated `gotchas.md` "Sprint 2 silent partial-failure pattern" documents all 5 gaps + 6 avoidance rules.
+- ✅ #122 — Decision O memory (earlier session)
+- ✅ #123 — wildcard cert memory + 5 gotchas; rebased + merged as `51ab4ec`
+- ✅ #124 — migration 0009 (earlier session)
+- ✅ #125 — bilingual SES templates + selectLocale; merged as `1cafd40`
+- ✅ #126 — tenant subdomain provisioning + migration 0010; merged as `d1d9b87`; **migration 0010 applied cleanly** (1 applied, 9 already in place)
+- ✅ #127 — Fix 6b deploy.sh Nginx reload; merged as `01207a4`; **skip-path empirically verified** via workflow_dispatch on `01207a4..01207a4` empty-diff (log line: `no nginx vhost changes; skipping nginx reload`)
+- 🟡 #128 — Day 22 EOD memory; CLOSED as superseded (stale pre-cascade prediction; rewritten in this PR)
+- ✅ #129 — pre-Day-23 consolidation partial session (earlier session)
+- ✅ #135 — IAM trust policy + docs for org migration; merged as `bc59747`
+- ✅ #136 — combined aws-sdk client-s3 + s3-request-presigner coupled bump + dependabot grouping config; merged as `0301f36`; **#131 + #133 closed as superseded** (TS2345 peerdep coupling)
+- 🟡 #134 — `@aws-sdk/client-sesv2` standalone; auto-closed by Dependabot when #136's grouping config landed; **REOPENED as #137 by Dependabot's next cycle as a grouped aws-sdk PR** (confirms grouping works)
+- ✅ 4 safe Dependabot bumps: #96 (@tanstack/react-query patch), #98 (pg minor), #130 (hono patch), #132 (dev-deps group)
+- ✅ #73 — `jose` 5→6 major; merged as `0e8e83e`; v6 breaking changes mapped clean against narrow usage
+- 🟡 #93 — `@hookform/resolvers` 3→5 major; auto-closed by Dependabot during the cascade; manually recreated as #142 with the same bump; **#142 merged as `013446f`**
+- 🟡 **#72 — `@noble/hashes` 1→2 major; DEFERRED to post-Days-24-25-EPS-truth-gate.** Labelled `deferred-post-eps-truth-gate`; PR remains OPEN. See decisions.md "@noble/hashes 1.8.0 → 2.2.0 deferred to post-Days-24-25-EPS-truth-gate" (2026-05-24).
 
-**Sprint 2 is closed. The platform now has:**
+**Memory captured (3 new gotchas + 1 decision + 1 CLAUDE.md amendment):**
 
-- KYC pipeline end-to-end: tenant submits via wizard (Individual Tier 1 OR Organisation Tier A) → server validates per-tier discriminated-union schemas → S3 presigned uploads with SSE-KMS + signed-into-URL key → submission state machine (`submitted → under_review → approved/rejected`, plus the `rejected → draft` resubmit lane) → audit trail in `audit_logs` table (append-only per §4.2.1.1) → notification stubs fire on every state transition.
-- Super admin KYC review queue at `/admin/kyc` — list view (no PII surfaced) → detail view (writes audit row per open per Decision G; signed-GET URLs for inline document preview; reviewer-checklist progress with per-tier required keys; reviewer notes auto-save) → decision (approve gated by checklist completeness; reject gated by typed reason ≥10 chars; both write a transition audit row + a decided audit row; conflict-of-interest guard checks audit_logs composite index).
-- Trust Center end-to-end: 18 v0.1 DRAFT-banner placeholder documents seeded (6 contracts + 12 artefacts per §20.2); public Server Components at `/privacy`/`/terms`/`/trust/*` (19 pages including `/trust` landing); super admin Legal & Trust editor at `/admin/legal-trust/` with publish-new-version form (textarea markdown → server-side render-at-publish via `rehype-sanitize` unified pipeline with `defaultSchema` allowlist → stored `body_html` is known-safe); Next.js revalidation hook so public pages bust cache within ~1s of publish.
-- Authentication: rolled-our-own (`@noble/hashes` argon2id + `jose` JWT + `arctic` OAuth + custom Postgres session adapter). Email+password + magic link + Google OAuth + Apple OAuth all wired. OAuth button hrefs fixed at Day 20 (Day 11 silent-regression).
-- Staging EC2 live: `i-02e4fddeb923c14f9`, Elastic IP `18.141.7.246`, 5 hostnames serving HTTPS via Let's Encrypt SAN cert, Postgres 16 + Redis 8 + Nginx + PM2 + CW Agent; KYC S3 bucket with dedicated CMK; OIDC three-claim trust pattern codified for `eventpulse-deploy-staging`.
-
-**Sprint 2 retro lives in the v0.2.0-sprint-2 git tag annotation + `docs/releases/v0.2.0-sprint-2.md`** (see release notes for the four-question retro answers + three things to do differently in Sprint 3).
-
-```text
-v0.2.0-sprint-2   <annotated tag>  <pending> end of sprint 2 closeout
-<pending>         memory: Sprint 2 closeout — Day 20 final + retro + sprint boundary
-09e1116           feat(api): Day 20 PM Item 16 PR 1 — Porichoy adapter scaffold (#108)
-b502d74           docs: Day 20 EPS library investigation note (#105)
-325abef           memory: Day 20 AM — EPS in-house wrapper + production-EPS-in-staging guard + OAuth gotcha (#107)
-5410b81           chore: Day 20 EPS in-house wrapper plan — bootstrap-staging EPS secret + CLAUDE.md §11 amendment (#106)
-5760045           fix(api): Day 20 AM OAuth sign-in — button hrefs hit API vhost; 503 when provider not configured (#104)
-…46 more Sprint 2 commits back to ebfacc4 (Sprint 2 Day 11 Item 2)…
-4c49e1d           chore: end of sprint 1 (v0.1.0-sprint-1)
-```
+- gotchas.md "GitHub repo transfer cascades through THREE owner-scoped trust relationships" (2026-05-20/21) — the full org-migration runbook
+- gotchas.md "AWS SDK v3 packages share smithy internal Client types — must bump together" (2026-05-24) — TS2345 + grouping config recipe
+- gotchas.md "Self-modifying deploy/bootstrap scripts don't take effect on the deploy that ships them" (2026-05-24) — needs TWO deploys to verify a deploy.sh change
+- decisions.md "@noble/hashes 1.8.0 → 2.2.0 (Dependabot PR #72) deferred to post-Days-24-25-EPS-truth-gate" (2026-05-24)
+- CLAUDE.md §11.2 amendment — `@noble/hashes` v2 `.js`-suffix note for the post-truth-gate bump
 
 ## Next concrete step
 
-**Resolve GHA org billing FIRST, then resume PR consolidation, then start Day 23 work.** Day 23 cannot start until the deploy pipeline is functional — every merge to main would otherwise create silent main-vs-staging drift. Order of operations:
+**Sprint 3 Day 23 — Event CRUD + `tenant_fee_config` exposure.** Staging is clean-pristine; deploy pipeline verified end-to-end; held queue zero. Day 23 starts here.
 
-1. **User action: verify GHA org billing** at github.com/organizations/publicpulseagency/settings/billing. If Actions minutes exhausted on the Free private-repo allowance, upgrade to Team (USD 4/user/month for org-level Actions minutes) OR enable pay-as-you-go billing. **Pro is per-user and does NOT solve org-level quota**.
-2. **Fire one verification deploy:** `gh workflow run deploy-staging.yml --ref main`. Expected: runs steps cleanly (not 3-second failure), catches up the memory-only PR #122 commit (`7caf7d9`) to staging.
-3. **Resume held PR merges in dependency sequence:**
-   - PR #123 (memory: cert wildcard applied + 5 gotchas) — memory-only
-   - PR #125 (feat: bilingual SES templates + selectLocale helper) — code; deploy after merge
-   - PR #126 (feat: tenant subdomain provisioning + migration 0010) — code + migration; deploy after merge; first run exercises Fix 6b retroactively
-   - PR #127 (fix: deploy.sh Nginx reload on vhost change) — exercised by #126
-   - PR #128 (memory: Day 22 EOD)
-   - This pre-Day-23 PR (README + memory + GHA gotcha) — last
-4. **Verify each merge's deploy goes green** before merging the next. If any fails for reasons NOT related to billing (e.g. migration 0010 hits an unexpected state), HALT and surface.
-5. **Day 23 main work — Event CRUD + `tenant_fee_config` exposure** (deferred from original Day 22-23 slot):
-   - Event CRUD API (`apps/api/src/routes/tenant/events.ts`) — POST/GET/PATCH/DELETE; event slug generation (citext unique, reserved-handles guard, 3-30 chars); status state machine (`draft → published → on_sale → sold_out → live → completed → archived`) per §2.4.
-   - `tenant_fee_config` exposed in super admin tenant detail view — fee-override modal + `fee_override_log` audit (4-eyes principle for changes > 10 bps per §14.4).
-   - Fixed form template per event type — hardcoded React forms (full builder is Sprint 5+).
-   - Pre-flight reads: §2.4 (event lifecycle), §9.3 (events schema), §14.4 (tenant fee override workflow), §6 (API patterns).
+Pre-flight reads before Day 23 work begins:
 
-**Post-GHA-restoration verification (carried from original Day 23 pre-flight):**
+- CLAUDE.md §2.4 (event lifecycle: `draft → published → on_sale → sold_out → live → completed → archived`)
+- CLAUDE.md §9.3 (events schema)
+- CLAUDE.md §14.4 (tenant fee override workflow — 4-eyes principle for >10 bps changes)
+- CLAUDE.md §6 (API patterns: envelope, error codes, idempotency, pagination)
 
-- Confirm staging-deploy after the held-PR merges picks up the new vhost — first deploy that touches `infra/nginx/**` exercises Fix 6b's reload path.
-- Verify Item 13 subdomain provisioning fires on next KYC approve in staging — create a fixture tenant, submit KYC, approve, watch logs for `provisionTenantSubdomain: success` + new vhost serving at `<slug>.staging.eventpulse.com.bd/nginx-health` returning 200.
+Day 23 main work:
 
-**Mandatory non-negotiable Day 24-25 EPS sandbox truth gate (per Decision N 2026-05-19).** Before any Day 26 sandbox-order work begins:
+- **Event CRUD API** (`apps/api/src/routes/tenant/events.ts`) — POST/GET/PATCH/DELETE; event slug generation (citext unique, reserved-handles guard, 3–30 chars); status state machine per §2.4.
+- **`tenant_fee_config` exposed in super admin tenant detail view** — fee-override modal + `fee_override_log` audit (4-eyes principle for changes > 10 bps per §14.4).
+- **Fixed form template per event type** — hardcoded React forms (full builder is Sprint 5+ per §26.1).
+
+Cross-module e2e for Item 13 subdomain provisioning (`feat: tenant subdomain provisioning + migration 0010` carried this as a Day 23 morning task):
+
+- Create a fixture tenant, submit KYC, approve, watch logs for `provisionTenantSubdomain: success` + new vhost serving at `<slug>.staging.eventpulse.com.bd/nginx-health` returning 200. This is the deferred follow-up from PR #126.
+
+**Mandatory non-negotiable Day 24-25 EPS sandbox truth gate (per Decision N 2026-05-19, unchanged):**
 
 - Run 4 real EPS sandbox transactions covering all §14.2 modes (subtotal 1,000 BDT, platform 0.25%, EPS 2.5%).
 - Capture EPS's actual fee on each.
@@ -78,26 +79,34 @@ b502d74           docs: Day 20 EPS library investigation note (#105)
 - Any delta in any cell is a calculator bug — adjust the calculator (NOT the sandbox observations), re-run §24.4 fee-mode tests, amend §14.2 to match.
 - Mode C is the most likely-to-shift cell (Decision N picked calc 2500 over §14.2 primary 2506; sandbox is the empirical arbiter).
 - Day 26 first-sandbox-order-verification cannot pass without this gate clearing.
+- **Post-truth-gate** — reopen #72 (`@noble/hashes` 1→2) per its deferral plan in decisions.md.
 
-**Sprint 3 pre-flight checklist (unchanged):**
+**Sprint 3 pre-flight checklist (carries from earlier handoffs):**
 
 - §29 #9 (AIT withholding) + #10 (VAT/Mushak) — tax opinions for fee calculator math (still pending; calculator ships PRE-WITHHOLDING per file header).
 - `eventpulse/staging/eps` Secrets Manager entry — ✅ DONE Day 20 closeout retry.
-- `eventpulse/staging/oauth-google` Secrets Manager entry — ✅ DONE Day 20 closeout.
+- `eventpulse/staging/oauth-google` Secrets Manager entry — ✅ DONE Day 20.
 - Apple OAuth — DROPPED from MVP per decisions.md 2026-05-19.
 - EPS library decision LOCKED (in-house wrapper) — no re-litigation.
 
-**Sprint 3 sprint plan** in full at `progress.md` "In flight" section; mirrors §26.1.
-
-## STOP-ASK conditions for Sprint 3 (pre-flight)
+## STOP-ASK conditions for Sprint 3 (unchanged)
 
 - §29 #9 / #10 tax opinions still pending by Day 22 → halt fee calculator work, surface to Moshiur.
 - OAuth credentials still missing by Day 23 → document as Sprint 4 pending; no further verification work this sprint.
-- ~~`eventpulse/staging/eps` Secrets Manager entry still missing by Day 26 → halt EPS in-house wrapper integration test, surface.~~ **RESOLVED Day 20 closeout** — secret populated; Sprint 3 EPS work unblocked.
 - Subdomain provisioning staging integration test fails in ways that suggest the SSM + Nginx + certbot chain is fragile → halt subdomain work, build something else, defer to Sprint 4.
 - EPS wrapper finds `STAGING_PAYMENT_BLOCK` doesn't reliably guard against priced orders → halt all EPS work, file critical bug, surface immediately.
 - **Day 24-25 EPS sandbox truth gate fails (any cell delta)** → calculator gets adjusted (not sandbox), §14.2 gets re-amended, fee-mode tests re-run. Day 26 sandbox-order work gates on this clearing. **The calculator is the variable to change, not the sandbox observations** — Decision N 2026-05-19.
 - Counsel returns Trust Center v1.0 drafts mid-sprint → in-scope addition only if drafts arrive before Day 25; later than that, defer to Sprint 4 + consent_records work alongside.
+
+## Net-new Dependabot PRs that arrived mid-consolidation (next session's triage)
+
+- #137 — aws-sdk grouped PR (confirms grouping config from #136 works; likely contains sesv2 + other aws-sdk family bumps)
+- #138 — `@tanstack/react-query` 5.100.11 → 5.100.14 (further patch beyond merged #96)
+- #139 — `@hookform/resolvers` 3.10.0 → 5.4.0 (Dependabot doesn't yet know #142 landed 5.2.2; will recompute next cycle)
+- #140 — `react-hook-form` 7.76.0 → 7.76.1 (patch)
+- #141 — `geist` 1.7.0 → 1.7.1 (patch)
+
+Defer triage to a future cycle; none are urgent. #137 in particular validates the grouping config from #136.
 
 ## Sprint 2 deliverable summary (locked in release notes — see docs/releases/v0.2.0-sprint-2.md)
 
@@ -114,7 +123,13 @@ Days 11-20 shipped:
 - Day 19 — Trust Center scaffolding + super admin Legal & Trust editor (Items 14+15)
 - Day 20 — Item 16 truncated (Porichoy scaffold shipped; subdomain provisioning + SES templates deferred to Sprint 3 Day 21) + OAuth bug fix + EPS library investigation + closeout
 
-## Hard guardrails (carry forward into Sprint 3 unchanged)
+## Sprint 3 to-date (Days 21-22 + pre-Day-23 consolidation)
+
+- Day 21 — Fee calculator (PR #119, 33 tests) + Sprint 2 silent-partial-failure pattern resolution (5 fix PRs)
+- Day 22 — Decision O (wildcard staging cert + tenants.preferred_locale) + SES templates + tenant subdomain provisioning + Fix 6b — all 6 Day 22 PRs landed across the 2026-05-24 consolidation session
+- Pre-Day-23 — org-migration cascade resolved (OIDC + billing + deploy keys) + README professional rewrite + held queue cleared + 7 Dependabot bumps merged (5 minors/patches + 2 majors) + #72 deferred
+
+## Hard guardrails (carry forward unchanged)
 
 - Single EC2 only. ~$23/mo total. $40/mo canary.
 - No SSH, no port 22. Shell via `aws ssm start-session --target i-02e4fddeb923c14f9 --profile eventpulse`.
@@ -122,15 +137,15 @@ Days 11-20 shipped:
 - Never write fee math anywhere except `apps/api/src/domain/payments/fee-calculator.ts` (Sprint 3 Day 21 deliverable).
 - §21.3 host-liability clause is load-bearing — don't weaken via code defaults or UX.
 - KYC bucket policy: never `StringNotEqualsIfExists` on encryption-key enforcement.
-- GitHub Actions OIDC trust policies: canonical three-claim shape only (§17.9.1).
+- GitHub Actions OIDC trust policies: canonical three-claim shape only (§17.9.1). Owner login = `The-Public-Pulse-Agency` (post-org-migration). Trust policy + provisioning script defaults reflect this.
 - `audit_logs` is APPEND-ONLY (§1.3 R8 + §4.2.1.1). No UPDATE/DELETE from application code. **`legal_document_versions` is also append-only** (Day 19 second-such-table); same invariant.
 - Idempotent inserts under RLS must handle zero-rows-after-collision as cross-tenant ownership (409).
-- **Audit helpers are one-per-domain** — never a generic `writeAudit()`. Multiple helpers in the same domain file are fine (4 KYC reviewer helpers + 2 KYC draft helpers in `services/audit/kyc.ts`; `services/audit/tenant.ts`; `services/audit/legal.ts`).
+- **Audit helpers are one-per-domain** — never a generic `writeAudit()`. Multiple helpers in the same domain file are fine.
 - **`tenants.type` is set-once for MVP** — change requires support intervention.
 - **`requireTenantType` middleware caching is request-scoped only** — Hono `c.set('tenantType')`, never closure/module-level.
 - **Frontend test rig precedent** — every new interactive component test includes `expect(await axe(container)).toHaveNoViolations()` via vitest-axe. Modal-open state needs its own axe scan.
 - **jsonb `||` shallow merge with `{step:{}}` SILENTLY wipes the step's sub-object** — Day 16 PR 3 BLOCKER.
-- **No client-side PII persistence** — react-hook-form: component memory only; TanStack Query: in-memory; sessionStorage holds only opaque IDs. **Detail-view queries on PII surfaces MUST override the default TanStack Query cache** to `staleTime: 0` + `gcTime: 0` + `refetchOnWindowFocus: false` + `refetchOnReconnect: false` so PII evaporates on navigation away (Decision H, Day 18).
+- **No client-side PII persistence** — react-hook-form: component memory only; TanStack Query: in-memory; sessionStorage holds only opaque IDs. **Detail-view queries on PII surfaces MUST override the default TanStack Query cache** to `staleTime: 0` + `gcTime: 0` + `refetchOnWindowFocus: false` + `refetchOnReconnect: false` (Decision H, Day 18).
 - **ESM-typed workspace packages with `.js` re-exports need `extensionAlias` in `next.config.mjs`** — Day 16 PR 3 gotcha; deferred from v2.3 playbook bump to v2.4.
 - **BIN 13-digit fact (NBR 2019-11-30) is reviewer-documentation, NOT server-side enforcement.** Day 17 PR 1 BLOCKER fix grandfathered as the one exception.
 - **Wizard step→jsonb-key mapping for Tier A** — verbose step names (`org_info`, `signatory_identity`) shorten to jsonb keys (`fields.org`, `fields.signatory`).
@@ -142,24 +157,22 @@ Days 11-20 shipped:
 - **`legal_document_versions` second append-only table.** Explicit `REVOKE UPDATE, DELETE, TRUNCATE FROM eventpulse_app` per §4.2.1.1.
 - **Admin route group lives under `/(admin)/admin/...`** to avoid `/kyc` collision with `/(tenant)/kyc`.
 - **Markdown sanitization is via `renderLegalMarkdown()` in `apps/api/src/domain/legal/render.ts`** (Decision J). Single source of truth. `defaultSchema` allowlist unchanged. Widening requires its own decisions.md entry.
-- **Public Trust Center pages are Server Components fetching over HTTP** (Decision K — §3.2-clean via `lib/legal.ts` HTTP wrapper). `revalidate: 3600` + `revalidatePath()` on publish.
+- **Public Trust Center pages are Server Components fetching over HTTP** (Decision K). `revalidate: 3600` + `revalidatePath()` on publish.
 - **`consent_records` table is Sprint 3+ scope** (Decision L). Scope-creep red flags: any "click to acknowledge" button, IP/UA capture on Trust Center views, sign-up consent checkbox.
-- **Document set is §20.2 verbatim** (Decision M.1). 6 contracts + 12 artefacts.
-- **Flat database slugs + `canonical_url_path text NOT NULL UNIQUE`** column (Decision M.3). Routing is data-driven.
-- **Sub-processors uses single-paragraph DRAFT placeholder in v0.1** (Decision M.2). Structured `<SubprocessorsEditor />` UI deferred to Sprint 3+.
-- **NEW for Sprint 3 — EPS library is in-house wrapper** at `apps/api/src/infra/eps/` (Day 20 decisions.md). NO SDK dependency. Wrapper composes axios + `@noble/hashes` HMACSHA512 + zod-validated responses + `normaliseStatus()` shim for §11.4 alias gotcha. Never `import { EpsGateway } from 'eps-gateway-nodejs'` — that decision is locked.
-- **NEW for Sprint 3 — `STAGING_PAYMENT_BLOCK=1` is mandatory in staging.** Production EPS credentials in staging is intentional per Day 20 Moshiur decision; the gate is load-bearing. `initialiseOrder()` MUST throw if `STAGING_PAYMENT_BLOCK === '1'` AND `total_paisa > 0`. Removal requires explicit decisions.md MVP-cutover entry.
-- **NEW for Sprint 3 — OAuth button hrefs MUST use absolute URL via `NEXT_PUBLIC_API_BASE_URL`.** The Day 20 PR #104 regression-guard test fires loud if anyone reverts. "Manual verification is a fallback for what tests can't cover, not a substitute for what they can."
+- **EPS library is in-house wrapper** at `apps/api/src/infra/eps/` (Day 20 decisions.md). NO SDK dependency.
+- **`STAGING_PAYMENT_BLOCK=1` is mandatory in staging.** Production EPS credentials in staging is intentional per Day 20 Moshiur decision; the gate is load-bearing.
+- **OAuth button hrefs MUST use absolute URL via `NEXT_PUBLIC_API_BASE_URL`.** Day 20 PR #104 regression-guard test fires loud if anyone reverts.
+- **NEW 2026-05-20/21 — Org migration to `The-Public-Pulse-Agency`** has cascading impact on OIDC trust policies + billing + deploy keys. Runbook in gotchas.md "GitHub repo transfer cascades through THREE owner-scoped trust relationships."
+- **NEW 2026-05-24 — AWS SDK v3 packages must bump together.** Dependabot grouping config landed in `.github/dependabot.yml` (PR #136). Never bump a single `@aws-sdk/*` package independently.
+- **NEW 2026-05-24 — Self-modifying scripts need TWO deploys to verify.** When changing `deploy.sh` (or any shell script invoked via SSM), the deploy that ships it runs the OLD copy from bash memory; the NEW copy doesn't exercise until the next deploy.
+- **NEW 2026-05-24 — `@noble/hashes` stays at v1.8.0 through Days 24-25 truth gate.** PR #72 deferred per decisions.md "@noble/hashes 1.8.0 → 2.2.0 deferred to post-Days-24-25-EPS-truth-gate". Do NOT add `.js` suffixes to subpath imports yet (would break v1 resolution).
 
 ## Pending user actions
 
-- **🔴 NEW (2026-05-20) — GHA org billing verification + restoration.** All GHA workflows failing since 19:01 UTC on 2026-05-19. Pre-Day-23 consolidation work partially blocked. See `.claude/memory/gotchas.md` "GitHub Actions org-wide failure" for full diagnostic + recovery procedure. Likely Free-plan org-level Actions quota exhausted; Team-plan upgrade or pay-as-you-go billing restores. Until restored: no PR merges (creates main-vs-staging drift); manual SSM-based deploy is the legitimate fallback if staging code needs updating urgently.
-- **`eventpulse/staging/eps` Secrets Manager entry** — ✅ DONE 2026-05-19 (Day 20 closeout retry). EPS production credentials written via the same `mktemp` + `--secret-string file://` pattern that worked for Google OAuth. Tags: `env=staging`, `eps-mode=production`, `sensitivity=payments`. Next staging deploy materialises into `.env.staging` via bootstrap-staging.sh extension shipped in PR #106. **STAGING_PAYMENT_BLOCK=1 still mandatory** to prevent priced orders from charging real cards — guard enforced in Sprint 3 Day 26+ in-house wrapper at `apps/api/src/infra/eps/client.ts`.
-- **Google OAuth credentials** — ✅ DONE 2026-05-19. `eventpulse/staging/oauth-google` Secrets Manager entry created with Moshiur-supplied Client ID + Client Secret. Manual happy-path verification gated on next staging deploy materialising the secret into `.env.staging` via bootstrap-staging.sh.
-- **Apple OAuth credentials** — DROPPED from MVP scope per Moshiur 2026-05-19. See `.claude/memory/decisions.md` "Apple Sign-In dropped from MVP scope — Google OAuth only". Scaffolding stays in code (cost-neutral); 503 OAUTH_NOT_CONFIGURED handles missing-credentials state. v2.4 playbook bump candidate: amend §1.2 + §5.2 + §19.2 references to "all four auth methods" → "three at MVP launch".
 - **Counsel engagement for Trust Center v1.0 drafts** — cross-sprint carry; first paying tenant blocked until counsel returns drafts.
-- **§29 #9 (AIT withholding) + #10 (VAT/Mushak)** — legal-consult email status; needed by Sprint 3 Day 22 for fee calculator math.
-- **EPS production credential rotation** — explicitly waived by Moshiur Day 20; revisit if compromise event arises.
+- **§29 #9 (AIT withholding) + #10 (VAT/Mushak)** — tax-opinion email status; needed before Day 24-25 truth gate for calculator math correctness.
+- **EPS production credential rotation** — explicitly waived by Moshiur Day 20; revisit only if compromise event arises.
+- **Org-level Actions spending limit** — set >$0 on 2026-05-24 per Moshiur confirmation. Periodic re-check at <https://github.com/organizations/The-Public-Pulse-Agency/settings/billing/summary> if monthly Actions consumption pattern changes materially.
 
 ## Useful runbook fragments
 
@@ -177,25 +190,18 @@ pnpm --filter @eventpulse/web test
 pnpm --filter @eventpulse/web exec playwright install --with-deps chromium
 pnpm --filter @eventpulse/web test:e2e
 
-# Populate `eventpulse/staging/eps` Secrets Manager entry (Day 20 user-action pending)
-# Run from a workstation with the `eventpulse` AWS profile configured.
-TMP=$(mktemp -t eps-creds) && chmod 600 "$TMP"
-cat > "$TMP" <<JSON
-{ "merchant_id": "...", "store_id": "...", "username": "...",
-  "password": "...", "hash_key": "...", "mode": "production" }
-JSON
-aws secretsmanager create-secret --name eventpulse/staging/eps \
-  --secret-string "file://${TMP}" \
-  --description "Event Pulse staging EPS credentials (production-mode per Moshiur 2026-05-19)" \
-  --tags 'Key=env,Value=staging' 'Key=eps-mode,Value=production' \
-  --region ap-southeast-1 --profile eventpulse --query 'ARN' --output text
-shred -uvz "$TMP" 2>/dev/null || rm -f "$TMP"
-
 # Re-run KYC bucket setup (idempotent)
 ENVIRONMENT=staging AWS_PROFILE=eventpulse ./infra/scripts/setup-kyc-bucket.sh
 
-# Re-run OIDC setup (idempotent)
-ENVIRONMENT=staging AWS_PROFILE=eventpulse GITHUB_REPO=publicpulseagency/EventPulse \
+# Re-run OIDC setup (idempotent; uses new org login)
+ENVIRONMENT=staging AWS_PROFILE=eventpulse GITHUB_REPO=The-Public-Pulse-Agency/EventPulse \
   BRANCH=main INSTANCE_ID=i-02e4fddeb923c14f9 \
   ./infra/scripts/setup-github-oidc.sh
+
+# Verify migration state on staging
+aws ssm send-command --instance-ids i-02e4fddeb923c14f9 \
+  --document-name AWS-RunShellScript \
+  --parameters 'commands=["sudo -u postgres psql -d eventpulse_staging -c \"SELECT filename, applied_at FROM _eventpulse_schema_migrations ORDER BY applied_at DESC LIMIT 5;\""]' \
+  --region ap-southeast-1 --profile eventpulse --query 'Command.CommandId' --output text
+# Then `aws ssm get-command-invocation --command-id <id> ...` to fetch output
 ```

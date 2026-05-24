@@ -4,6 +4,46 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-24 · `@noble/hashes` 1.8.0 → 2.2.0 (Dependabot PR #72) deferred to post-Days-24-25-EPS-truth-gate
+
+**Context:** During the 2026-05-24 pre-Day-23 consolidation session, Dependabot PR #72 (`@noble/hashes` 1.8.0 → 2.2.0) was one of three open major bumps evaluated. Analysis surfaced that the v2 bump fails CI on import-resolution (`Cannot find module '@noble/hashes/argon2'` — v2's `exports` field requires explicit `.js` suffix on subpath imports; bare `'@noble/hashes/argon2'` is no longer a valid specifier). The fix scope itself is small (one-line change in `apps/api/src/auth/hash.ts:16` adding `.js` suffix). The deeper concern is the bump's TIMING relative to Sprint 3.
+
+**Decision (Moshiur 2026-05-24):** Hold #72 — do not merge during the consolidation session. Defer to after the Days 24-25 EPS sandbox truth gate (Decision N) clears. Leave PR open with `deferred-post-eps-truth-gate` label; reopening after the truth gate clears.
+
+**Rationale:**
+
+1. **`@noble/hashes` underpins both surfaces that Days 24-25 stress-test.** Argon2id (live) is used for password hashing on every signup + signin via `apps/api/src/auth/hash.ts`. The EPS HMAC mechanism (not yet built; lands Days 26-28 per the in-house wrapper plan in CLAUDE.md §11.2 + Day 20 decisions.md "EPS library choice locked — in-house wrapper") will use `hmac` + `sha512` from `@noble/hashes` during the Days 24-25 truth-gate sandbox transactions. Bumping the crypto library now would make it a **confounding variable during EPS week** — a sandbox-call failure during the truth gate couldn't be cleanly attributed between (a) fee-calculator bug (the variable Decision N is designed to test), (b) EPS-integration bug (expected; that's why we're running the truth gate), or (c) silent v2 behavioral change in the crypto primitive itself.
+2. **Analysis could NOT confirm argon2id produces byte-identical output in v2.** CI failed at import-resolution before exercising the function itself; Noble libraries publish no per-function changelog (only the package-level "modules reorganized" notice). A silent change in password-hash output would mean existing user passwords stop verifying — catastrophic at any scale beyond zero users.
+3. **Zero production users means zero cost to holding.** No security CVE forces the bump. v1.8.0 continues to ship and is supported in the maintenance window. The cost of delay is only "the bump is held longer"; the cost of bumping now and discovering a silent breakage during truth-gate week is "lose the empirical clarity of Decision N AND potentially break auth."
+
+**Post-truth-gate plan (when reopening #72):**
+
+After the Days 24-25 truth gate clears, bump 1→2 in **ISOLATION** — NOT bundled with any other change. Dedicated test PR carrying:
+
+1. The 1-line import-path fix in `apps/api/src/auth/hash.ts` (`'@noble/hashes/argon2'` → `'@noble/hashes/argon2.js'`).
+2. Updated import paths in the (then-existing) EPS wrapper at `apps/api/src/infra/eps/` per CLAUDE.md §11.2 (`/hmac.js`, `/sha2.js`, `/utils.js` suffixes).
+3. A **dedicated regression test** verifying:
+   - argon2id produces byte-identical output pre/post bump for a known password+salt pair (use a hard-coded fixture from a real v1.8.0 hash that exists on disk in a test-vectors file)
+   - EPS HMAC produces byte-identical HMACSHA512 output for a known payload (use a fixture against a known-good expected hex string)
+4. Local + CI typecheck pass.
+
+Isolating the crypto change from EPS-integration week means any breakage that surfaces post-bump is **unambiguously attributable** to the crypto change, not entangled with EPS sandbox integration noise.
+
+**Consequences:**
+
+- `@noble/hashes` stays at 1.8.0 through Sprint 3. Days 24-25 truth gate runs against the v1 crypto library — current behavior, known surface.
+- The EPS wrapper code shipped in Days 26-28 will use the v1 subpath imports (`from '@noble/hashes/hmac'`, `from '@noble/hashes/sha512'`, `from '@noble/hashes/utils'`) — bare specifiers, no `.js` suffix. When #72 is reopened post-truth-gate, the EPS wrapper imports become part of the change scope alongside the `hash.ts` fix.
+- CLAUDE.md §11.2 carries an amendment (added in the same 2026-05-24 consolidation closeout PR) noting that subpath imports will need explicit `.js` suffixes when v2 lands. This prevents the Day 26-28 wrapper work from being written against v2 paths that don't actually work on v1, OR from being written against v1 paths and then needing rework when v2 lands.
+- PR #72 stays open with `deferred-post-eps-truth-gate` label. A deferral comment was posted to the PR pointing at this decisions entry.
+
+**Reopening trigger:** Days 24-25 EPS sandbox truth gate (Decision N 2026-05-19) reports clean. After that gate clears, this entry's deferral lifts and the post-truth-gate plan above executes as a focused PR.
+
+**Cross-references:** Decision N (decisions.md 2026-05-19) "Fee calculator EPS-base rule locked + mandatory Day 24-25 EPS sandbox truth gate"; CLAUDE.md §11.2 (EPS wrapper plan + the v2 `.js`-suffix amendment); `.claude/memory/gotchas.md` "AWS SDK v3 packages share smithy internal Client types" (a related "library coupling" pattern — different library, same "things that look independent are actually coupled" lesson).
+
+---
+
+---
+
 ## 2026-05-20 · Org migration — `publicpulseagency` (personal) → `The-Public-Pulse-Agency` (org); OIDC trust policy updated to Option A
 
 **Context:** Pre-Day-23 consolidation resumption discovered that the first auto-deploy after GHA was restored failed at the OIDC AssumeRole step with `Not authorized to perform sts:AssumeRoleWithWebIdentity`. Investigation surfaced two simultaneous changes that landed during the GHA outage window: (1) Moshiur's personal GitHub username `publicpulseagency` was changed; (2) a new GitHub organisation `The-Public-Pulse-Agency` was created and the EventPulse repo was transferred from the personal account into the new org. Nothing was deleted; HTTP redirects keep `publicpulseagency/EventPulse` URLs working, but the OIDC `sub` and `job_workflow_ref` claims carry the new canonical org login (`The-Public-Pulse-Agency`) — and the IAM trust policy on `eventpulse-deploy-staging` was pinned to the old name. Three claims, exact-match per the canonical pattern: both `sub` and `job_workflow_ref` mismatched, AssumeRole rejected.
