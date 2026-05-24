@@ -2033,6 +2033,8 @@ All webhook endpoints verify signature, enqueue to SQS, return 200 fast. Workers
 
 ### 11.2 Implementation Skeleton (in-house wrapper, Sprint 3 Day 21+)
 
+> **Note on `@noble/hashes` subpath imports.** The current locked version of `@noble/hashes` is **1.8.0**. The imports below (bare `'@noble/hashes/hmac'` etc., no `.js` suffix) are the v1 syntax — they work today against `^1.8.0`. When `@noble/hashes` bumps to v2 (currently deferred — see `.claude/memory/decisions.md` "`@noble/hashes` 1.8.0 → 2.2.0 (Dependabot PR #72) deferred to post-Days-24-25-EPS-truth-gate" 2026-05-24), all subpath imports require an explicit `.js` extension because v2's `exports` field drops bare-specifier resolution. The post-truth-gate v2 bump will rewrite these imports to `'@noble/hashes/hmac.js'`, `'@noble/hashes/sha2.js'`, `'@noble/hashes/utils.js'` alongside the matching fix in `apps/api/src/auth/hash.ts`. Do NOT add `.js` suffixes until v2 actually lands — they'd break the v1 import resolution path.
+
 ```typescript
 // apps/api/src/infra/eps/client.ts
 import { hmac } from '@noble/hashes/hmac'

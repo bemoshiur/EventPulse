@@ -4,6 +4,88 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## AWS SDK v3 packages share smithy internal Client types — must bump together (2026-05-24)
+
+**Symptom.** Bumping `@aws-sdk/client-s3` alone (or `@aws-sdk/s3-request-presigner` alone) to a newer patch version while the sibling stays back produces a typecheck failure on the s3-presigner boundary:
+
+```text
+src/infra/s3/client.ts(198,40): error TS2345:
+  Argument of type 'S3Client' is not assignable to parameter of type
+  'Client<any, ServiceInputTypes, MetadataBearer, any>'.
+  Types have separate declarations of a private property 'handlers'.
+```
+
+The same pattern hit Dependabot PRs #131 (`client-s3` patch alone) and #133 (`s3-request-presigner` patch alone) during the 2026-05-24 consolidation session — each failed CI individually with this exact error.
+
+**Why it happens.** `@aws-sdk/*` packages share an internal smithy `Client` class via the `@smithy/types` package transitively. The `handlers` field is a **private class member**, and TypeScript treats two versions of the same private class member as structurally distinct (private fields are nominal in TypeScript, not structural). When `client-s3` and `s3-request-presigner` versions diverge, the presigner's expected `Client<...>` parameter type and the `client-s3` instance's class identity mismatch on `handlers`. The diagnostic is misleading — you read "S3Client is not Client" and assume an API change, but the real issue is two copies of the same `Client` class from different package versions.
+
+Fix one alone, CI breaks on main. Fix the other alone, CI breaks on main. Both must move together.
+
+**Fix.**
+
+1. **Always bump `@aws-sdk/*` packages as a group.** Either combine the bumps locally into one PR (the pattern used for the 2026-05-24 PR #136 recovery) or rely on Dependabot grouping to do it automatically. Recovery command for an already-stuck pair:
+
+   ```bash
+   pnpm --filter <app> update @aws-sdk/client-s3@<version> @aws-sdk/s3-request-presigner@<version>
+   # Then commit lockfile + package.json together in one PR
+   ```
+
+2. **Dependabot grouping config.** `.github/dependabot.yml` carries an `aws-sdk` group matching `@aws-sdk/*` with `update-types: [minor, patch]` (added 2026-05-24 in PR #136). Going forward, Dependabot opens ONE PR per AWS SDK family bump instead of N separate PRs that each break CI. Majors stay ungrouped (review by hand) because they often retitle exports.
+
+**Verification of the grouping config** (2026-05-24 same day): Dependabot ran its next cycle 3 hours after #136 merged and opened **PR #137 — "bump the aws-sdk group across 1 directory with 2 updates"**, confirming the grouping works. Standalone `client-sesv2` PR (#134) auto-closed itself as part of consolidating into the group.
+
+**How to avoid future occurrences:**
+
+- If you see `TS2345` with "separate declarations of private property 'handlers'" anywhere in AWS-SDK-adjacent code, it's a version skew between sibling `@aws-sdk/*` packages. Check `package.json` for divergent minor versions across the family.
+- Never bump a single `@aws-sdk/*` package independently. If you need to bump one, bump all of them at the same minor.
+- The grouping config is **load-bearing** — removing it re-exposes every cycle to the same N-separate-PRs-each-failing-CI pattern.
+
+**Cross-reference:** PR #136 (2026-05-24 combined bump + grouping config) is the canonical fix recipe. Confirmation that grouping works: PR #137 (Dependabot's first grouped aws-sdk PR after the config landed). Decisions entry in `.claude/memory/decisions.md` "Pre-Day-23 consolidation session" if extended docs are needed.
+
+---
+
+## Self-modifying deploy/bootstrap scripts don't take effect on the deploy that ships them (2026-05-24)
+
+**Symptom.** PR #127 changed `infra/deploy/deploy.sh` to add Fix 6b's conditional Nginx reload. After merge, the auto-deploy fired and succeeded — but the deploy log showed NO trace of the new Fix 6b code paths (no "previous HEAD was..." line, no "no nginx vhost changes; skipping nginx reload" line). The new `deploy.sh` was on disk; it just hadn't run.
+
+**Why it happens.** Bash loads the entire script into memory at process start, then runs to completion from that loaded copy. By the time `deploy.sh` does its `git fetch + git reset --hard <new TARGET>`, the new version of itself is on disk — but the running bash process is still executing the OLD copy. Sequence:
+
+1. CI invokes `deploy.sh` via SSM `SendCommand`
+2. Bash loads the OLD `deploy.sh` into its process memory
+3. Old `deploy.sh` runs: `git fetch + git reset --hard <new commit>` (NEW `deploy.sh` now on disk)
+4. Old `deploy.sh` continues from memory: install / build / migrate / pm2 reload / healthcheck
+5. Old `deploy.sh` exits cleanly
+6. NEW `deploy.sh` sits on disk, unexercised
+7. The NEXT deploy (whatever fires next) is the first to run the new code
+
+**Empirical verification (2026-05-24):**
+
+- 13:32 PR #127 merge → push-event deploy → ran OLD `deploy.sh` → no Fix 6b markers in log
+- 13:44 fresh `workflow_dispatch` deploy → ran NEW `deploy.sh` → both Fix 6b markers present:
+
+  ```text
+  checked out 01207a4 (from ref=01207a48...; previous HEAD was 01207a48...)
+  no nginx vhost changes; skipping nginx reload
+  ```
+
+**Fix.** When shipping a change to `deploy.sh` (or any other self-modifying deploy/bootstrap script):
+
+1. Merge the PR that ships the change.
+2. **Fire a second deploy** (`gh workflow run deploy-staging.yml --ref main` or whatever triggers it) to actually exercise the new script.
+3. Verify the second deploy's log shows the expected new behavior.
+
+A single PR merge is NOT sufficient to verify a `deploy.sh` change — you need TWO deploys: the one that ships the file, and the next one that runs it.
+
+**How to avoid future occurrences:**
+
+- When reviewing a `deploy.sh` PR, add "fire a follow-up workflow_dispatch deploy after merge to verify the new logic" to the PR description's test plan.
+- The same caveat applies to `infra/scripts/bootstrap-staging.sh`, `rollback.sh`, and any other shell script invoked via SSM `SendCommand`. Bootstrap and rollback are less frequently exercised so the gotcha is even more likely to be missed there.
+- If you can't tell whether the new or old version of the script ran, grep the deploy log for a marker line unique to the new version (e.g. a new echo statement). Absence of that marker = old version ran.
+
+**Related — Sprint 2 silent-failure pattern.** This is structurally similar to the Sprint 2 silent-partial-failure pattern that took 5 working days to surface: observability of a code path requires probes that exercise the actual code path, not layer-of-abstraction shortcuts. Here, "the script changed" doesn't mean "the new script ran" — you need a probe (the next deploy) that actually exercises the new code.
+
+---
+
 ## GitHub repo transfer cascades through THREE owner-scoped trust relationships (2026-05-20 / -21)
 
 **TL;DR.** Transferring a repo to a new GitHub org breaks **three** independent owner-scoped trust relationships in sequence. Fix one, the next surfaces. The three are: **(1) OIDC trust policy** (`sub` + `job_workflow_ref` carry the owner name; AWS IAM rejects AssumeRole until updated); **(2) Actions billing entity** (new org has its own 2,000-min Free-tier allowance + its own Free-tier default $0 spending limit; a limit set on the previous owner does NOT carry over); **(3) Deploy keys** (org-level policy can disable deploy keys; transferred keys can land in a stale-metadata state that authenticates on the SSH greeting but rejects `git-upload-pack`). When migrating a repo to a new org, check + fix all three before expecting deploys to work. Each surfaces only after the prior is resolved, so a one-at-a-time debugging session burns hours; the runbook below is the consolidated three-layer fix.
