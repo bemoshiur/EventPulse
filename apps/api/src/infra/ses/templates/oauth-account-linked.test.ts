@@ -51,15 +51,9 @@ describe('oauth-account-linked email template', () => {
     expect(out.text).not.toMatch(/from IP /)
   })
 
-  it('uses brand-canonical "Apple" label regardless of locale', () => {
-    const out = renderOAuthAccountLinked({
-      userName: 'Aisha',
-      provider: 'apple',
-      linkedAt: LINKED_AT,
-      securitySettingsUrl: securityUrl,
-      locale: 'bn',
-    })
-    expect(out.subject).toContain('Apple')
-    expect(out.text).toContain('Apple সাইন-ইন যুক্ত হয়েছে')
-  })
+  // Apple Sign-In was DROPPED from MVP scope Sprint 3 Day 23 —
+  // OAuthProvider narrowed to 'google'. The Apple-label test (originally
+  // covering Apple's brand-canonical rendering across both locales) is
+  // gone with the runtime. The Google-locale tests above are the
+  // canonical happy-path coverage.
 })

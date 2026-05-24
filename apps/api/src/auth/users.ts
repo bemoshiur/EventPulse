@@ -87,8 +87,14 @@ export async function markEmailVerified(userId: string): Promise<void> {
 }
 
 // ─── OAuth identity helpers (Sprint 2 Item 4) ─────────────────────────
+//
+// Type is Google-only at MVP per decisions.md "Apple Sign-In dropped
+// from MVP scope" (Sprint 3 Day 23). Database CHECK enum on
+// oauth_identities.provider retains both ('google', 'apple') for
+// historical row readability + forward-compat re-introduction; type
+// narrows the application surface to what's actively wired.
 
-export type OAuthProvider = 'google' | 'apple'
+export type OAuthProvider = 'google'
 
 export interface OAuthIdentityRecord {
   id: string

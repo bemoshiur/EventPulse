@@ -1,5 +1,5 @@
 /**
- * Tests for OAuthButtonGroup — Sprint 2 Day 20 OAuth bug fix.
+ * Tests for OAuthButtonGroup — originally Sprint 2 Day 20 OAuth bug fix.
  *
  * The Day 11 → Day 20 silent failure: buttons pointed at
  * `/api/auth/{provider}/start` (web vhost relative) which 404'd against
@@ -8,6 +8,11 @@
  *
  * These tests pin the URL shape so a regression resurrects with a loud
  * failure instead of a silent UX dead-end.
+ *
+ * Apple Sign-In was DROPPED from MVP scope Sprint 3 Day 23 (see
+ * decisions.md "Apple Sign-In dropped from MVP scope"). Apple-button
+ * assertions removed; an "Apple button is gone" guard test pins the
+ * decision against copy-paste regression.
  */
 
 import { render, screen } from '@testing-library/react'
@@ -31,13 +36,17 @@ describe('OAuthButtonGroup', () => {
     }
   })
 
-  it('renders both provider buttons', () => {
+  it('renders the Google button', () => {
     render(<OAuthButtonGroup />)
     expect(screen.getByTestId('oauth-google-button')).toBeInTheDocument()
-    expect(screen.getByTestId('oauth-apple-button')).toBeInTheDocument()
   })
 
-  it('button hrefs hit the API vhost path, not the web vhost', async () => {
+  it('does NOT render an Apple button (dropped from MVP scope)', () => {
+    render(<OAuthButtonGroup />)
+    expect(screen.queryByTestId('oauth-apple-button')).toBeNull()
+  })
+
+  it('button href hits the API vhost path, not the web vhost', async () => {
     // Re-import the module under a fresh env so the module-eval `startUrl()`
     // function reads the value we set here, not the build-time default.
     process.env['NEXT_PUBLIC_API_BASE_URL'] = 'https://api.staging.eventpulse.com.bd'
@@ -46,25 +55,18 @@ describe('OAuthButtonGroup', () => {
     render(<Fresh />)
 
     const google = screen.getByTestId('oauth-google-button')
-    const apple = screen.getByTestId('oauth-apple-button')
     expect(google.getAttribute('href')).toBe(
       'https://api.staging.eventpulse.com.bd/api/v1/auth/oauth/google/start',
     )
-    expect(apple.getAttribute('href')).toBe(
-      'https://api.staging.eventpulse.com.bd/api/v1/auth/oauth/apple/start',
-    )
   })
 
-  it('button hrefs MUST start with the v1 oauth path (regression guard)', () => {
+  it('button href MUST start with the v1 oauth path (regression guard)', () => {
     render(<OAuthButtonGroup />)
     const google = screen.getByTestId('oauth-google-button').getAttribute('href') ?? ''
-    const apple = screen.getByTestId('oauth-apple-button').getAttribute('href') ?? ''
     expect(google).toMatch(/\/api\/v1\/auth\/oauth\/google\/start$/)
-    expect(apple).toMatch(/\/api\/v1\/auth\/oauth\/apple\/start$/)
     // Defence against the original bug: web-vhost relative paths must NEVER
     // be the href shape.
     expect(google).not.toMatch(/^\/api\/auth\/google/)
-    expect(apple).not.toMatch(/^\/api\/auth\/apple/)
   })
 
   it('strips trailing slash from NEXT_PUBLIC_API_BASE_URL', async () => {

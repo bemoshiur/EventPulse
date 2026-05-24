@@ -1,6 +1,15 @@
 /**
- * OAuth (Google + Apple) callback routes for Sprint 2 Item 4. Mounted
- * at /api/v1/auth/oauth/<provider>/{start,callback}.
+ * OAuth (Google) callback routes for Sprint 2 Item 4. Mounted at
+ * /api/v1/auth/oauth/google/{start,callback}.
+ *
+ * Apple Sign-In was DROPPED from MVP scope (Sprint 3 Day 23 decision —
+ * see decisions.md "Apple Sign-In dropped from MVP scope"). Apple
+ * routes, helpers, and frontend wiring removed; the `apple` literal
+ * survives in shared types (oauth_identities.provider DB CHECK enum
+ * still allows it for historical rows, type `OAuthProvider = 'google'
+ * | 'apple'` retained for forward-compat) but no runtime path emits
+ * 'apple'. Re-introducing Apple is a deliberate Phase 2+ decision +
+ * dedicated PR; do not re-add piecemeal.
  *
  * Security model — full rationale in `.claude/memory/decisions.md`
  * "OAuth callback security model" (2026-05-17). Summary:
@@ -9,16 +18,13 @@
  *      domain-separated tag `oauth-state-v1`), TTL 10 min, single-use
  *      (cleared on callback before any DB write).
  *   2. PKCE on for Google (verifier ships inside the signed state
- *      cookie); not applicable for Apple (different security model —
- *      JWT-based client_secret minted from team key).
- *   3. ID tokens always verified via JWKS (`verifyGoogleIdToken` /
- *      `verifyAppleIdToken`); never trust claims from `decodeIdToken`.
+ *      cookie).
+ *   3. ID tokens always verified via JWKS (`verifyGoogleIdToken`);
+ *      never trust claims from `decodeIdToken`.
  *   4. Auto-link match order: by oauth_identities (provider, sub)
  *      first; then by users.email if email is verified AND not a
  *      relay; otherwise create a new user with whatever email the
  *      IdP provided.
- *   5. Apple uses response_mode=form_post (delivers `user` name on
- *      first auth) → callback is POST application/x-www-form-urlencoded.
  *
  * Why this file lives separately from auth.ts: the file comment in
  * auth.ts ("OAuth routes are wired in `oauth-routes.ts` and folded
@@ -33,13 +39,10 @@ import { signTokens } from '../auth/jwt.js'
 import { createSession } from '../auth/sessions.js'
 import { hashToken } from '../auth/tokens.js'
 import {
-  appleClient,
   decideAutoLink,
   googleClient,
   isOAuthProviderConfigured,
-  verifyAppleIdToken,
   verifyGoogleIdToken,
-  type AppleIdClaims,
   type GoogleIdClaims,
 } from '../auth/oauth.js'
 import {
@@ -62,7 +65,6 @@ import { logger } from '../lib/logger.js'
 const oauth = new Hono()
 
 const GOOGLE_SCOPES = ['openid', 'email', 'profile']
-const APPLE_SCOPES = ['name', 'email']
 
 function isSecureCookieEnv(): boolean {
   return process.env['NODE_ENV'] === 'production'
@@ -198,133 +200,10 @@ oauth.get('/google/callback', async (c) => {
   return c.json({ data: session.responseBody }, 200)
 })
 
-// ─── APPLE ───────────────────────────────────────────────────────────────
-
-oauth.get('/apple/start', (c) => {
-  if (!isOAuthProviderConfigured('apple')) {
-    return c.json(
-      {
-        error: {
-          code: 'OAUTH_NOT_CONFIGURED',
-          message:
-            'Apple sign-in is not configured for this environment. Credentials are still being provisioned.',
-        },
-      },
-      503,
-    )
-  }
-  const state = generateState()
-  const url = appleClient().createAuthorizationURL(state, APPLE_SCOPES)
-  // Apple needs response_mode=form_post to return the user's name on
-  // first auth. arctic's URL builder doesn't set this for us.
-  url.searchParams.set('response_mode', 'form_post')
-
-  const cookie = signState({ state, codeVerifier: '', provider: 'apple' })
-  c.header(
-    'Set-Cookie',
-    buildSetCookie(stateCookieName('apple'), cookie, { secure: isSecureCookieEnv() }),
-  )
-  return c.redirect(url.toString(), 302)
-})
-
-oauth.post('/apple/callback', async (c) => {
-  const requestId = c.req.header('x-request-id') ?? undefined
-  // form_post: parameters arrive in the body as application/x-www-form-urlencoded.
-  const body = await c.req.parseBody()
-  const code = typeof body['code'] === 'string' ? (body['code'] as string) : null
-  const stateParam = typeof body['state'] === 'string' ? (body['state'] as string) : null
-  const idpError = typeof body['error'] === 'string' ? (body['error'] as string) : null
-  const cookie = c.req.header('cookie')
-  const cookieValue = readCookie(cookie, stateCookieName('apple'))
-
-  c.header(
-    'Set-Cookie',
-    buildClearCookie(stateCookieName('apple'), { secure: isSecureCookieEnv() }),
-  )
-
-  if (idpError) {
-    logger.info({ request_id: requestId, idp_error: idpError }, 'apple oauth user cancelled')
-    return c.json(fail(`idp_error:${idpError}`, requestId), 400)
-  }
-  if (!code || !stateParam) {
-    return c.json(fail('missing code or state in callback', requestId), 400)
-  }
-  const verified = verifyState(cookieValue, 'apple', stateParam)
-  if (!verified.ok) {
-    logger.warn({ request_id: requestId, reason: verified.error }, 'apple state verify failed')
-    return c.json(fail(`state:${verified.error}`, requestId), 400)
-  }
-
-  // Apple delivers a `user` field with name only on FIRST authorisation;
-  // it's a JSON-encoded string `{name: {firstName, lastName}, email}`.
-  let firstAuthName: string | null = null
-  if (typeof body['user'] === 'string') {
-    try {
-      const parsed = JSON.parse(body['user'] as string) as {
-        name?: { firstName?: string; lastName?: string }
-      }
-      const fn = parsed?.name?.firstName ?? ''
-      const ln = parsed?.name?.lastName ?? ''
-      const joined = `${fn} ${ln}`.trim()
-      if (joined) firstAuthName = joined
-    } catch {
-      // Apple sent a malformed `user` blob — non-fatal; we just don't
-      // capture the name for new-user flow.
-    }
-  }
-
-  let idToken: string
-  try {
-    const tokens = await appleClient().validateAuthorizationCode(code)
-    idToken = tokens.idToken()
-  } catch (err) {
-    if (err instanceof OAuth2RequestError) {
-      logger.warn(
-        { request_id: requestId, err_code: err.code, err_desc: err.description },
-        'apple code exchange rejected',
-      )
-      return c.json(fail(`code_exchange:${err.code}`, requestId), 400)
-    }
-    throw err
-  }
-
-  let claims: AppleIdClaims
-  try {
-    claims = await verifyAppleIdToken(idToken)
-  } catch (err) {
-    logger.warn(
-      { request_id: requestId, err: err instanceof Error ? err.message : String(err) },
-      'apple id token verify failed',
-    )
-    return c.json(fail('id_token_verify_failed', requestId), 400)
-  }
-
-  const session = await loginOrLink({
-    provider: 'apple',
-    sub: claims.sub,
-    email: claims.email,
-    emailVerified: claims.emailVerified,
-    isPrivateEmail: claims.isPrivateEmail,
-    nameForNewUser: firstAuthName,
-    ip: c.req.header('x-forwarded-for') ?? null,
-    userAgent: c.req.header('user-agent') ?? null,
-    rawProfile: {
-      sub: claims.sub,
-      email: claims.email,
-      email_verified: claims.emailVerified,
-      is_private_email: claims.isPrivateEmail,
-    },
-  })
-
-  setCookie(c, 'eventpulse_session', session.sessionToken, {
-    httpOnly: true,
-    secure: isSecureCookieEnv(),
-    sameSite: 'Lax',
-    path: '/',
-    maxAge: 7 * 24 * 60 * 60,
-  })
-  return c.json({ data: session.responseBody }, 200)
-})
+// Apple routes removed Day 23 per "Apple Sign-In dropped from MVP scope"
+// decision. To re-add, restore /apple/start (GET) + /apple/callback (POST)
+// and reinstate appleClient + verifyAppleIdToken usage. See git history
+// commit removing this section for the full prior implementation.
 
 // ─── shared post-verify flow ────────────────────────────────────────────
 

@@ -19,10 +19,11 @@
 
 import { expect, test } from '@playwright/test'
 
-test('sign-in page renders the four auth entry points', async ({ page }) => {
+test('sign-in page renders the auth entry points', async ({ page }) => {
   await page.goto('/sign-in')
-  // Continue-with-Apple + Continue-with-Google + email magic-link + password sign-in
-  // per §19.2 sign-in UI. We assert on stable selectors that the public
-  // marketing surface guarantees.
+  // Continue-with-Google + email magic-link + password sign-in per §19.2
+  // sign-in UI. (Apple was dropped from MVP scope Sprint 3 Day 23.)
+  // We assert on stable selectors that the public marketing surface
+  // guarantees.
   await expect(page).toHaveTitle(/event pulse/i)
 })

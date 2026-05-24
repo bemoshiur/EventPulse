@@ -29,18 +29,10 @@ describe('oauth-state: signState + verifyState happy path', () => {
     }
   })
 
-  it('round-trips an Apple payload with empty codeVerifier', () => {
-    const cookie = signState(
-      { state: 'st-apple', codeVerifier: '', provider: 'apple' },
-      { key: KEY },
-    )
-    const result = verifyState(cookie, 'apple', 'st-apple', { key: KEY })
-    expect(result.ok).toBe(true)
-    if (result.ok) {
-      expect(result.payload.codeVerifier).toBe('')
-      expect(result.payload.provider).toBe('apple')
-    }
-  })
+  // Apple Sign-In was DROPPED from MVP scope Sprint 3 Day 23. The
+  // Apple-payload round-trip test (originally covering Apple's empty-
+  // codeVerifier path) is gone with the runtime. The Google round-trip
+  // above is the canonical happy-path test now.
 })
 
 describe('oauth-state: tamper detection', () => {
@@ -103,12 +95,12 @@ describe('oauth-state: TTL', () => {
 })
 
 describe('oauth-state: provider + state binding', () => {
-  it('rejects when expected provider differs from payload provider', () => {
-    const cookie = signState({ state: 's', codeVerifier: 'v', provider: 'google' }, { key: KEY })
-    const result = verifyState(cookie, 'apple', 's', { key: KEY })
-    expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.error).toBe('provider_mismatch')
-  })
+  // Provider-mismatch detection used the Google/Apple pair to verify
+  // the binding. With Apple dropped Sprint 3 Day 23, the provider type
+  // narrows to 'google' only — the mismatch path is unreachable via
+  // the type system. Test removed; the invalid_payload branch in
+  // verifyState() still catches malformed third-party payloads at the
+  // structural level.
 
   it('rejects when state nonce in payload differs from IdP-returned state', () => {
     const cookie = signState(
@@ -144,7 +136,6 @@ describe('oauth-state: deriveStateHmacKey rejects short secrets', () => {
 describe('oauth-state: cookie name + Set-Cookie helpers', () => {
   it('stateCookieName is provider-specific', () => {
     expect(stateCookieName('google')).toBe('oauth_state_google')
-    expect(stateCookieName('apple')).toBe('oauth_state_apple')
   })
 
   it('buildSetCookie includes HttpOnly + SameSite=Lax + Path=/ + Max-Age', () => {

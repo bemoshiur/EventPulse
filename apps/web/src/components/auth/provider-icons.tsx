@@ -1,22 +1,13 @@
 /**
  * Provider logos.
- * Apple and Google require brand-correct rendering — colours and proportions
+ *
+ * Google logo requires brand-correct rendering — colours and proportions
  * follow the official brand guidelines. Do not restyle.
+ *
+ * Apple logo removed Sprint 3 Day 23 per decisions.md "Apple Sign-In
+ * dropped from MVP scope". Restore from git history of this file when
+ * Apple is re-introduced.
  */
-
-export function AppleLogo({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      aria-hidden
-      className={className}
-      fill="currentColor"
-    >
-      <path d="M17.05 12.04c-.02-1.95.87-3.41 2.66-4.49-1-1.44-2.51-2.23-4.5-2.38-1.88-.15-3.93 1.1-4.69 1.1-.8 0-2.62-1.04-4.04-1.04C3.36 5.3 1 7.8 1 12.7c0 1.45.27 2.95.8 4.49.71 2.04 3.27 7.05 5.95 6.97 1.39-.03 2.37-.99 4.19-.99 1.76 0 2.68.99 4.21.99 2.71-.04 5.02-4.59 5.7-6.64-3.65-1.72-3.8-5.04-3.8-5.48ZM14.94 3.74C16.1 2.36 16 1.1 15.96.66 14.92.72 13.72 1.36 13.04 2.16 12.3 3 11.86 4.04 11.96 5.27c1.14.09 2.17-.49 2.98-1.53Z" />
-    </svg>
-  )
-}
 
 export function GoogleLogo({ className }: { className?: string }) {
   return (
