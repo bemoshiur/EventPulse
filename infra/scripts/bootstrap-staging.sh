@@ -539,6 +539,42 @@ EOF
 mv "$TMP_ENV" "$ENV_FILE"
 chown "$EVENTPULSE_USER:$EVENTPULSE_GROUP" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
+
+# ─── 2.1) Post-materialise validation of load-bearing values ────────────
+#
+# Sprint 3 Day 25 carry-forward from the Day 23 silent-failure: a stale
+# `.env.staging` could carry an EMPTY `NEXT_PUBLIC_API_BASE_URL=` (e.g.
+# if a partial materialise raced with a deploy, or if a future edit to
+# this heredoc accidentally truncated the line). Empty at build time
+# would silently revive the relative-href OAuth bug (gotchas.md
+# "NEXT_PUBLIC_API_BASE_URL missing at Next.js build time silently
+# renders relative OAuth href"). The grep+test below fails the script
+# loud BEFORE the next `pnpm build` runs against a broken env.
+#
+# Validates load-bearing values only:
+#   - NEXT_PUBLIC_API_BASE_URL (build-time inlined; the silent-failure
+#     class Day 23 surfaced)
+#   - EVENTPULSE_API_BASE_URL + EVENTPULSE_WEB_BASE_URL (runtime
+#     consumed by OAuth callback redirect target + health probes)
+#
+# Doesn't validate values that are genuinely-empty when intentionally
+# unset (e.g. EPS_* values during the period before Secrets Manager is
+# populated; KYC_BUCKET_NAME before setup-kyc-bucket.sh runs).
+log "step 2.1: validate load-bearing materialised env values"
+for var in NEXT_PUBLIC_API_BASE_URL EVENTPULSE_API_BASE_URL EVENTPULSE_WEB_BASE_URL; do
+  value=$(grep "^${var}=" "$ENV_FILE" | sed -E "s/^${var}=//" || true)
+  if [[ -z "$value" ]]; then
+    log "  ERROR: ${var} is empty in $ENV_FILE — would silently break the Next.js build at deploy time"
+    log "  fix: re-run this script, OR check for a heredoc edit that dropped the line above"
+    exit 1
+  fi
+  if [[ "$value" =~ ^https?:// ]]; then
+    log "  ok: ${var} = ${value}"
+  else
+    log "  ERROR: ${var}=${value} doesn't look like an http(s) URL — would break runtime consumers"
+    exit 1
+  fi
+done
 # Clear in-memory secrets from this shell — defence in depth even though
 # the shell exits right after. KYC_* values are non-secret (bucket name +
 # key ARN) but unset for cleanliness.
