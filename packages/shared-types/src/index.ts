@@ -113,3 +113,14 @@ export {
   type Venue,
   type RefundPolicy,
 } from './event-schemas.js'
+
+// Ticket tier zod schemas — Sprint 3 Day 25. Shared between server
+// route validation (apps/api/src/routes/tenant/ticket-tiers.ts) and
+// frontend react-hook-form resolvers (apps/web/src/components/tenant/
+// ticket-tier-form/...).
+export {
+  TicketTierCreateSchema,
+  TicketTierUpdateSchema,
+  type TicketTierCreateInput,
+  type TicketTierUpdateInput,
+} from './ticket-tier-schemas.js'

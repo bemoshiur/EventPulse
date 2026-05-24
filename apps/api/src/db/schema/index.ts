@@ -675,3 +675,63 @@ export const events = pgTable(
       .where(sql`${t.status} IN ('published','on_sale','live')`),
   ],
 )
+
+// ─── ticket_tiers (Sprint 3 Day 25) ─────────────────────────────────────
+//
+// Per CLAUDE.md §9.3 + migration 0012. Deferred from Day 23 events
+// workstream per decisions.md 2026-05-24 "Scope = events table ONLY;
+// ticket_tiers is Day 25". Each tier has its own price + capacity +
+// sales window; the order pipeline (Day 26-28) reads tiers via the
+// fee-calculator at order time. capacity locking via SELECT...FOR
+// UPDATE on the sold counter lands Day 29.
+//
+// is_complimentary distinguishes revenue-bearing free tiers (price 0,
+// is_complimentary false — e.g. "RSVP for our free meetup") from comp
+// passes (price 0, is_complimentary true — e.g. sponsor/organiser
+// invites). The CHECK constraint enforces price_paisa=0 when
+// is_complimentary=true.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const ticketTiers = pgTable(
+  'ticket_tiers',
+  {
+    id: uuid()
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    name: text().notNull(),
+    description: text(),
+    pricePaisa: bigint('price_paisa', { mode: 'bigint' }).notNull(),
+    capacity: integer().notNull(),
+    sold: integer().notNull().default(0),
+    salesStartAt: timestamp('sales_start_at', { withTimezone: true }),
+    salesEndAt: timestamp('sales_end_at', { withTimezone: true }),
+    minPerOrder: integer('min_per_order').notNull().default(1),
+    maxPerOrder: integer('max_per_order').notNull().default(10),
+    isComplimentary: boolean('is_complimentary').notNull().default(false),
+    sortOrder: integer('sort_order').notNull().default(0),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('ticket_tiers_price_chk', sql`${t.pricePaisa} >= 0`),
+    check('ticket_tiers_capacity_chk', sql`${t.capacity} > 0`),
+    check('ticket_tiers_sold_chk', sql`${t.sold} >= 0`),
+    check('ticket_tiers_min_per_order_chk', sql`${t.minPerOrder} >= 1`),
+    check('ticket_tiers_max_per_order_chk', sql`${t.maxPerOrder} >= ${t.minPerOrder}`),
+    check(
+      'ticket_tiers_window_chk',
+      sql`${t.salesEndAt} IS NULL OR ${t.salesStartAt} IS NULL OR ${t.salesEndAt} > ${t.salesStartAt}`,
+    ),
+    check(
+      'ticket_tiers_complimentary_price_chk',
+      sql`${t.isComplimentary} = false OR ${t.pricePaisa} = 0`,
+    ),
+    index('idx_tickets_event').on(t.eventId),
+  ],
+)

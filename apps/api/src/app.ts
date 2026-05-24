@@ -9,11 +9,13 @@ import { publicLegalRoutes } from './routes/public/legal.js'
 import { feeConfigRoutes } from './routes/super-admin/fee-config.js'
 import { adminKycRoutes } from './routes/super-admin/kyc.js'
 import { adminLegalRoutes } from './routes/super-admin/legal.js'
+import { adminTicketTiersRoutes } from './routes/super-admin/ticket-tiers.js'
 import { accountTypeRoutes } from './routes/tenant/account-type.js'
 import { eventsRoutes } from './routes/tenant/events.js'
 import { kycDraftRoutes } from './routes/tenant/kyc-drafts.js'
 import { kycRoutes } from './routes/tenant/kyc.js'
 import { meRoutes } from './routes/tenant/me.js'
+import { tenantTicketTiersRoutes } from './routes/tenant/ticket-tiers.js'
 
 /**
  * Hono application factory. Kept side-effect-free so tests can request routes
@@ -88,6 +90,11 @@ export function createApp() {
   // gate — self-service free-events publish without KYC per §13.5;
   // KYC requirement layers in at "add paid tier" (Day 25+).
   app.route('/api/v1/tenant/events', eventsRoutes)
+  // Ticket-tier router — Sprint 3 Day 25 per §10.2. Nested under
+  // events because tiers FK to events. :eventId path param is exposed
+  // inside the sub-router; the tenant scope comes from requireTenantAuth
+  // applied inside the router.
+  app.route('/api/v1/tenant/events/:eventId/tickets', tenantTicketTiersRoutes)
 
   // Super admin routes — Sprint 2 Day 18 Item 13 + Day 19 Item 15.
   // Mounted under /api/v1/admin/* per §10.4. requireSuperAdminAuth
@@ -101,6 +108,12 @@ export function createApp() {
   // withSuperAdmin() in the service layer bypasses RLS so the
   // single super-admin queue can write to any tenant's row.
   app.route('/api/v1/admin/tenants/:tenantId/fees', feeConfigRoutes)
+  // Ticket-tier super-admin read — Sprint 3 Day 25. READ only per
+  // §14.4 ("platform doesn't reach into tenant pricing"). Mounted
+  // by event-id for direct super-admin inspection without needing
+  // to know the owning tenant id upfront — withSuperAdmin() bypasses
+  // RLS so event_id alone is sufficient.
+  app.route('/api/v1/admin/events/:eventId/tickets', adminTicketTiersRoutes)
 
   return app
 }
