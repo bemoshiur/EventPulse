@@ -106,22 +106,19 @@ describe('cfg', () => {
     expect(() => cfg()).toThrow(/EPS_MODE/)
   })
 
-  it.each([
-    'EPS_MERCHANT_ID',
-    'EPS_STORE_ID',
-    'EPS_USERNAME',
-    'EPS_PASSWORD',
-    'EPS_HASH_KEY',
-  ])('throws EpsConfigError naming %s when missing', (envKey) => {
-    delete process.env[envKey]
-    try {
-      cfg()
-      throw new Error('expected throw')
-    } catch (err) {
-      expect(err).toBeInstanceOf(EpsConfigError)
-      expect((err as Error).message).toContain(envKey)
-    }
-  })
+  it.each(['EPS_MERCHANT_ID', 'EPS_STORE_ID', 'EPS_USERNAME', 'EPS_PASSWORD', 'EPS_HASH_KEY'])(
+    'throws EpsConfigError naming %s when missing',
+    (envKey) => {
+      delete process.env[envKey]
+      try {
+        cfg()
+        throw new Error('expected throw')
+      } catch (err) {
+        expect(err).toBeInstanceOf(EpsConfigError)
+        expect((err as Error).message).toContain(envKey)
+      }
+    },
+  )
 
   it('throws once listing ALL missing keys (faster diagnosis than one-at-a-time)', () => {
     delete process.env['EPS_MERCHANT_ID']
@@ -224,9 +221,9 @@ describe('verifyOrder', () => {
     // a read-only call against the gateway. The guard only protects
     // the funds-moving entry points.
     process.env['STAGING_PAYMENT_BLOCK'] = '1'
-    await expect(
-      verifyOrder({ merchantTransactionId: 'TXN-VERIFY' }),
-    ).rejects.toBeInstanceOf(EpsNotImplementedError)
+    await expect(verifyOrder({ merchantTransactionId: 'TXN-VERIFY' })).rejects.toBeInstanceOf(
+      EpsNotImplementedError,
+    )
   })
 
   it('NotImplementedError names Day 26-28 as the wire-up point', async () => {

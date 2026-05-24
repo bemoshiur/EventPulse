@@ -103,9 +103,7 @@ export function cfg(): EpsConfig {
     throw new EpsConfigError(`EPS env vars missing: ${missing.join(', ')}`)
   }
   if (modeRaw !== 'production' && modeRaw !== 'sandbox') {
-    throw new EpsConfigError(
-      `EPS_MODE must be 'production' or 'sandbox'; received '${modeRaw}'`,
-    )
+    throw new EpsConfigError(`EPS_MODE must be 'production' or 'sandbox'; received '${modeRaw}'`)
   }
 
   return {
@@ -259,9 +257,7 @@ const ACCESS_TOKEN_CACHE_TTL_SEC = 14 * 60
  * without throwing. This lets downstream code be developed against
  * the real shape today.
  */
-export async function getAccessToken(
-  cache: TokenCache = defaultTokenCache(),
-): Promise<string> {
+export async function getAccessToken(cache: TokenCache = defaultTokenCache()): Promise<string> {
   const cached = await cache.get(ACCESS_TOKEN_CACHE_KEY)
   if (cached) return cached
   throw new EpsNotImplementedError(
