@@ -493,9 +493,30 @@ POROCHOY_BASE_URL=${POROCHOY_BASE_URL}
 MAIL_DRY_RUN=1
 SES_FROM_ADDRESS=no-reply@eventpulse.com.bd
 
-# Base URLs
+# Base URLs.
+#
+# EVENTPULSE_API_BASE_URL + EVENTPULSE_WEB_BASE_URL: server-side env
+# vars consumed by Hono routes (e.g. OAuth callback construction in
+# apps/api/src/auth/oauth.ts:baseUrl()) + by deploy/health scripts.
+#
+# NEXT_PUBLIC_API_BASE_URL: Next.js build-time variable. The `NEXT_PUBLIC_`
+# prefix means Next.js statically inlines this into the client bundle
+# during `pnpm build`. The OAuth button at apps/web/src/components/auth/
+# oauth-button-group.tsx reads it via process.env to produce absolute
+# hrefs against the API vhost. If missing at build time, the href falls
+# back to a relative path which resolves against the web vhost (Next.js
+# 404 HTML, not Hono) — see gotchas.md "NEXT_PUBLIC_API_BASE_URL missing
+# at Next.js build time silently renders relative OAuth href" (Sprint 3
+# Day 23). Hardcoded here (not a Secrets Manager value) because it's a
+# public deployment-target identifier, not sensitive.
+#
+# Build-time vs runtime: changing this value requires a fresh `pnpm
+# --filter @eventpulse/web build` (which deploy.sh runs on every deploy
+# at line ~124). `pm2 reload web --update-env` alone is INSUFFICIENT
+# because the value is already inlined into the built bundle.
 EVENTPULSE_API_BASE_URL=https://api.staging.eventpulse.com.bd
 EVENTPULSE_WEB_BASE_URL=https://staging.eventpulse.com.bd
+NEXT_PUBLIC_API_BASE_URL=https://api.staging.eventpulse.com.bd
 
 # KYC documents bucket — sourced from $SM_KYC_CONFIG in Secrets Manager.
 # Empty values mean setup-kyc-bucket.sh has not been run yet; KYC upload
