@@ -4,6 +4,104 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-25 · Day 24 architectural choices — OAuth post-sign-in redirect target + EPS wrapper Part 1 deferral patterns
+
+**Context:** Sprint 3 Day 24 shipped 4 PRs (STAGING_PAYMENT_BLOCK guard #148; OAuth callback fix #149; EPS wrapper Part 1 #150; Decision N truth-gate harness #151). Three architectural choices were made inside the implementation that warrant explicit codification — they're already inline in code comments + commit messages, but pinning them at the decisions layer prevents future drift if anyone refactors the surrounding code without reading the originals.
+
+### Choice A — OAuth post-sign-in redirect target = apex `/?signed_in=1` via `EVENTPULSE_WEB_BASE_URL`
+
+**Decision:** The OAuth callback success path redirects to apex `/?signed_in=1` constructed via `EVENTPULSE_WEB_BASE_URL` (already populated in staging since Day 22). Implementation lives in `apps/api/src/routes/oauth-routes.ts postSignInUrl()`, exported + regression-tested against 4 cases (absolute URL composition, trailing-slash strip, localhost fallback, query-param presence).
+
+**Why apex (not `/dashboard`, not `/sign-in`):**
+
+- `/dashboard` exists but is a tenant-context route — OAuth creates an attendee-context session per `loginOrLink({ audience: 'attendee', ... })`. Redirecting a fresh attendee to a tenant-gated route is wrong-by-default.
+- `/sign-in` would loop — the user just signed in; sending them back to the sign-in page is confusing UX.
+- `(my)/tickets` is the §2.7 long-term attendee landing but the `(my)/` route group doesn't ship until Sprint 8 (attendee portal scope). Forward-compat: this decision flips to `/my/tickets` when Sprint 8 lands; `postSignInUrl()` is the single file to edit.
+- Apex `/?signed_in=1` exists today, renders, and lets the marketing landing branch on `?signed_in=1` if a "Welcome back" UX surface is added later. It's the safe interim landing.
+
+**Why absolute URL via `EVENTPULSE_WEB_BASE_URL`:**
+
+- The OAuth callback runs on the **api vhost** (`api.staging.eventpulse.com.bd`). User-facing pages live on the **web vhost** (`staging.eventpulse.com.bd`). A relative `/` redirect would resolve against the api vhost which 404s — same gotcha class as `.claude/memory/gotchas.md` "API routes live ONLY on api.staging vhost" (2026-05-24) + "NEXT_PUBLIC_API_BASE_URL missing at Next.js build time" (2026-05-24). The dual-vhost rule means OAuth redirect targets MUST be absolute, sourced from an env that's available at runtime.
+
+**Why this is a decision-level entry (not just code comment):**
+
+- The redirect target is the only user-visible artefact of the OAuth flow's success state. A future refactor that "simplifies" `postSignInUrl()` to a relative path would silently degrade UX + reintroduce the vhost-confusion class of bug. Pinning the absolute-URL rule + the apex-target choice at the decisions layer means a reviewer can grep for the decision before approving such a refactor.
+
+**Consequences:**
+
+- All OAuth providers (today: Google only; Phase 2+ when Apple re-introduced: same applies) MUST go through `postSignInUrl()`. No per-provider redirect customisation.
+- When `(my)/tickets` lands at Sprint 8, edit `postSignInUrl()` in one place. The function's regression tests update to assert the new path; the absolute-URL invariant stays.
+- The OAuth flow's session establishment (cookie + DB session row) is unchanged. The redirect is purely the response-shape change.
+- Token-bearing response body removed — caller-side consumption was already nil (browser-initiated OAuth flow; no JS reads the JSON before display). The session cookie is the auth state carrier. Future JWT-cookie-vs-middleware-cookie-read upgrade is separate scope for the auth-hardening bundle PR.
+
+### Choice B — EPS wrapper Part 1 ships in-memory token cache; Redis adapter swap is Day 26+
+
+**Decision:** `apps/api/src/infra/eps/token-cache.ts` ships a narrow `TokenCache` interface + an `inMemoryTokenCache()` adapter. The Redis adapter that CLAUDE.md §11.2 calls for is **deferred to Day 26+** when the order pipeline lands its first real `getAccessToken` caller.
+
+**Why in-memory is acceptable in the interim:**
+
+- No live caller exists yet at end of Day 24 — `initialiseOrder` + `verifyOrder` are stubs throwing `EpsNotImplementedError`. The cache is unused until Day 26+ wires real callers.
+- Cache TTL is ~14 min (1-min margin against EPS's ~15-min JWT). Worst-case process-restart impact is one extra GetToken call per process per ~15 min.
+- A multi-process PM2 setup would see N tokens fetched within ~15 min instead of 1 (cache is per-process). That's a latency/cost issue, not a correctness one. The Redis adapter collapses N → 1 when it lands.
+
+**Why not add Redis now:**
+
+- Adding `ioredis` dep + provisioning Redis on the staging EC2 is its own scope of work (~1-2 hours: dep install, env var, Redis systemd service if not running, connection lifecycle in app.ts).
+- Gating Phase 3 on Redis provisioning would invert the safety priority: Phase 1 (guard) ships first, Phase 3 (wrapper primitives) ships second, Phase 4 (truth-gate) ships third, Day 25 (landing + tiers) ships fourth, Day 26-28 (order pipeline + Redis swap) ships fifth. The brief's phase order is correct.
+
+**Day-26+ swap shape:**
+
+```ts
+// In apps/api/src/infra/eps/client.ts defaultTokenCache():
+let _defaultTokenCache: TokenCache | null = null
+export function defaultTokenCache(): TokenCache {
+  if (!_defaultTokenCache) {
+    // Day 26+: swap inMemoryTokenCache() → redisTokenCache(redisClient)
+    _defaultTokenCache = inMemoryTokenCache()
+  }
+  return _defaultTokenCache
+}
+```
+
+Single-file change at the seam. The `TokenCache` interface is narrow enough (`get` + `set(value, ttlSeconds)`) that a Redis-backed adapter is ~10 lines.
+
+**Consequences:**
+
+- The Day 26+ PR that wires the order pipeline carries the Redis swap as part of its scope.
+- Until then, `getAccessToken()` cache-hit path is fully wired (returns cached value) + cache-miss path throws `EpsNotImplementedError`. Tests pass; functionality is gated by the throw, not by the cache.
+- If a hot-path consumer surfaces between Day 24 and Day 26+ (unlikely — no consumer exists), the in-memory cache is sufficient — just costs a fresh GetToken per process restart.
+
+### Choice C — Three distinct greppable EPS error classes
+
+**Decision:** EPS wrapper exposes three distinct error classes — `StagingPaymentBlockedError`, `EpsConfigError`, `EpsNotImplementedError`. Distinctness is pinned by a test that asserts none is `instanceof` another. Future copy-paste regression that collapses two classes into one fails fast.
+
+**Why three (not one generic `EpsError`):**
+
+- Each error type signals a distinct root-cause class to the caller:
+  - `StagingPaymentBlockedError` → deliberate safety refusal (caller should not retry without ops involvement; production cutover ceremony required)
+  - `EpsConfigError` → missing env var (caller should not retry without ops fixing config)
+  - `EpsNotImplementedError` → scope gap (caller can retry post-Day-26-28 wrapper Part 2)
+- Day 26+ order pipeline + Day 24-25 truth-gate harness both need to distinguish these classes. Generic `EpsError` would force string-matching on error messages, which is exactly the anti-pattern §1.3 R10 "no client-side trust" warns about.
+
+**Consequences:**
+
+- All three classes have `.name` set + are exported from `apps/api/src/infra/eps/client.ts` (re-exporting from sub-modules).
+- Tests in `client.test.ts` "error class hygiene (greppable distinct types)" pin all three.
+- Future EPS errors (e.g. `EpsHashMismatchError`, `EpsTokenExpiredError`) added Day 26+ follow the same shape.
+
+**Cross-references:**
+
+- PR #148 (Phase 1, merged db4f807) — STAGING_PAYMENT_BLOCK guard
+- PR #149 (Phase 2, merged a8cdb96) — OAuth redirect fix
+- PR #150 (Phase 3, merged 2d8190f) — EPS wrapper Part 1
+- PR #151 (Phase 4, merged 888827e) — Decision N truth-gate harness
+- CLAUDE.md §11.0, §11.2, §14.2
+- `.claude/memory/decisions.md` "Decision N" (2026-05-19) — the truth-gate that the harness drives
+- `.claude/memory/decisions.md` "EPS library choice locked" (2026-05-19) — the in-house wrapper architecture
+- `.claude/memory/decisions.md` "@noble/hashes deferred" (2026-05-24) — the dep-version context
+
+---
+
 ## 2026-05-24 · Apple Sign-In dropped from MVP scope
 
 **Context:** PR #111 (Sprint 2 Item 4) shipped Apple Sign-In wiring alongside Google OAuth: frontend Apple button + AppleLogo SVG, backend `/apple/start` + `/apple/callback` routes, Apple OIDC client construction with the JWT-based client_secret-from-team-key shape, Apple JWKS verifier, Apple-specific account-linked notification template label, Apple relay-email handling in the auto-link decision, schema CHECK allowing `('google', 'apple')` on `oauth_identities.provider`. The full implementation was in place; only the Apple Developer + procurement step (Apple Services ID + private key + redirect URI registration) was missing. During Sprint 3 Day 23 the staging URL pass surfaced that the Apple button shipped to users in the sign-in UI even though the credentials were never provisioned — clicking it would 503 with `OAUTH_NOT_CONFIGURED`. The procurement work was never started; it's a separate scope (Apple Developer Program enrolment + signing-key generation + per-app Services ID configuration) that doesn't align with MVP launch priorities. Continuing to ship the button creates a UX dead-end and an attack surface (unconfigured OAuth flows are a known phishing-redirect target if the credential later lands with wrong settings).
