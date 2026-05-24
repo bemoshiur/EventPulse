@@ -179,9 +179,7 @@ describeIfDb('events service — CRUD + state machine + RLS', () => {
         const audit = await db
           .select({ action: auditLogs.action, diff: auditLogs.diff })
           .from(auditLogs)
-          .where(
-            and(eq(auditLogs.tenantId, fx.tenantAId), eq(auditLogs.entityId, result.id)),
-          )
+          .where(and(eq(auditLogs.tenantId, fx.tenantAId), eq(auditLogs.entityId, result.id)))
         expect(audit).toHaveLength(1)
         expect(audit[0]?.action).toBe('event.created')
         const diff = audit[0]?.diff as { event_type: string; initial_status: string }
@@ -441,9 +439,7 @@ describeIfDb('events service — CRUD + state machine + RLS', () => {
         const audit = await db
           .select({ action: auditLogs.action })
           .from(auditLogs)
-          .where(
-            and(eq(auditLogs.tenantId, fx.tenantAId), eq(auditLogs.entityId, created.id)),
-          )
+          .where(and(eq(auditLogs.tenantId, fx.tenantAId), eq(auditLogs.entityId, created.id)))
         // Only the create audit; no updated row.
         expect(audit.map((a) => a.action)).toEqual(['event.created'])
       })
@@ -655,7 +651,7 @@ describeIfDb('events service — CRUD + state machine + RLS', () => {
       expect(directQuery).toHaveLength(0)
     })
 
-    it('tenant B cannot transition tenant A\'s event', async () => {
+    it("tenant B cannot transition tenant A's event", async () => {
       const created = await createEvent({
         tenantId: fx.tenantAId,
         actorUserId: fx.ownerId,
@@ -681,7 +677,7 @@ describeIfDb('events service — CRUD + state machine + RLS', () => {
       expect(stillDraft.status).toBe('draft')
     })
 
-    it('tenant B cannot soft-delete tenant A\'s event', async () => {
+    it("tenant B cannot soft-delete tenant A's event", async () => {
       const created = await createEvent({
         tenantId: fx.tenantAId,
         actorUserId: fx.ownerId,

@@ -102,12 +102,9 @@ describe('event-state-machine — pure validation', () => {
       expect(isTerminal('archived')).toBe(true)
     })
 
-    it.each(EVENT_STATUSES.filter((s) => s !== 'archived'))(
-      'isTerminal(%s) === false',
-      (state) => {
-        expect(isTerminal(state)).toBe(false)
-      },
-    )
+    it.each(EVENT_STATUSES.filter((s) => s !== 'archived'))('isTerminal(%s) === false', (state) => {
+      expect(isTerminal(state)).toBe(false)
+    })
   })
 
   describe('allowedNext is always populated correctly', () => {

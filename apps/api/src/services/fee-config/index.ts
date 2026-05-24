@@ -177,8 +177,7 @@ export async function setOverride(input: SetOverrideInput): Promise<SetOverrideR
     const previousFeeBps =
       (currentRows[0]?.platformFeeBps as number | undefined) ?? PLATFORM_DEFAULT_FEE_BPS
     const previousMode =
-      (currentRows[0]?.defaultFeeMode as FeeHandlingMode | undefined) ??
-      PLATFORM_DEFAULT_FEE_MODE
+      (currentRows[0]?.defaultFeeMode as FeeHandlingMode | undefined) ?? PLATFORM_DEFAULT_FEE_MODE
 
     // 2. Anomaly flag — abs delta > 10 bps. Bps swap is independent of
     //    mode swap; mode swap alone is never anomalous (just a UX choice).
@@ -318,10 +317,7 @@ export interface FeeOverrideHistoryEntry {
   createdAt: Date
 }
 
-export async function getHistory(
-  tenantId: string,
-  limit = 50,
-): Promise<FeeOverrideHistoryEntry[]> {
+export async function getHistory(tenantId: string, limit = 50): Promise<FeeOverrideHistoryEntry[]> {
   const cap = Math.min(Math.max(limit, 1), 200)
   return withSuperAdmin(async (db) => {
     const rows = await db

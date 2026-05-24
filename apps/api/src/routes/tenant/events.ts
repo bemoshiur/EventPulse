@@ -60,7 +60,11 @@ const eventsApp = new Hono()
 eventsApp.use('*', requireTenantAuth)
 eventsApp.use('*', requireTenantType)
 
-function reqMeta(c: Context): { requestId: string | null; ip: string | null; userAgent: string | null } {
+function reqMeta(c: Context): {
+  requestId: string | null
+  ip: string | null
+  userAgent: string | null
+} {
   return {
     requestId: c.req.header('x-request-id') ?? null,
     ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
@@ -138,7 +142,9 @@ eventsApp.get('/', zValidator('query', EventListFilterSchema), async (c) => {
   } catch (err) {
     logger.error({ err, tenantId, request_id: requestId }, 'event list failed')
     return c.json(
-      { error: { code: 'INTERNAL_ERROR', message: 'failed to list events', request_id: requestId } },
+      {
+        error: { code: 'INTERNAL_ERROR', message: 'failed to list events', request_id: requestId },
+      },
       500,
     )
   }

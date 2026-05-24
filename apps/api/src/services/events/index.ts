@@ -167,59 +167,51 @@ export async function createEvent(input: CreateEventInput): Promise<CreatedEvent
       if (!input.epsFeeHandling) epsFeeHandling = fallback
     }
 
-    // 2. Generate slug + handle collisions deterministically.
+    // 2. Generate slug + handle collisions via ON CONFLICT DO NOTHING.
+    //
+    // Why ON CONFLICT and not try/catch on 23505: Postgres aborts the
+    // entire transaction on any constraint violation, leaving it in a
+    // FAILED state where every subsequent query errors out with 25P02
+    // (in_failed_sql_transaction). Try/catch on the JS side can't
+    // recover — we'd need SAVEPOINTs around each attempt, which adds
+    // round-trips. INSERT ... ON CONFLICT DO NOTHING RETURNING * is
+    // the canonical idempotent-insert pattern: zero rows = the slug
+    // exists, try next; one row = inserted, done.
     const base = baseSlugFromTitle(input.title)
     let attempt = 0
     let inserted: { id: string; slug: string } | null = null
-    let lastError: unknown = null
     while (attempt < SLUG_COLLISION_MAX_ATTEMPTS && inserted === null) {
       const candidate = attempt === 0 ? base : `${base}-${attempt + 1}`
-      try {
-        const rows = await tx
-          .insert(events)
-          .values({
-            tenantId: input.tenantId,
-            slug: candidate,
-            type: input.type,
-            status: 'draft',
-            visibility: input.visibility ?? 'public',
-            title: input.title,
-            titleBn: input.titleBn ?? null,
-            description: input.description ?? null,
-            descriptionBn: input.descriptionBn ?? null,
-            startsAt: input.startsAt,
-            endsAt: input.endsAt,
-            timezone: input.timezone ?? 'Asia/Dhaka',
-            venue: input.venue as object,
-            capacity: input.capacity ?? null,
-            bannerImageUrl: input.bannerImageUrl ?? null,
-            ogImageUrl: input.ogImageUrl ?? null,
-            epsFeeHandling,
-            platformFeeHandling,
-            refundPolicy: (input.refundPolicy as object | undefined) ?? { allowed: false },
-            createdBy: input.actorUserId,
-          })
-          .returning({ id: events.id, slug: events.slug })
-        if (rows.length === 0) throw new Error('insert returned zero rows')
+      const rows = await tx
+        .insert(events)
+        .values({
+          tenantId: input.tenantId,
+          slug: candidate,
+          type: input.type,
+          status: 'draft',
+          visibility: input.visibility ?? 'public',
+          title: input.title,
+          titleBn: input.titleBn ?? null,
+          description: input.description ?? null,
+          descriptionBn: input.descriptionBn ?? null,
+          startsAt: input.startsAt,
+          endsAt: input.endsAt,
+          timezone: input.timezone ?? 'Asia/Dhaka',
+          venue: input.venue as object,
+          capacity: input.capacity ?? null,
+          bannerImageUrl: input.bannerImageUrl ?? null,
+          ogImageUrl: input.ogImageUrl ?? null,
+          epsFeeHandling,
+          platformFeeHandling,
+          refundPolicy: (input.refundPolicy as object | undefined) ?? { allowed: false },
+          createdBy: input.actorUserId,
+        })
+        .onConflictDoNothing({ target: [events.tenantId, events.slug] })
+        .returning({ id: events.id, slug: events.slug })
+      if (rows.length > 0) {
         inserted = rows[0]!
-      } catch (err) {
-        lastError = err
-        // Drizzle wraps the original pg.DatabaseError; the wrapped
-        // Error's message may or may not include the constraint name
-        // depending on driver + version. Check both: pg.code 23505
-        // (unique_violation) on err or on err.cause, AND the constraint-
-        // name substring on the message text. Catches all the shapes the
-        // node-postgres + drizzle stack throws for a slug collision.
-        const errAny = err as { code?: string; cause?: { code?: string }; message?: string }
-        const pgCode = errAny?.code ?? errAny?.cause?.code
-        const messageHit =
-          err instanceof Error &&
-          (/events_tenant_slug_uq/.test(err.message) || /duplicate key value/i.test(err.message))
-        if (pgCode === '23505' || messageHit) {
-          attempt += 1
-          continue
-        }
-        throw err
+      } else {
+        attempt += 1
       }
     }
 
@@ -254,9 +246,7 @@ export async function createEvent(input: CreateEventInput): Promise<CreatedEvent
         })
         .returning({ id: events.id, slug: events.slug })
       if (fallbackRows.length === 0) {
-        throw lastError instanceof Error
-          ? lastError
-          : new Error('event insert failed via slug-fallback path')
+        throw new Error('event insert failed via slug-fallback path')
       }
       inserted = fallbackRows[0]!
     }
