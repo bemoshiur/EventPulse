@@ -4,6 +4,67 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-24 · Apple Sign-In dropped from MVP scope
+
+**Context:** PR #111 (Sprint 2 Item 4) shipped Apple Sign-In wiring alongside Google OAuth: frontend Apple button + AppleLogo SVG, backend `/apple/start` + `/apple/callback` routes, Apple OIDC client construction with the JWT-based client_secret-from-team-key shape, Apple JWKS verifier, Apple-specific account-linked notification template label, Apple relay-email handling in the auto-link decision, schema CHECK allowing `('google', 'apple')` on `oauth_identities.provider`. The full implementation was in place; only the Apple Developer + procurement step (Apple Services ID + private key + redirect URI registration) was missing. During Sprint 3 Day 23 the staging URL pass surfaced that the Apple button shipped to users in the sign-in UI even though the credentials were never provisioned — clicking it would 503 with `OAUTH_NOT_CONFIGURED`. The procurement work was never started; it's a separate scope (Apple Developer Program enrolment + signing-key generation + per-app Services ID configuration) that doesn't align with MVP launch priorities. Continuing to ship the button creates a UX dead-end and an attack surface (unconfigured OAuth flows are a known phishing-redirect target if the credential later lands with wrong settings).
+
+**Decision (Moshiur 2026-05-24, Sprint 3 Day 23):** Drop Apple Sign-In from MVP scope. Remove the live wiring + UI + the test cases that exercise Apple-specific paths. Lock the decision against future copy-paste regression with guard tests that assert `/apple/start` returns 404 and the frontend renders no Apple button. Google remains the only OAuth provider through MVP.
+
+**What's removed in PR #144 (merged 2026-05-24 18:47 UTC, deployed as 5234728):**
+
+- Frontend: Apple button + Apple test-id + AppleLogo SVG (`apps/web/src/components/auth/oauth-button-group.tsx` + `provider-icons.tsx`).
+- Backend: `/apple/start` (GET) + `/apple/callback` (POST) route handlers in `apps/api/src/routes/oauth-routes.ts`.
+- Backend: `appleClient()`, `decodeApplePrivateKey()`, `_apple` lazy singleton, `Apple` import from arctic in `apps/api/src/auth/oauth.ts`.
+- Backend: `verifyAppleIdToken()`, `AppleIdClaims`, `_appleJwks`, `appleJwks()`, `APPLE_JWKS_URL` in `apps/api/src/auth/oauth.ts`.
+- Backend: `APPLE_SCOPES` constant + Apple-specific helpers in routes.
+- Types narrowed: `OAuthProvider` in `auth/users.ts`, `oauth-state.ts` `provider` literal, SES template `oauth-account-linked.ts` `OAuthProvider` all narrow from `'google' | 'apple'` to `'google'`. The SES template also adds an exhaustive `providerLabel` guard that throws on unknown providers (future copy-paste protection).
+- Tests: Apple-specific cases removed from `oauth-state.test.ts`, `oauth-routes.test.ts`, `oauth-account-linked.test.ts`, `oauth-button-group.test.tsx`, `sign-in-smoke.spec.ts`.
+
+**What's preserved (deliberately):**
+
+- `oauth_identities.provider` DB CHECK enum still allows `('google', 'apple')` for historical-row readability + forward-compat re-introduction. No migration. The DB layer doesn't care that the application no longer emits `'apple'`; future re-introduction lands without a schema migration.
+- `OAuthStatePayload`'s `provider` literal is narrowed to `'google'` only in TypeScript, but the wire payload format is unchanged — restoring Apple just requires widening the literal.
+- The `AutoLinkDecision`'s `isPrivateEmail` input field stays on the shape with the comment that it's reserved for future providers (Apple-driven concern); callers pass `false` for Google. Restoring Apple is a literal-widening + re-introducing the `'apple'` provider branch.
+
+**Regression guards (committed as part of PR #144):**
+
+- `oauth-routes.test.ts` adds "Apple Sign-In removal guard" describe block: `GET /api/v1/auth/oauth/apple/start` → 404 + `POST /api/v1/auth/oauth/apple/callback` → 404. A future PR that copy-pastes Apple back in piecemeal fails CI at these gates before reaching review.
+- `oauth-button-group.test.tsx` adds "does NOT render an Apple button" test that catches accidental re-add at the frontend layer.
+
+**Consequences:**
+
+- MVP sign-in surface: Google OAuth + email/password + email magic link. Three auth methods, not four. §5.2 + §19.2 narrowed accordingly.
+- Apple Developer Program enrolment + Apple Services ID procurement come off the MVP procurement list. Reopens only if a Phase 2+ user-research signal shows Apple-only iOS users as a meaningful conversion gap.
+- Reintroducing Apple is a deliberate Phase 2+ decision via a dedicated PR — restore from git history of `apps/api/src/routes/oauth-routes.ts` + `apps/api/src/auth/oauth.ts` for the prior implementation, then re-narrow the types, re-add the SES template branch, re-add the frontend button + icon, re-provision Apple Developer credentials + Secrets Manager entry `eventpulse/<env>/oauth-apple`. NOT a piecemeal add — landing only the backend routes without the procurement reproduces exactly the dead-end button this decision removes.
+- Cleanup also addresses the immediate user-reported "OAuth not working" diagnosis chain (`.claude/memory/gotchas.md` "API routes live ONLY on `api.staging` vhost" + "`NEXT_PUBLIC_API_BASE_URL` missing at Next.js build time" — both surfaced during the same Day 23 URL health pass).
+
+**Cross-references:** PR #144 (merged 5234728); `.claude/memory/gotchas.md` "API routes live ONLY on `api.staging` vhost" (2026-05-24) + "`NEXT_PUBLIC_API_BASE_URL` missing at Next.js build time" (2026-05-24) — the same Day 23 URL pass that triggered this cleanup; CLAUDE.md §1.2 (sign-up methods table — Apple row removed) + §5.2 (OAuth implementation note — Apple section removed) + §19.2 (sign-in UI — Apple button removed from the mockup).
+
+---
+
+## 2026-05-24 · EPS fee is NOT per-tenant configurable — pass-through, derived from payment-method metadata at order creation
+
+**Context:** During Day 23 pre-flight (Sprint 3 Day 3), draft brief speculatively included `eps_fee_bps` alongside `platform_fee_bps` in the `tenant_fee_config` super-admin exposure workstream. Cross-check against CLAUDE.md §14.1 + §14.4 + §9.12 + §14.3 confirmed this was a brief-side error — the playbook is unambiguous that only the platform fee is per-tenant configurable; the EPS fee is pass-through from the payment-gateway-side rate card based on which payment method the buyer selects at checkout (card ≈ 2.5%, MFS ≈ 1.5–1.8%, exact values from EPS settlement reports).
+
+**Decision (Moshiur 2026-05-24):** `eps_fee_bps` is **not** a column on `tenant_fee_config` and never will be at any tier. The schema in §9.12 stays as currently written (`platform_fee_bps integer NOT NULL DEFAULT 25` only). The `fee-calculator` function (§14.3 + Day 21 implementation) receives `epsFeeBps` as an **order-time input** to `calculateFees()`, sourced at order creation time from payment-method metadata (the gateway's published rate card for the method the buyer chose). It is NOT read from any tenant-level config row.
+
+**Rationale:**
+
+1. **EPS sets EPS fees, not the platform.** Per §14.1: "Charged by EPS based on the payment method ... Pass-through — we do not mark this up." There is no business reason to allow super-admin override of a gateway's own fee schedule, and no contractual mechanism for one (EPS bills us by their schedule; we cannot bill the buyer at a rate divorced from what EPS will deduct).
+2. **Per-method, not per-tenant.** EPS fees vary by payment method (card vs MFS vs net banking) within a single tenant's traffic. A tenant-level `eps_fee_bps` would be wrong on day one — it can only represent one method's rate. The order-time input pattern is correct: each order knows its method and its method's rate.
+3. **The fee calculator already takes this shape.** Day 21 fee-calculator.ts implementation (per Sprint 3 Day 1 deliverable) accepts `epsFeeBps` as part of `FeeCalcInput`, NOT pulled from a tenant config. Adding a tenant-level column would be a no-op at best, double-source-of-truth confusion at worst.
+
+**Consequences:**
+
+- Day 23 Workstream 2 (super-admin fee config exposure) writes services + routes + UI for `platform_fee_bps` + `default_fee_mode` + `allow_per_event_override` + `custom_arrangement_note` only. No `eps_fee_bps` field anywhere in the form, no field in the audit log, no field in `setOverride()` payload.
+- `fee_override_log` audit shape stays as currently migrated (0001 + RLS 0002): `previous_fee_bps`, `new_fee_bps`, `previous_mode`, `new_mode`, `reason`, `effective_from`, `changed_by`, `created_at`. The `_fee_bps` columns refer to platform fee only — schema is consistent with the decision because there is only one tenant-level fee bps.
+- At order creation (Day 24+ work), `epsFeeBps` is sourced from the payment-method metadata (TBD: hardcoded constants from the EPS rate card initially, eventually a `payment_method_rates` lookup once the settlement-reconciliation work surfaces a need to make it data-driven). The calculator call site reads tenant config for `platform_fee_bps` + `platform_fee_handling`, reads event config for `eps_fee_handling`, derives `epsFeeBps` from payment-method choice — three independent inputs, single calculation.
+- The Day 23 pre-flight brief erroneously listed `eps_fee_bps` as a fourth config column — that line is reframed here so the error doesn't echo into Day 24+ work. If a future spec change requires bookkeeping a tenant-specific EPS arrangement (e.g. an enterprise contract that absorbs EPS fees as a platform cost), it lands as a separate scope decision with a separate column and separate audit shape — NOT bolted onto `tenant_fee_config`.
+
+**Cross-references:** CLAUDE.md §14.1 (EPS fee = pass-through, never marked up); §14.3 (calculator signature `FeeCalcInput` with order-time `epsFeeBps`); §14.4 (per-tenant fee — singular, platform-only); §9.12 (`tenant_fee_config` schema — `platform_fee_bps` is the only fee column).
+
+---
+
 ## 2026-05-24 · `@noble/hashes` 1.8.0 → 2.2.0 (Dependabot PR #72) deferred to post-Days-24-25-EPS-truth-gate
 
 **Context:** During the 2026-05-24 pre-Day-23 consolidation session, Dependabot PR #72 (`@noble/hashes` 1.8.0 → 2.2.0) was one of three open major bumps evaluated. Analysis surfaced that the v2 bump fails CI on import-resolution (`Cannot find module '@noble/hashes/argon2'` — v2's `exports` field requires explicit `.js` suffix on subpath imports; bare `'@noble/hashes/argon2'` is no longer a valid specifier). The fix scope itself is small (one-line change in `apps/api/src/auth/hash.ts:16` adding `.js` suffix). The deeper concern is the bump's TIMING relative to Sprint 3.

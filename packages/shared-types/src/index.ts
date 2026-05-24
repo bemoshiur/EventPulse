@@ -84,3 +84,32 @@ export {
   type ReviewerDecision,
   type ReviewerNotesPatch,
 } from './kyc-reviewer-schemas.js'
+
+// Event zod schemas — Sprint 3 Day 23 Workstream 1. Shared between
+// server route validation (apps/api/src/routes/tenant/events.ts) and
+// frontend react-hook-form resolvers (apps/web/src/components/tenant/
+// event-form-templates/...). Single source of truth per §6.1.
+export {
+  EVENT_TYPES,
+  EVENT_STATUSES,
+  EVENT_VISIBILITIES,
+  FEE_HANDLING_MODES,
+  EventCreateSchema,
+  EventUpdateSchema,
+  EventTransitionSchema,
+  EventListFilterSchema,
+  VenueSchema,
+  PhysicalVenueSchema,
+  OnlineVenueSchema,
+  RefundPolicySchema,
+  type EventType,
+  type EventStatus,
+  type EventVisibility,
+  type FeeHandlingMode,
+  type EventCreateInput,
+  type EventUpdateInput,
+  type EventTransitionInput,
+  type EventListFilter,
+  type Venue,
+  type RefundPolicy,
+} from './event-schemas.js'

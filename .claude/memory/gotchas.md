@@ -4,6 +4,143 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## API routes live ONLY on `api.staging` vhost — hitting them on the web vhost returns Next.js 404 HTML (2026-05-24)
+
+**Symptom.** User reports `https://staging.eventpulse.com.bd/api/v1/auth/oauth/google/start` "not working." Curl shows:
+
+```text
+HTTP/2 404
+content-type: text/html; charset=utf-8
+x-nextjs-cache: HIT
+x-nextjs-prerender: 1
+```
+
+Body is a Next.js 404 HTML page — not the structured `{"error":{"code":"OAUTH_NOT_CONFIGURED",...}}` shape the Hono API would have returned. The user sees a generic browser 404 and assumes the OAuth endpoint is broken.
+
+**Why it happens.** The staging Nginx config (`infra/nginx/eventpulse-staging.conf`) has **two separate vhosts**:
+
+1. `staging.eventpulse.com.bd` (and `app.`, `admin.`, `my.`) → proxies to **Next.js on :3000** — handles all web pages + `app/api/*` routes that Next.js defines (Trust Center revalidation hooks, etc.).
+2. `api.staging.eventpulse.com.bd` → proxies to **Hono on :4000** — handles all `/api/v1/*` routes (auth, OAuth, tenant, admin, public legal).
+
+When a request for `/api/v1/auth/oauth/google/start` hits the WEB vhost, Nginx forwards it to Next.js, which has no route at that path → Next.js's catch-all 404 page (HTML). When the same path hits the API vhost, Nginx forwards it to Hono, which returns the route's response (503 OAUTH_NOT_CONFIGURED or 302 redirect depending on env).
+
+The frontend OAuth button is supposed to use `NEXT_PUBLIC_API_BASE_URL` to produce an absolute URL pointing at `api.staging.eventpulse.com.bd`. When that env var is unset at build time, the button falls back to a relative path which resolves against the web vhost — reproducing exactly the user's 404 (see next entry).
+
+**Fix.**
+
+- When a user reports an "API endpoint not working," **first verify which vhost they hit**. Curl both:
+  ```bash
+  curl -s -o /dev/null -w "%{http_code}\n" https://staging.eventpulse.com.bd/api/v1/auth/oauth/google/start
+  # 404 = Next.js — wrong vhost
+  curl -s -o /dev/null -w "%{http_code}\n" https://api.staging.eventpulse.com.bd/api/v1/auth/oauth/google/start
+  # 503 (or other structured response) = Hono — correct vhost
+  ```
+  Different status codes from different vhosts on the same path is the signature.
+- **API routes belong on `api.staging.eventpulse.com.bd` only.** Never link to `/api/v1/*` from the web vhost as a relative path; always use the absolute `NEXT_PUBLIC_API_BASE_URL` prefix.
+
+**How to avoid future occurrences:**
+
+- Frontend code that hits the API MUST use absolute URLs via `NEXT_PUBLIC_API_BASE_URL` (see `apps/web/src/hooks/use-admin-kyc.ts` `apiBase()` for the canonical pattern). The OAuth button in `apps/web/src/components/auth/oauth-button-group.tsx` is the load-bearing example.
+- Production vhost layout will mirror staging: `eventpulse.com.bd` for web, `api.eventpulse.com.bd` for Hono. The same vhost-confusion class of bug applies — same diagnosis applies.
+
+---
+
+## `NEXT_PUBLIC_API_BASE_URL` missing at Next.js build time silently renders relative OAuth href (2026-05-24)
+
+**Symptom.** OAuth button on `https://staging.eventpulse.com.bd/sign-in` clicks through to a Next.js 404 HTML page instead of redirecting to Google. The HTML rendered to the page contains:
+
+```html
+<a href="/api/v1/auth/oauth/google/start" data-testid="oauth-google-button">
+```
+
+— a **relative** path that resolves against the web vhost. Per the gotcha above, the web vhost has no such route, so Next.js returns 404 HTML.
+
+The frontend code (`apps/web/src/components/auth/oauth-button-group.tsx`) is correct — it reads `NEXT_PUBLIC_API_BASE_URL` and produces an absolute URL when the env var is set. The bug is at the BUILD layer.
+
+**Why it happens.** Next.js inlines `NEXT_PUBLIC_*` env vars at **build time** via static analysis. They MUST be set as environment variables when `pnpm build` runs — setting them at runtime in `.env.production` or via PM2's `env:` block has NO effect; the built bundle already has whatever value (or empty string fallback) was available at compile.
+
+If `NEXT_PUBLIC_API_BASE_URL` is missing from the build environment:
+- `process.env['NEXT_PUBLIC_API_BASE_URL']` evaluates to `undefined` at build time
+- The fallback `?? ''` produces empty string
+- The button href becomes `'' + '/api/v1/auth/oauth/google/start'` = `/api/v1/auth/oauth/google/start` — relative
+- Browser resolves against current host (web vhost) → wrong vhost → 404
+
+`deploy.sh` step 0 sources `/home/eventpulse/.env.staging` into the bash environment via `set -a; source "$ENV_FILE"; set +a` BEFORE running pnpm build. So if `NEXT_PUBLIC_API_BASE_URL` is in `.env.staging`, the build picks it up. **If the env var is missing from the bootstrap-staging.sh output, the variable is never set at build time** and every Next.js build silently bakes in the relative-path bug.
+
+**Fix.**
+
+1. Confirm the env var is in `/home/eventpulse/.env.staging` on the EC2:
+   ```bash
+   aws ssm start-session --target i-02e4fddeb923c14f9
+   grep NEXT_PUBLIC_API_BASE_URL /home/eventpulse/.env.staging
+   ```
+2. If missing, add it via the standard secret-rotation flow (Secrets Manager entry → bootstrap-staging.sh refresh → trigger redeploy so the next Next.js build picks it up).
+3. After the next deploy, verify the rendered HTML:
+   ```bash
+   curl -s https://staging.eventpulse.com.bd/sign-in | grep -oE 'href="[^"]*oauth[^"]*"'
+   # Should print: href="https://api.staging.eventpulse.com.bd/api/v1/auth/oauth/google/start"
+   # NOT: href="/api/v1/auth/oauth/google/start"
+   ```
+
+**How to avoid future occurrences:**
+
+- `bootstrap-staging.sh` should validate that `NEXT_PUBLIC_API_BASE_URL` is set after materialising `.env.staging`; refuse to exit success if it's empty. (Adding this validation is a tracked follow-up.)
+- Any new `NEXT_PUBLIC_*` env var added to the frontend MUST land in Secrets Manager + bootstrap-staging.sh + .env.example in the same PR. The frontend code that consumes it can ship before the env arrives — but the consumer should log a build-time warning if the value is empty, so deploys don't silently bake in the bug.
+- The OAuth-button test suite in `oauth-button-group.test.tsx` exercises both the unset-env (renders relative path) and set-env (renders absolute) paths. The set-env path is the production contract.
+
+---
+
+## react-hook-form + zod schema with `.pipe(z.coerce.date())` produces unresolvable Resolver type mismatch (2026-05-24)
+
+**Symptom.** Using `useForm<EventCreateInput>` with `resolver: zodResolver(EventCreateSchema)` where `EventCreateSchema` uses `z.string().datetime().pipe(z.coerce.date())` for date fields produces TS2719:
+
+```text
+Type 'Resolver<{ ... startsAt: string; ... }>' is not assignable to type
+'Resolver<{ ... startsAt: Date; ... }>'.
+Two different types with this name exist, but they are unrelated.
+```
+
+The two `Resolver<T>` types are structurally distinct because their `T` differs on the `startsAt` field (string vs Date).
+
+**Why it happens.** zod's pipe operator transforms the schema's INPUT type and OUTPUT type independently:
+
+- INPUT type (what the form submits): `string` (from `z.string().datetime()`)
+- OUTPUT type (what the resolver returns after coercion): `Date` (from `z.coerce.date()`)
+
+`useForm<TFieldValues>` infers `TFieldValues` from `defaultValues` (which we want to be string-shaped because HTML `<input type="datetime-local">` returns strings). `zodResolver(schema)` returns a `Resolver<schema.output>`. The two don't unify when the input and output diverge.
+
+**Fix.**
+
+Two options:
+
+1. **Cast at the resolver seam** (used in `apps/web/src/components/tenant/event-form-templates/event-form.tsx`):
+   ```typescript
+   import { useForm, type Resolver } from 'react-hook-form'
+   type FormShape = z.input<typeof EventCreateSchema>
+   useForm<FormShape>({
+     resolver: zodResolver(EventCreateSchema) as unknown as Resolver<FormShape>,
+     defaultValues: { ... string-shaped ... },
+   })
+   // Then in the submit handler, cast the values back to the output shape:
+   handleSubmit((values) => onValidSubmit(values as unknown as EventCreateOutput))
+   ```
+   The runtime is correct — the resolver coerces on submit before the handler runs. The cast is a typing bridge between the form's input-shape and the API's output-shape.
+
+2. **Drop the pipe in the schema.** Use plain `z.string().datetime()` and let the service-layer convert to Date. This matches the §6.1 playbook example (which uses string-typed date fields server-side). Trade-off: every service-layer call site has to remember to `new Date(input.startsAt)`.
+
+The cast approach is chosen for the events form because:
+- Service layer wants Date (cleaner ergonomics for `validateTransition` + date comparisons)
+- Form layer wants string (HTML input contract)
+- Schema bridges both via the pipe; the cast acknowledges TypeScript can't represent both sides simultaneously without explicit help
+
+**How to avoid future occurrences:**
+
+- When a zod schema uses pipe + coerce, document the input vs output types in a comment above the schema definition.
+- When binding a form to such a schema, ALWAYS pass `z.input<typeof Schema>` as the `useForm` TFieldValues + cast the resolver. Don't use `z.infer<typeof Schema>` (which is the output) — it produces the same TS2719 with a different decoration.
+- Reach for option 2 (drop the pipe) when the service layer doesn't actually need Date — string-passthrough is simpler.
+
+---
+
 ## AWS SDK v3 packages share smithy internal Client types — must bump together (2026-05-24)
 
 **Symptom.** Bumping `@aws-sdk/client-s3` alone (or `@aws-sdk/s3-request-presigner` alone) to a newer patch version while the sibling stays back produces a typecheck failure on the s3-presigner boundary:
