@@ -32,6 +32,18 @@ updates:
       types:
         patterns: ['@types/*']
         update-types: [minor, patch]
+      # AWS SDK v3 packages share smithy internal Client types — bumping any
+      # one @aws-sdk/* package independently of its siblings causes
+      # TS2345 ("separate declarations of private property 'handlers'") at
+      # boundaries like s3-request-presigner ↔ client-s3. They MUST bump
+      # together. Without this grouping, client-s3 + presigner open as
+      # separate PRs and each fails CI on the version mismatch. See
+      # .claude/memory/gotchas.md "AWS SDK v3 packages share smithy internal
+      # Client types" for the symptom + fix runbook. Patch + minor only;
+      # majors are review-by-hand since they often retitle exports.
+      aws-sdk:
+        patterns: ['@aws-sdk/*']
+        update-types: [minor, patch]
     ignore:
       # CLAUDE.md §1.2 locks the stack. Major bumps of these packages would
       # break documented contracts; they require a playbook update first.
