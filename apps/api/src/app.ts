@@ -6,6 +6,7 @@ import { logger } from './lib/logger.js'
 import { authRoutes } from './routes/auth.js'
 import { oauthRoutes } from './routes/oauth-routes.js'
 import { publicLegalRoutes } from './routes/public/legal.js'
+import { feeConfigRoutes } from './routes/super-admin/fee-config.js'
 import { adminKycRoutes } from './routes/super-admin/kyc.js'
 import { adminLegalRoutes } from './routes/super-admin/legal.js'
 import { accountTypeRoutes } from './routes/tenant/account-type.js'
@@ -93,6 +94,13 @@ export function createApp() {
   // is applied inside each sub-router via `*.use('*', ...)`.
   app.route('/api/v1/admin/kyc', adminKycRoutes)
   app.route('/api/v1/admin/legal', adminLegalRoutes)
+  // Per-tenant fee config (super-admin only) — Sprint 3 Day 23
+  // Workstream 2 per §10.4 + §14.4. NO migration needed (table +
+  // RLS already shipped in 0001 + 0002). The :tenantId path param
+  // is the source of truth for which tenant is being mutated;
+  // withSuperAdmin() in the service layer bypasses RLS so the
+  // single super-admin queue can write to any tenant's row.
+  app.route('/api/v1/admin/tenants/:tenantId/fees', feeConfigRoutes)
 
   return app
 }
