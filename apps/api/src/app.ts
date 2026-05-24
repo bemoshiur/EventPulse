@@ -5,6 +5,7 @@ import { withSuperAdmin } from './db/client.js'
 import { logger } from './lib/logger.js'
 import { authRoutes } from './routes/auth.js'
 import { oauthRoutes } from './routes/oauth-routes.js'
+import { publicEventsRoutes } from './routes/public/events.js'
 import { publicLegalRoutes } from './routes/public/legal.js'
 import { feeConfigRoutes } from './routes/super-admin/fee-config.js'
 import { adminKycRoutes } from './routes/super-admin/kyc.js'
@@ -71,6 +72,12 @@ export function createApp() {
   // apps/web Server Components for the /trust + /privacy/etc pages
   // (Decision K, 2026-05-19). Edge-cacheable.
   app.route('/api/v1/public/legal', publicLegalRoutes)
+  // Public event landing read — Sprint 3 Day 25 Phase 2. Consumed by
+  // the apps/web Server Component at /(public)/[tenant]/[event]/page.
+  // Visibility + status filtering is application-side; the route's
+  // RLS context is super-admin (BYPASSRLS) because public reads
+  // cross tenant boundaries by design.
+  app.route('/api/v1/public/events', publicEventsRoutes)
   // Tenant routes — order doesn't matter (Hono routes are matched by
   // exact path prefix), but the `me` + `account-type` mounts deliberately
   // sit alongside `kyc` because they share the /api/v1/tenant/* namespace.
