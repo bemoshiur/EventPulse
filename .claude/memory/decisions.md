@@ -4,6 +4,29 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-24 · EPS fee is NOT per-tenant configurable — pass-through, derived from payment-method metadata at order creation
+
+**Context:** During Day 23 pre-flight (Sprint 3 Day 3), draft brief speculatively included `eps_fee_bps` alongside `platform_fee_bps` in the `tenant_fee_config` super-admin exposure workstream. Cross-check against CLAUDE.md §14.1 + §14.4 + §9.12 + §14.3 confirmed this was a brief-side error — the playbook is unambiguous that only the platform fee is per-tenant configurable; the EPS fee is pass-through from the payment-gateway-side rate card based on which payment method the buyer selects at checkout (card ≈ 2.5%, MFS ≈ 1.5–1.8%, exact values from EPS settlement reports).
+
+**Decision (Moshiur 2026-05-24):** `eps_fee_bps` is **not** a column on `tenant_fee_config` and never will be at any tier. The schema in §9.12 stays as currently written (`platform_fee_bps integer NOT NULL DEFAULT 25` only). The `fee-calculator` function (§14.3 + Day 21 implementation) receives `epsFeeBps` as an **order-time input** to `calculateFees()`, sourced at order creation time from payment-method metadata (the gateway's published rate card for the method the buyer chose). It is NOT read from any tenant-level config row.
+
+**Rationale:**
+
+1. **EPS sets EPS fees, not the platform.** Per §14.1: "Charged by EPS based on the payment method ... Pass-through — we do not mark this up." There is no business reason to allow super-admin override of a gateway's own fee schedule, and no contractual mechanism for one (EPS bills us by their schedule; we cannot bill the buyer at a rate divorced from what EPS will deduct).
+2. **Per-method, not per-tenant.** EPS fees vary by payment method (card vs MFS vs net banking) within a single tenant's traffic. A tenant-level `eps_fee_bps` would be wrong on day one — it can only represent one method's rate. The order-time input pattern is correct: each order knows its method and its method's rate.
+3. **The fee calculator already takes this shape.** Day 21 fee-calculator.ts implementation (per Sprint 3 Day 1 deliverable) accepts `epsFeeBps` as part of `FeeCalcInput`, NOT pulled from a tenant config. Adding a tenant-level column would be a no-op at best, double-source-of-truth confusion at worst.
+
+**Consequences:**
+
+- Day 23 Workstream 2 (super-admin fee config exposure) writes services + routes + UI for `platform_fee_bps` + `default_fee_mode` + `allow_per_event_override` + `custom_arrangement_note` only. No `eps_fee_bps` field anywhere in the form, no field in the audit log, no field in `setOverride()` payload.
+- `fee_override_log` audit shape stays as currently migrated (0001 + RLS 0002): `previous_fee_bps`, `new_fee_bps`, `previous_mode`, `new_mode`, `reason`, `effective_from`, `changed_by`, `created_at`. The `_fee_bps` columns refer to platform fee only — schema is consistent with the decision because there is only one tenant-level fee bps.
+- At order creation (Day 24+ work), `epsFeeBps` is sourced from the payment-method metadata (TBD: hardcoded constants from the EPS rate card initially, eventually a `payment_method_rates` lookup once the settlement-reconciliation work surfaces a need to make it data-driven). The calculator call site reads tenant config for `platform_fee_bps` + `platform_fee_handling`, reads event config for `eps_fee_handling`, derives `epsFeeBps` from payment-method choice — three independent inputs, single calculation.
+- The Day 23 pre-flight brief erroneously listed `eps_fee_bps` as a fourth config column — that line is reframed here so the error doesn't echo into Day 24+ work. If a future spec change requires bookkeeping a tenant-specific EPS arrangement (e.g. an enterprise contract that absorbs EPS fees as a platform cost), it lands as a separate scope decision with a separate column and separate audit shape — NOT bolted onto `tenant_fee_config`.
+
+**Cross-references:** CLAUDE.md §14.1 (EPS fee = pass-through, never marked up); §14.3 (calculator signature `FeeCalcInput` with order-time `epsFeeBps`); §14.4 (per-tenant fee — singular, platform-only); §9.12 (`tenant_fee_config` schema — `platform_fee_bps` is the only fee column).
+
+---
+
 ## 2026-05-24 · `@noble/hashes` 1.8.0 → 2.2.0 (Dependabot PR #72) deferred to post-Days-24-25-EPS-truth-gate
 
 **Context:** During the 2026-05-24 pre-Day-23 consolidation session, Dependabot PR #72 (`@noble/hashes` 1.8.0 → 2.2.0) was one of three open major bumps evaluated. Analysis surfaced that the v2 bump fails CI on import-resolution (`Cannot find module '@noble/hashes/argon2'` — v2's `exports` field requires explicit `.js` suffix on subpath imports; bare `'@noble/hashes/argon2'` is no longer a valid specifier). The fix scope itself is small (one-line change in `apps/api/src/auth/hash.ts:16` adding `.js` suffix). The deeper concern is the bump's TIMING relative to Sprint 3.
