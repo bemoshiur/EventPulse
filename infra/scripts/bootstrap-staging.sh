@@ -499,21 +499,31 @@ SES_FROM_ADDRESS=no-reply@eventpulse.com.bd
 # vars consumed by Hono routes (e.g. OAuth callback construction in
 # apps/api/src/auth/oauth.ts:baseUrl()) + by deploy/health scripts.
 #
-# NEXT_PUBLIC_API_BASE_URL: Next.js build-time variable. The `NEXT_PUBLIC_`
-# prefix means Next.js statically inlines this into the client bundle
-# during `pnpm build`. The OAuth button at apps/web/src/components/auth/
-# oauth-button-group.tsx reads it via process.env to produce absolute
-# hrefs against the API vhost. If missing at build time, the href falls
-# back to a relative path which resolves against the web vhost (Next.js
-# 404 HTML, not Hono) — see gotchas.md "NEXT_PUBLIC_API_BASE_URL missing
-# at Next.js build time silently renders relative OAuth href" (Sprint 3
-# Day 23). Hardcoded here (not a Secrets Manager value) because it's a
-# public deployment-target identifier, not sensitive.
+# NEXT_PUBLIC_API_BASE_URL: Next.js build-time variable. The
+# NEXT_PUBLIC underscore prefix means Next.js statically inlines this
+# into the client bundle during pnpm build. The OAuth button at
+# apps/web/src/components/auth/oauth-button-group.tsx reads it via
+# process.env to produce absolute hrefs against the API vhost. If
+# missing at build time, the href falls back to a relative path which
+# resolves against the web vhost (Next.js 404 HTML, not Hono) — see
+# gotchas.md "NEXT_PUBLIC_API_BASE_URL missing at Next.js build time
+# silently renders relative OAuth href" (Sprint 3 Day 23). Hardcoded
+# here (not a Secrets Manager value) because it's a public
+# deployment-target identifier, not sensitive.
 #
-# Build-time vs runtime: changing this value requires a fresh `pnpm
-# --filter @eventpulse/web build` (which deploy.sh runs on every deploy
-# at line ~124). `pm2 reload web --update-env` alone is INSUFFICIENT
+# Build-time vs runtime: changing this value requires a fresh pnpm
+# build of the web app (which deploy.sh runs on every deploy around
+# line 124). pm2 reload alone with --update-env is INSUFFICIENT
 # because the value is already inlined into the built bundle.
+#
+# IMPORTANT: this comment block lives inside an UNQUOTED heredoc
+# (cat > "\$TMP_ENV" <<EOF ... EOF), so backticks would be evaluated
+# as command substitution at write time. Backticks are intentionally
+# AVOIDED in this comment block; if you need to reference a command
+# name, write it as plain text. The original version of this block
+# (committed in PR #146 then hotfixed here) had unescaped backticks
+# that injected pnpm's help text into .env.staging and broke
+# deploy.sh's source step. Do not reintroduce backticks here.
 EVENTPULSE_API_BASE_URL=https://api.staging.eventpulse.com.bd
 EVENTPULSE_WEB_BASE_URL=https://staging.eventpulse.com.bd
 NEXT_PUBLIC_API_BASE_URL=https://api.staging.eventpulse.com.bd
