@@ -70,6 +70,28 @@ function isSecureCookieEnv(): boolean {
   return process.env['NODE_ENV'] === 'production'
 }
 
+/**
+ * Post-sign-in redirect target. Must be ABSOLUTE — the callback runs on
+ * the api vhost (api.staging.eventpulse.com.bd), the user-facing pages
+ * live on the web vhost (staging.eventpulse.com.bd). A relative `/`
+ * here resolves against the api vhost which 404s (see gotchas.md
+ * "API routes live ONLY on api.staging vhost").
+ *
+ * Target is the apex `/?signed_in=1` for MVP — the attendee portal at
+ * `my.eventpulse.com.bd/tickets` is the long-term home per §2.7, but
+ * `(my)/` pages don't ship until Sprint 8. Apex is the safe interim
+ * landing; the session cookie is set; the apex page can branch on
+ * `?signed_in=1` if desired.
+ *
+ * `EVENTPULSE_WEB_BASE_URL` is populated in production + staging via
+ * bootstrap-staging.sh (set since Day 22). Local dev falls back to
+ * `http://localhost:3000`.
+ */
+export function postSignInUrl(): string {
+  const webBase = process.env['EVENTPULSE_WEB_BASE_URL'] ?? 'http://localhost:3000'
+  return `${webBase.replace(/\/$/, '')}/?signed_in=1`
+}
+
 function fail(reason: string, requestId: string | undefined) {
   // One generic shape returned to the client — never leaks state-cookie
   // failure details. The reason ends up in logs only.
@@ -197,7 +219,20 @@ oauth.get('/google/callback', async (c) => {
     path: '/',
     maxAge: 7 * 24 * 60 * 60,
   })
-  return c.json({ data: session.responseBody }, 200)
+  // 302 to the web vhost rather than 200 JSON. Three reasons:
+  //   1. Token leak — returning session/access/refresh tokens in the
+  //      JSON response body exposes them via browser history, copy-as-
+  //      curl, accidental screenshots, and any extension that reads
+  //      response bodies. The session cookie carries the auth state;
+  //      nothing in the body was being consumed.
+  //   2. Back-button trap — the OAuth `code` is single-use; navigating
+  //      back to the callback URL after success re-runs the callback
+  //      with the same code, gets a code-exchange failure from Google,
+  //      and shows the user a confusing error page. A redirect breaks
+  //      that loop — the back button goes to the IdP, not to the
+  //      callback URL.
+  //   3. UX — users see a real page, not a JSON dump.
+  return c.redirect(postSignInUrl(), 302)
 })
 
 // Apple routes removed Day 23 per "Apple Sign-In dropped from MVP scope"

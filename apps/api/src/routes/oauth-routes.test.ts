@@ -2,6 +2,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 
 import { createApp } from '../app.js'
 import { _resetOAuthClients } from '../auth/oauth.js'
+import { postSignInUrl } from './oauth-routes.js'
 
 /**
  * Route-shape tests for OAuth callbacks. Focus is on the predicates we
@@ -119,6 +120,47 @@ describe('OAuth /callback failure-closed paths', () => {
     expect(setCookie).not.toBeNull()
     expect(setCookie!).toContain('oauth_state_google=')
     expect(setCookie!).toContain('Max-Age=0')
+  })
+})
+
+describe('postSignInUrl (Day 24 redirect fix)', () => {
+  // Locks the post-sign-in redirect target shape against regression to a
+  // relative path (which would resolve against the api vhost and 404) or
+  // to a non-web-vhost. The OAuth callback post-Day-24 returns 302 here
+  // instead of 200 + JSON body; if anyone reverts the redirect or
+  // changes the target shape, these tests fire loud.
+
+  const ORIGINAL = process.env['EVENTPULSE_WEB_BASE_URL']
+  afterEach(() => {
+    if (ORIGINAL === undefined) {
+      delete process.env['EVENTPULSE_WEB_BASE_URL']
+    } else {
+      process.env['EVENTPULSE_WEB_BASE_URL'] = ORIGINAL
+    }
+  })
+
+  it('returns absolute URL with EVENTPULSE_WEB_BASE_URL prefix when set', () => {
+    process.env['EVENTPULSE_WEB_BASE_URL'] = 'https://staging.eventpulse.com.bd'
+    const target = postSignInUrl()
+    expect(target).toBe('https://staging.eventpulse.com.bd/?signed_in=1')
+    // Defence against regression to relative path (the original Day 23
+    // OAuth-button bug class).
+    expect(target).not.toMatch(/^\/[^/]/)
+  })
+
+  it('strips trailing slash from the base URL before appending', () => {
+    process.env['EVENTPULSE_WEB_BASE_URL'] = 'https://staging.eventpulse.com.bd/'
+    expect(postSignInUrl()).toBe('https://staging.eventpulse.com.bd/?signed_in=1')
+  })
+
+  it('falls back to localhost:3000 when EVENTPULSE_WEB_BASE_URL is unset', () => {
+    delete process.env['EVENTPULSE_WEB_BASE_URL']
+    expect(postSignInUrl()).toBe('http://localhost:3000/?signed_in=1')
+  })
+
+  it('appends the `signed_in=1` query so apex page can branch on it', () => {
+    process.env['EVENTPULSE_WEB_BASE_URL'] = 'https://example.test'
+    expect(postSignInUrl()).toContain('?signed_in=1')
   })
 })
 
