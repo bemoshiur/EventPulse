@@ -59,6 +59,12 @@ set -a; source "$ENV_FILE"; set +a
 # If neither resolves, fail loud rather than silently checking out the
 # wrong commit.
 cd "$APP_DIR"
+# Capture the pre-deploy HEAD so step 4.5 (Nginx reload) can diff
+# infra/nginx/** between before and after the reset to decide whether
+# to reload Nginx. PREV_COMMIT may be empty on first-ever deploy
+# (fresh clone with no prior commit); the Nginx step treats empty as
+# "first deploy, reload conservatively."
+PREV_COMMIT="$(git rev-parse HEAD 2>/dev/null || true)"
 git fetch --all --prune
 if TARGET="$(git rev-parse --verify "origin/$REF" 2>/dev/null)"; then
   :
@@ -70,7 +76,7 @@ else
 fi
 git reset --hard "$TARGET"
 COMMIT=$(git rev-parse --short HEAD)
-echo "checked out $COMMIT (from ref=$REF)"
+echo "checked out $COMMIT (from ref=$REF; previous HEAD was ${PREV_COMMIT:-<none>})"
 
 # 2) Install. Three knobs worth their own comment:
 #
@@ -121,6 +127,58 @@ unset NODE_OPTIONS
 
 # 4) Migrate
 $PNPM --filter @eventpulse/api db:migrate
+
+# 4.5) Nginx vhost reload — Fix 6b from Day 21 silent-failure remediation.
+#
+# Nginx vhost config lives in the repo at infra/nginx/eventpulse-staging.conf
+# and is SYMLINKED into /etc/nginx/sites-enabled/ via bootstrap-staging.sh.
+# That means `git reset --hard` (step 1) propagates vhost changes via the
+# symlink immediately — but Nginx itself doesn't reload until something
+# calls `systemctl reload nginx`. Previously the manual SSM workaround
+# was the only path; deploys silently shipped stale Nginx config until
+# the next operator-initiated reload.
+#
+# This block detects whether any infra/nginx/*.conf or
+# infra/nginx/snippets/*.conf changed in the deploy (git diff between
+# the previous HEAD and the new TARGET). If so:
+#   - run `nginx -t` to validate the new config
+#   - if valid: `systemctl reload nginx`
+#   - if invalid: ABORT the deploy BEFORE pm2 reload — rolls back the
+#     git ref via the rollback path (Nginx keeps serving the previous
+#     config that was loaded into worker processes; the broken file is
+#     on disk but not yet active)
+#
+# The diff range is `${PREV_COMMIT}..HEAD` where PREV_COMMIT is the SHA
+# checked out before this deploy's `git reset --hard`. We capture it
+# right after the git fetch + before the reset by reading HEAD's SHA;
+# the file path filter is scoped to infra/nginx/** to avoid spurious
+# reloads on unrelated changes.
+PREV_COMMIT_FOR_NGINX="${PREV_COMMIT:-}"
+NGINX_CHANGED=0
+if [[ -n "$PREV_COMMIT_FOR_NGINX" ]]; then
+  if git -C "$APP_DIR" diff --name-only "$PREV_COMMIT_FOR_NGINX..HEAD" -- \
+       'infra/nginx/**' 'infra/nginx/snippets/**' | grep -q .; then
+    NGINX_CHANGED=1
+  fi
+else
+  # First deploy on this server (no previous commit recorded) — be
+  # conservative and reload Nginx so the symlinked vhost takes effect.
+  NGINX_CHANGED=1
+fi
+
+if [[ "$NGINX_CHANGED" == "1" ]]; then
+  echo "nginx vhost changes detected in $PREV_COMMIT_FOR_NGINX..HEAD; validating + reloading"
+  if sudo nginx -t 2>&1; then
+    sudo systemctl reload nginx
+    echo "nginx reloaded"
+  else
+    echo "ERROR: nginx -t rejected the new config; aborting before pm2 reload"
+    echo "rolling back via rollback.sh"
+    exec "$APP_DIR/infra/deploy/rollback.sh"
+  fi
+else
+  echo "no nginx vhost changes; skipping nginx reload"
+fi
 
 # 5) Reload PM2 (graceful)
 if $PM2 describe web >/dev/null 2>&1; then
