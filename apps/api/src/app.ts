@@ -21,6 +21,7 @@ import { eventsRoutes } from './routes/tenant/events.js'
 import { kycDraftRoutes } from './routes/tenant/kyc-drafts.js'
 import { kycRoutes } from './routes/tenant/kyc.js'
 import { meRoutes } from './routes/tenant/me.js'
+import { tenantReportsRoutes } from './routes/tenant/reports.js'
 import { tenantTicketTiersRoutes } from './routes/tenant/ticket-tiers.js'
 
 /**
@@ -144,6 +145,15 @@ export function createApp() {
   // list reads (Decision G precedent; bulk extraction is what the
   // Phase-3 CSV-export endpoint audits).
   app.route('/api/v1/tenant/events', attendeeRoutes)
+
+  // Tenant reports — Sprint 4 Day 33 per §10.2:
+  //   GET /api/v1/tenant/reports/sales    (Phase 1)
+  //   GET /api/v1/tenant/reports/payouts  (Phase 3)
+  // Aggregate reads scoped via withTenant() ↔ RLS. Cross-tenant
+  // aggregate isolation is the load-bearing security property —
+  // an unscoped SUM accidentally crossing tenants would leak
+  // another tenant's revenue.
+  app.route('/api/v1/tenant/reports', tenantReportsRoutes)
 
   // Super admin routes — Sprint 2 Day 18 Item 13 + Day 19 Item 15.
   // Mounted under /api/v1/admin/* per §10.4. requireSuperAdminAuth
