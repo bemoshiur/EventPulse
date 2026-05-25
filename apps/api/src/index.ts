@@ -30,7 +30,6 @@ if (redis) {
   })
 }
 
-
 // Day 28 Phase 3 — start the in-process delivery worker. Consumes
 // the `tickets-delivery` BullMQ queue + processes post-paid PDF +
 // email delivery. Falls back to no-op if Redis is unset (logs).
