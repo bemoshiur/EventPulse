@@ -4,6 +4,69 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## Hono middleware that hashes request body MUST use `c.req.raw.clone().text()`, NOT `c.req.text()` (2026-05-25 / Day 29 Phase 1 hotfix #1)
+
+**Symptom.** Day 29 Phase 1 idempotency middleware shipped with `await c.req.text()` for body hashing. All 12 unit tests against `app.request()` passed. Production smoke after deploy returned plain-text "Internal Server Error" (not the route handler's typed 4xx envelope) for any POST with a non-trivial body.
+
+**Why it happens.** Standard Web API: a `Request` body is a `ReadableStream` that can be consumed ONCE. Hono's `c.req.text()` reads the underlying Request's body stream → consumes it. Downstream `zValidator('json')` calls `c.req.json()` which tries to read the same stream → empty → `JSON.parse` throws → Hono's default `onError` catches the throw and returns generic 500 plain text.
+
+The unit tests didn't catch this because `app.request()` in Hono shortcuts internal caching — the same code reads fine in `app.request()` but breaks under real HTTP traffic served by `@hono/node-server`. Different code path, different stream behaviour.
+
+**Fix.** `await c.req.raw.clone().text()`. The `.raw` accessor returns the underlying standard `Request` object; `.clone()` is the Web-API standard that returns a clone with its own body stream. Reading from the clone hashes the bytes without consuming the original stream that downstream consumers need.
+
+**How to avoid.**
+
+1. Any Hono middleware that needs to read the request body MUST use `c.req.raw.clone().text()` (or `.arrayBuffer()`).
+2. Any HTTP-touching middleware change needs a post-deploy live curl smoke as part of the merge gate. Mock-based unit tests with `app.request()` are a BLIND SPOT for real HTTP behaviour.
+
+---
+
+## Redis singleton needs explicit warm-up at boot or first request after pm2 reload races the lazy-connect (2026-05-25 / Day 29 Phase 1 hotfix #2)
+
+**Symptom.** After Day 29 Phase 1 body-clone hotfix (#172) deployed, production smoke STILL returned plain-text "Internal Server Error" on the FIRST request after pm2 reload. EC2 stderr revealed the real second issue:
+
+```text
+Error: Stream isn't writeable and enableOfflineQueue options is false
+  at EventEmitter.sendCommand (ioredis/built/Redis.js:365:32)
+  at EventEmitter.get (ioredis/built/utils/Commander.js:90:25)
+  at <anonymous> (apps/api/src/middleware/idempotency.ts:245:37)
+```
+
+**Why it happens.** The Redis singleton at `apps/api/src/infra/redis/client.ts` uses `lazyConnect: true` + `enableOfflineQueue: false` (Day 26 design — fail-fast for the EPS token-cache hot path; a slow Redis can't hang token fetches indefinitely). Without explicit warm-up, the FIRST request after pm2 reload races the deferred connect: ioredis throws synchronously before the socket opens, the consumer's `redis.get()` rejects with `"Stream isn't writeable"`, Hono returns generic 500.
+
+This is the SECOND time the same root issue (unit-tests-vs-production-HTTP gap) bit Day 29 Phase 1. Unit tests inject mock Redis via `_setRedisClientForTest` BEFORE the singleton ever constructs — they don't exercise the lazy-connect race.
+
+**Fix.** In `apps/api/src/index.ts` after `const redis = getRedis()`:
+
+```typescript
+void redis.connect().catch((err) => {
+  logger.warn({ err: err.message }, 'redis.warmup_failed_at_boot')
+})
+```
+
+Errors swallowed because Redis-absent is not a fatal boot condition (each consumer handles its own absence path).
+
+**Why warm-up vs `enableOfflineQueue: true`.** Flipping to `true` would queue commands while connecting — fine for idempotency but DEFEATS the Day-26-intentional fail-fast on the EPS token cache (a slow Redis would hang token fetches indefinitely). Warm-up preserves both invariants: idempotency works on the first request AND EPS token cache stays bounded.
+
+**How to avoid.**
+
+1. Any singleton with `lazyConnect: true` + `enableOfflineQueue: false` needs an explicit `connect()` at boot if ANY consumer queries it on the request hot path.
+2. Post-deploy smoke MUST exercise the first-request-after-reload case. The `pm2 reload api` simulates a cold start; the subsequent curl validates the warm-up worked.
+
+---
+
+## `ioredis-mock` shares data across `new RedisMock()` instances — per-test unique keys required (2026-05-25 / Day 29 Phase 1)
+
+**Symptom.** A unit test in the idempotency middleware suite ("three sequential replays all return identical body; handler runs only ONCE") failed with `expected spy to be called 1 times, got 0 times`. Sibling tests using DIFFERENT keys passed.
+
+**Why it happens.** `ioredis-mock` documents that `new RedisMock()` instances SHARE the same underlying in-memory data store by default. The test's `beforeEach` replaced the singleton with a "fresh" mock via `_setRedisClientForTest(new RedisMock())`, but writes from the previous test (which used the same Redis KEY constant) persisted into the new mock. The middleware found the cached entry from a prior test and returned the cached response without calling the handler.
+
+**Fix.** Per-test unique KEY suffixes (e.g. `'happy-path-1-12345'`, `'happy-path-2-12345'`, `'reuse-key-1-12345'`). The data-share is unavoidable without a deeper mock-reset; the test discipline is to avoid cross-test key collisions.
+
+**How to avoid.** When writing tests against `ioredis-mock`, use a fresh key per `it()` block. The `describe`-level shared KEY constant pattern (which works against real Redis when the test framework spins up isolated databases) is unsafe with the mock.
+
+---
+
 ## BullMQ Worker requires `maxRetriesPerRequest: null` on its Redis connection — incompatible with the bounded singleton (2026-05-25 / Day 28 Phase 3)
 
 **Symptom.** PR #168 first push crashed CI E2E job at API boot:
