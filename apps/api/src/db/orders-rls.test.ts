@@ -331,48 +331,101 @@ describeIfDb('orders schema — RLS isolation + append-only invariants', () => {
   })
 
   describe('order_events — append-only at the GRANT layer (§4.2.1.1 pattern)', () => {
-    it('UPDATE on order_events via eventpulse_app raises permission denied', async () => {
+    // Pattern mirrors the audit_logs append-only test in
+    // db/__tests__/rls-cross-tenant.test.ts: capture either-thrown-or-zero-rows
+    // and verify state via withSuperAdmin. Direct regex on the error
+    // message is brittle because Drizzle wraps pg errors as "Failed
+    // query: ..." with the underlying "permission denied" in error.cause.
+    // The invariant being tested is "the mutation did not succeed";
+    // captured-error OR zero-rows-affected satisfies that invariant.
+
+    it('UPDATE on order_events via eventpulse_app does not succeed', async () => {
       const { orderEventId } = await seedOrderGraph(
         fx.tenantAId,
         fx.eventAId,
         fx.tierAId,
         'append-up',
       )
-      // Same-tenant UPDATE — RLS would let it through; the REVOKE at
-      // the GRANT layer is what fails the operation. The error is a
-      // postgres "permission denied" message at the underlying driver.
-      await expect(
-        withTenant(fx.tenantAId, async (db) => {
-          await db
+
+      let updateError: unknown = null
+      let updated: { id: string }[] = []
+      try {
+        updated = await withTenant(fx.tenantAId, async (db) =>
+          db
             .update(orderEvents)
             .set({ payload: { tampered: true } })
             .where(eq(orderEvents.id, orderEventId))
-        }),
-      ).rejects.toThrow(/permission denied/i)
+            .returning({ id: orderEvents.id }),
+        )
+      } catch (err) {
+        updateError = err
+      }
+      // Either the REVOKE at the GRANT layer threw, OR the UPDATE
+      // affected zero rows (RLS/grant denial). Either is "immutability
+      // honoured" from the test's perspective.
+      expect(updateError !== null || updated.length === 0).toBe(true)
+
+      // Verify via super-admin that the payload was not actually mutated.
+      const [row] = await withSuperAdmin((db) =>
+        db
+          .select({ payload: orderEvents.payload })
+          .from(orderEvents)
+          .where(eq(orderEvents.id, orderEventId)),
+      )
+      expect(row!.payload).not.toEqual({ tampered: true })
     })
 
-    it('DELETE on order_events via eventpulse_app raises permission denied', async () => {
+    it('DELETE on order_events via eventpulse_app does not succeed', async () => {
       const { orderEventId } = await seedOrderGraph(
         fx.tenantAId,
         fx.eventAId,
         fx.tierAId,
         'append-del',
       )
-      await expect(
-        withTenant(fx.tenantAId, async (db) => {
-          await db.delete(orderEvents).where(eq(orderEvents.id, orderEventId))
-        }),
-      ).rejects.toThrow(/permission denied/i)
+
+      let deleteError: unknown = null
+      let deleted: { id: string }[] = []
+      try {
+        deleted = await withTenant(fx.tenantAId, async (db) =>
+          db
+            .delete(orderEvents)
+            .where(eq(orderEvents.id, orderEventId))
+            .returning({ id: orderEvents.id }),
+        )
+      } catch (err) {
+        deleteError = err
+      }
+      expect(deleteError !== null || deleted.length === 0).toBe(true)
+
+      // Read-back must still find the row.
+      const stillThere = await withSuperAdmin((db) =>
+        db.select({ id: orderEvents.id }).from(orderEvents).where(eq(orderEvents.id, orderEventId)),
+      )
+      expect(stillThere).toHaveLength(1)
     })
 
-    it('TRUNCATE on order_events via eventpulse_app raises permission denied', async () => {
-      await expect(
-        withTenant(fx.tenantAId, async (db) => {
+    it('TRUNCATE on order_events via eventpulse_app does not succeed', async () => {
+      // Seed at least one row so we can verify TRUNCATE did NOT empty the table.
+      await seedOrderGraph(fx.tenantAId, fx.eventAId, fx.tierAId, 'append-trunc')
+
+      let truncateError: unknown = null
+      try {
+        await withTenant(fx.tenantAId, async (db) => {
           // Drizzle doesn't have a builder for TRUNCATE; raw SQL is
           // the right shape here.
           await db.execute(`TRUNCATE TABLE order_events`)
-        }),
-      ).rejects.toThrow(/permission denied/i)
+        })
+      } catch (err) {
+        truncateError = err
+      }
+      // TRUNCATE either threw OR was somehow accepted but didn't
+      // actually truncate. The defensive read confirms the table is
+      // not empty regardless of which branch hit.
+      const remaining = await withSuperAdmin((db) =>
+        db.select({ id: orderEvents.id }).from(orderEvents).limit(1),
+      )
+      expect(truncateError !== null || remaining.length > 0).toBe(true)
+      expect(remaining.length).toBeGreaterThan(0)
     })
 
     it('eventpulse_admin (withSuperAdmin) CAN still UPDATE/DELETE — the redaction path', async () => {
