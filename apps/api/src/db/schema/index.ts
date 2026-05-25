@@ -735,3 +735,202 @@ export const ticketTiers = pgTable(
     index('idx_tickets_event').on(t.eventId),
   ],
 )
+
+// ─── orders + order_items + attendees + order_events + refunds ──────────
+// Sprint 3 Day 26 Phase 3 — order pipeline schema per §9.5.
+// Migration 0013_orders.sql is the canonical SQL; this is its Drizzle
+// mirror. The 4 fee-snapshot extension columns (platformFeeBps,
+// epsFeeBps, platformFeeHandling, epsFeeHandling) match the migration
+// file header rationale (§14.4 + Decision N audit requirements).
+//
+// order_events is APPEND-ONLY per §4.2.1.1: the migration REVOKEs
+// UPDATE/DELETE/TRUNCATE from eventpulse_app. The Drizzle schema
+// cannot express that constraint — it's a GRANT-layer policy. The
+// service layer must NEVER attempt to UPDATE/DELETE order_events
+// through the tenant role; super-admin bypass is the only legitimate
+// mutation path (regulator-required redaction).
+// ─────────────────────────────────────────────────────────────────────────
+
+export const orders = pgTable(
+  'orders',
+  {
+    id: uuid()
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'restrict' }),
+    merchantTransactionId: text('merchant_transaction_id').notNull().unique(),
+    buyerName: text('buyer_name').notNull(),
+    buyerEmail: citext('buyer_email').notNull(),
+    buyerPhone: text('buyer_phone').notNull(),
+    buyerNidLast4: text('buyer_nid_last4'),
+    // Money snapshot (paisa, §1.3 R2).
+    subtotalPaisa: bigint('subtotal_paisa', { mode: 'bigint' }).notNull(),
+    epsFeePaisa: bigint('eps_fee_paisa', { mode: 'bigint' }).notNull().default(0n),
+    platformFeePaisa: bigint('platform_fee_paisa', { mode: 'bigint' }).notNull(),
+    withholdingTaxPaisa: bigint('withholding_tax_paisa', { mode: 'bigint' }).notNull().default(0n),
+    totalPaisa: bigint('total_paisa', { mode: 'bigint' }).notNull(),
+    netToOrganiserPaisa: bigint('net_to_organiser_paisa', { mode: 'bigint' }).notNull(),
+    currency: text().notNull().default('BDT'),
+    // Fee-handling + bps snapshots (§14.4 extension).
+    platformFeeBps: integer('platform_fee_bps').notNull(),
+    epsFeeBps: integer('eps_fee_bps').notNull(),
+    platformFeeHandling: text('platform_fee_handling').notNull(),
+    epsFeeHandling: text('eps_fee_handling').notNull(),
+    status: text().notNull().default('pending'),
+    epsTransactionId: text('eps_transaction_id'),
+    epsPaymentMethod: text('eps_payment_method'),
+    epsVerifiedAt: timestamp('eps_verified_at', { withTimezone: true }),
+    ip: inet(),
+    userAgent: text('user_agent'),
+    utm: jsonb(),
+    idempotencyKey: text('idempotency_key'),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'orders_status_chk',
+      sql`${t.status} IN ('pending','awaiting_payment','paid','completed','cancelled','failed','refund_requested','refunded','disputed','chargeback','reversed')`,
+    ),
+    check(
+      'orders_platform_fee_handling_chk',
+      sql`${t.platformFeeHandling} IN ('absorb','pass_through')`,
+    ),
+    check('orders_eps_fee_handling_chk', sql`${t.epsFeeHandling} IN ('absorb','pass_through')`),
+    check('orders_subtotal_nonneg_chk', sql`${t.subtotalPaisa} >= 0`),
+    check('orders_eps_fee_nonneg_chk', sql`${t.epsFeePaisa} >= 0`),
+    check('orders_platform_fee_nonneg_chk', sql`${t.platformFeePaisa} >= 0`),
+    check('orders_withholding_nonneg_chk', sql`${t.withholdingTaxPaisa} >= 0`),
+    check('orders_total_nonneg_chk', sql`${t.totalPaisa} >= 0`),
+    check('orders_net_to_organiser_nonneg_chk', sql`${t.netToOrganiserPaisa} >= 0`),
+    check('orders_platform_fee_bps_nonneg_chk', sql`${t.platformFeeBps} >= 0`),
+    check('orders_eps_fee_bps_nonneg_chk', sql`${t.epsFeeBps} >= 0`),
+    check('orders_currency_chk', sql`${t.currency} = 'BDT'`),
+    index('idx_orders_tenant_status').on(t.tenantId, t.status, t.createdAt),
+    index('idx_orders_event').on(t.eventId, t.status, t.createdAt),
+  ],
+)
+
+export const orderItems = pgTable(
+  'order_items',
+  {
+    id: uuid()
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    ticketTierId: uuid('ticket_tier_id')
+      .notNull()
+      .references(() => ticketTiers.id, { onDelete: 'restrict' }),
+    quantity: integer().notNull(),
+    unitPricePaisa: bigint('unit_price_paisa', { mode: 'bigint' }).notNull(),
+    subtotalPaisa: bigint('subtotal_paisa', { mode: 'bigint' }).notNull(),
+  },
+  (t) => [
+    check('order_items_quantity_pos_chk', sql`${t.quantity} > 0`),
+    check('order_items_unit_price_nonneg', sql`${t.unitPricePaisa} >= 0`),
+    check('order_items_subtotal_nonneg', sql`${t.subtotalPaisa} >= 0`),
+    index('idx_order_items_order').on(t.orderId),
+  ],
+)
+
+export const attendees = pgTable(
+  'attendees',
+  {
+    id: uuid()
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    orderItemId: uuid('order_item_id')
+      .notNull()
+      .references(() => orderItems.id, { onDelete: 'cascade' }),
+    ticketTierId: uuid('ticket_tier_id')
+      .notNull()
+      .references(() => ticketTiers.id, { onDelete: 'restrict' }),
+    attendeeName: text('attendee_name').notNull(),
+    attendeeEmail: citext('attendee_email'),
+    attendeePhone: text('attendee_phone'),
+    submissionData: jsonb('submission_data')
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    qrCode: text('qr_code').notNull().unique(),
+    checkedInAt: timestamp('checked_in_at', { withTimezone: true }),
+    checkedInBy: uuid('checked_in_by').references(() => users.id),
+    checkedInGate: text('checked_in_gate'),
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
+    voidReason: text('void_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_attendees_event').on(t.tenantId, t.orderId),
+    index('idx_attendees_qr').on(t.qrCode),
+  ],
+)
+
+export const orderEvents = pgTable(
+  'order_events',
+  {
+    id: uuid()
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    eventType: text('event_type').notNull(),
+    actorType: text('actor_type').notNull(),
+    actorId: uuid('actor_id'),
+    payload: jsonb().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_order_events_order').on(t.orderId, t.createdAt)],
+)
+
+export const refunds = pgTable(
+  'refunds',
+  {
+    id: uuid()
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'restrict' }),
+    amountPaisa: bigint('amount_paisa', { mode: 'bigint' }).notNull(),
+    reason: text().notNull(),
+    initiatedBy: uuid('initiated_by')
+      .notNull()
+      .references(() => users.id),
+    status: text().notNull().default('pending'),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('refunds_amount_pos_chk', sql`${t.amountPaisa} > 0`),
+    check(
+      'refunds_status_chk',
+      sql`${t.status} IN ('pending','approved','rejected','processed','failed')`,
+    ),
+    index('idx_refunds_order').on(t.orderId, t.createdAt),
+  ],
+)
