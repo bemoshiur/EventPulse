@@ -23,7 +23,7 @@
     "@eventpulse/shared-utils": "workspace:*",
     "@hono/node-server": "^1.13.7",
     "@hono/zod-validator": "^0.8.0",
-    "@noble/hashes": "^1.6.1",
+    "@noble/hashes": "^2.2.0",
     "arctic": "^3.7.0",
     "axios": "^1.16.1",
     "bullmq": "^5.77.3",
