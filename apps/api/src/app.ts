@@ -8,6 +8,7 @@ import { oauthRoutes } from './routes/oauth-routes.js'
 import { publicEventsRoutes } from './routes/public/events.js'
 import { publicLegalRoutes } from './routes/public/legal.js'
 import { publicOrdersRoutes } from './routes/public/orders.js'
+import { epsWebhookRoutes } from './routes/webhooks/eps.js'
 import { feeConfigRoutes } from './routes/super-admin/fee-config.js'
 import { adminKycRoutes } from './routes/super-admin/kyc.js'
 import { adminLegalRoutes } from './routes/super-admin/legal.js'
@@ -85,6 +86,13 @@ export function createApp() {
   // awaiting_payment regardless. Day 27 ships the EPS callback
   // handler that completes the lifecycle.
   app.route('/api/v1/public/orders', publicOrdersRoutes)
+  // EPS server-to-server webhook — Sprint 3 Day 27 Phase 2. The
+  // authentication model is "verify-by-callback" per §11.1 step 11:
+  // the handler treats the payload as a notification trigger only;
+  // verifyOrder() against EPS is the authoritative status source.
+  // §11 does NOT specify an EPS-side webhook signature mechanism
+  // (decisions.md "Day 27 EPS webhook auth model" 2026-05-25).
+  app.route('/api/v1/webhooks/eps', epsWebhookRoutes)
   // Tenant routes — order doesn't matter (Hono routes are matched by
   // exact path prefix), but the `me` + `account-type` mounts deliberately
   // sit alongside `kyc` because they share the /api/v1/tenant/* namespace.
