@@ -169,6 +169,9 @@ async function seedOrder(
     quantity?: number
     /** Unit price for this order's snapshot (default = tier price). */
     unitPricePaisa?: bigint
+    /** Override event_id (defaults to fx.eventId; needed for the
+     *  eventId-filter test which seeds against a sibling event). */
+    eventIdOverride?: string
     /** Snapshotted fee fields (defaults compute from quantity * unitPrice with 25 bps + 250 bps pass-through). */
     paidAt?: Date
   },
@@ -193,7 +196,7 @@ async function seedOrder(
       .insert(orders)
       .values({
         tenantId: fx.tenantId,
-        eventId: fx.eventId,
+        eventId: spec.eventIdOverride ?? fx.eventId,
         merchantTransactionId: `TXN-sales-${spec.suffix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         buyerName: `Buyer ${spec.suffix}`,
         buyerEmail: `buyer-${spec.suffix}@test.local`,
@@ -464,11 +467,14 @@ describeIfDb('GET /api/v1/tenant/reports/sales', () => {
     })
     // Orders for event 1
     await seedOrder(fx, { suffix: 'ev1', status: 'paid', tierId: fx.tierGA, quantity: 1 })
-    // Orders for event 2
+    // Orders for event 2 — must override eventId (the seedOrder helper
+    // defaults to fx.eventId; without the override, the order lands on
+    // event 1, and the filter test fails because event 2 has 0 orders).
     await seedOrder(fx, {
       suffix: 'ev2',
       status: 'paid',
       tierId: evt2.tierId,
+      eventIdOverride: evt2.id,
       quantity: 5,
     })
 
