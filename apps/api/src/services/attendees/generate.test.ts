@@ -344,9 +344,7 @@ describeIfDb('generateAttendeesForOrder', () => {
     })
 
     it('order_not_paid: failed status → no mutation', async () => {
-      const order = await seedOrder('failed', 'failed-order', [
-        { tierId: fx.tierA, quantity: 1 },
-      ])
+      const order = await seedOrder('failed', 'failed-order', [{ tierId: fx.tierA, quantity: 1 }])
 
       const result = await generateAttendeesForOrder({ orderId: order.id })
       expect(result.kind).toBe('order_not_paid')
@@ -399,7 +397,10 @@ describeIfDb('generateAttendeesForOrder', () => {
       )
       expect(audits).toHaveLength(1)
 
-      const diff = audits[0]!.diff as { attendee_count?: number; tier_breakdown?: Record<string, number> }
+      const diff = audits[0]!.diff as {
+        attendee_count?: number
+        tier_breakdown?: Record<string, number>
+      }
       expect(diff.attendee_count).toBe(2)
       expect(diff.tier_breakdown?.[fx.tierA]).toBe(2)
 

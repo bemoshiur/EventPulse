@@ -61,13 +61,7 @@
 import { eq, sql } from 'drizzle-orm'
 
 import { withSuperAdmin } from '../../db/client.js'
-import {
-  attendees,
-  orderEvents,
-  orderItems,
-  orders,
-  ticketTiers,
-} from '../../db/schema/index.js'
+import { attendees, orderEvents, orderItems, orders, ticketTiers } from '../../db/schema/index.js'
 import { logger } from '../../lib/logger.js'
 
 import { writeAttendeesGenerated } from '../audit/attendees.js'
@@ -227,8 +221,7 @@ export async function generateAttendeesForOrder(
     const insertedTokens: string[] = []
 
     for (const item of itemRows) {
-      tierBreakdown[item.ticketTierId] =
-        (tierBreakdown[item.ticketTierId] ?? 0) + item.quantity
+      tierBreakdown[item.ticketTierId] = (tierBreakdown[item.ticketTierId] ?? 0) + item.quantity
 
       for (let n = 1; n <= item.quantity; n++) {
         const qrToken = mintQrToken()
