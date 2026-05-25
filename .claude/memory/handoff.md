@@ -1,106 +1,124 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-05-25 (Sprint 3 Day 27 COMPLETE — order state machine + authenticated webhook + browser redirects, all behind STAGING_PAYMENT_BLOCK, verified end-to-end on staging with a live fraud-prevention smoke)
-**Driver:** Claude Code (Opus 4.7) — Day 27 closeout; **next session opens Sprint 3 Day 28 — QR generation per attendee + PDF ticket + email delivery via the bilingual SES templates from Day 21 AM (`order_confirmed`, `attendee_ticket`).**
+**Last update:** 2026-05-25 (Sprint 3 Day 28 COMPLETE — QR + PDF + BullMQ background-worker delivery, end-to-end behind STAGING_PAYMENT_BLOCK, staging worker boot signal verified live)
+**Driver:** Claude Code (Opus 4.7) — Day 28 closeout; **next session opens Sprint 3 Day 29 — `Idempotency-Key` middleware + FOR UPDATE capacity lock on `ticket_tiers`.**
 
 ## State right now (2026-05-25 EOD)
 
-**Sprint 3 Day 27 COMPLETE.** All 4 phases shipped through 3 PRs in clean dependency order; Phase 4 verification done on staging with a live spoofed-webhook smoke proving the verify-by-callback authority model.
+**Sprint 3 Day 28 COMPLETE.** All 4 phases shipped through 3 PRs in dependency order; Phase 4 verification done on staging with the new `tickets.delivery_worker.started` boot signal confirmed live.
 
 **Branches + PRs:**
 
-- `origin/main` HEAD = `de0faed` (PR #164 — browser redirect handlers)
-- Staging EC2 deployed code = `de0faed` (verified below)
-- **3 Day 27 PRs MERGED:**
-  - PR #162 (Phase 1) `feat(orders): pure order state machine + transition validation` → merged `46a2575`
-  - PR #163 (Phase 2) `feat(eps): authenticated webhook + verifyOrder reconciliation` → merged `bcfb89c`
-  - PR #164 (Phase 3) `feat(eps): browser redirect handlers (success/fail/cancel) — display-only` → merged `de0faed`
+- `origin/main` HEAD = `f4ef282` (PR #168 — BullMQ delivery worker)
+- Staging EC2 deployed code = `f4ef282` (verified below)
+- **3 Day 28 PRs MERGED:**
+  - PR #166 (Phase 1) `feat(tickets): per-attendee QR token + attendee row generation` → merged `4392307`
+  - PR #167 (Phase 2) `feat(tickets): PDF ticket generation with embedded QR` → merged `64e13dd`
+  - PR #168 (Phase 3) `feat(tickets): BullMQ delivery worker — QR + PDF + email on paid` → merged `f4ef282`
 - **PR #72 still DEFERRED** — `@noble/hashes` 1→2 awaits post-Days-24-25-EPS-truth-gate.
 
-**Day 27 deliverables (all merged):**
+**Day 28 deliverables (all merged):**
 
-- ✅ **Pure order state machine** at `apps/api/src/domain/order-state-machine.ts` (113 unit tests, 6ms). 11 states matching the live `orders_status_chk` constraint verified Phase 0. Encodes §2.5 + §11.1 transitions. 5 terminal states. Self-transitions rejected (idempotency is a service-layer concern). Companion `mapEpsStatusToOrderTransition()` is the EPS↔order seam; pairs with `normaliseStatus` from `infra/eps/normalise-status.ts`.
-- ✅ **Authenticated webhook + verifyOrder reconciliation + idempotent settlement.** Service at `apps/api/src/services/orders/settle.ts settleOrderFromEps()`; route at `apps/api/src/routes/webhooks/eps.ts` (mounted at `/api/v1/webhooks/eps/callback`). **Auth model: verify-by-callback as the AUTHORITY** — user-approved Day 27 Phase 0 STOP-ASK (§11.1 step 11 design; §11 does NOT specify a webhook signature mechanism). Handler does NOT trust any payload field — only consumes `merchant_transaction_id` as a DB lookup key + ALWAYS calls `verifyOrder()` against EPS. Defense-in-depth: zod body validation + per-IP rate-limit (100/min) + per-txn-id rate-limit (20/min) + always-200-OK + idempotent fast-path on already-settled orders. Discriminated-union `SettlementResult` with 5 outcome kinds. **Live fraud-prevention smoke confirmed Phase 4:** POST webhook with claimed `status:SUCCESS` for unknown txn → 200 + `kind:unknown_transaction` (claim completely ignored). New `apps/api/src/lib/rate-limit.ts` primitive (in-memory; Redis swap is a future single-call-site change).
-- ✅ **Browser redirect handlers (display-only, non-authoritative).** Routes at `/api/v1/public/orders/eps-return/{success,fail,cancel}` (GET). **CRITICAL invariant pinned by 3 tests:** the inbound `/eps-return/*` URL is NEVER authoritative — outbound redirect target computed from the RESOLVED order status (from `settleOrderFromEps`'s verify response), NOT from which path EPS sent the buyer to. Both webhook + redirects call the same settle service — uniform verify-by-callback authority. Outbound targets: `${EVENTPULSE_WEB_BASE_URL}/orders/return/{success,fail,cancel,pending,error}?orderId=...` (frontend pages at these URLs are Day 28+ scope). No-PII: only `orderId` echoed in outbound query.
+- ✅ **QR token mint** at `apps/api/src/services/attendees/qr-token.ts` (9 unit tests, 4ms). 256-bit cryptographically-random opaque token, base64url-encoded (43 chars), stored in `attendees.qr_code` (UNIQUE constraint from migration 0013). Forgery-resistance: brute force at 1B/sec takes ~3.7×10^60 years. Mirror of `mintMerchantTransactionId` pure-inner + thin wrapper pattern.
+- ✅ **Attendee row generation** at `apps/api/src/services/attendees/generate.ts` — one row per `(order_item × quantity)` under withSuperAdmin (same trust-boundary pattern as settle.ts). Idempotent via `order.attendees_generated` append-only marker in order_events. New `writeAttendeesGenerated` one-per-domain audit helper at `services/audit/attendees.ts`. MVP naming: buyerName verbatim for quantity=1, "buyerName (Ticket N of M)" suffix for quantity>1 (per-attendee form capture is Phase 2 scope).
+- ✅ **PDF ticket render** at `apps/api/src/services/tickets/{qr-image,render-ticket-pdf}.ts`. QR encodes `${API_BASE}/scan/{token}` URL so phone cameras scan + open natively (no custom scanner app for MVP). pdfkit (vanilla, ~500KB) over @react-pdf/renderer (React tax). Bilingual via locale param; bn labels rendered as "Bangla / English" so English half remains scannable when Bangla glyphs fall through Helvetica (NotoSansBengali bundling is future improvement). Defence-in-depth brand colour sanitisation (regex `/^#[0-9A-Fa-f]{6}$/`). **PDF travels as email attachment, NO S3 bucket** — avoids the AWS-write surface STOP-ASK.
+- ✅ **SES raw-MIME path** at `apps/api/src/infra/ses/raw-email.ts` — `sendEmailRaw()` via Content.Raw; `buildMimeMessage` pure helper assembles multipart/mixed → multipart/alternative → application/pdf. RFC 5322 CRLF + RFC 2047 B-encoding for non-ASCII subjects. Honours `MAIL_DRY_RUN=1`.
+- ✅ **Two bilingual SES templates** at `apps/api/src/infra/ses/templates/{order-confirmed,attendee-ticket}.ts` per §16.3. Order confirmed = buyer summary (no PDF). Attendee ticket = per-attendee with PDF attached + "don't share this ticket" warning.
+- ✅ **BullMQ queue + worker** at `apps/api/src/workers/{delivery-queue,delivery-worker}.ts`. Job name `deliver-order` on queue `tickets-delivery`. Job id `delivery:${orderId}` dedupes at enqueue. 5 attempts, exponential backoff (5s..52m, ~63min before DLQ). **DEDICATED Redis connection** (`getBullRedis()`) because BullMQ requires `maxRetriesPerRequest: null` (blocking commands); the singleton at `infra/redis/client.ts` stays bounded for the EPS token cache hot path. Worker concurrency=2 (env-tunable). Graceful shutdown on SIGTERM in `index.ts`.
+- ✅ **Settle.ts on-paid hook** — `if (target === 'paid') await enqueueOrderDelivery({ orderId })` inside the paid-transition branch AFTER tx commits. `enqueueOrderDelivery` NEVER throws (settlement reliability invariant): Redis blip returns `{enqueued: false}` + logs.
+- ✅ **Delivery orchestration** at `apps/api/src/services/tickets/deliver-order.ts` — end-to-end deliver: load order → generateAttendeesForOrder (Phase 1) → render PDFs (Phase 2) → send buyer + per-attendee emails → mark delivered. Two markers in sequence (`attendees_generated` + `delivery_sent`) so the worker can retry delivery-half without re-generating attendees. Throws on infra failures so BullMQ retries; discriminated union for business outcomes. New `writeOrderDelivered` audit helper.
 
 **Tests shipped:**
 
-- 113 pure-unit state machine tests
-- 19 webhook unit tests (settle service vi.mock'd) + 10 DB-gated settle integration tests
-- 19 redirect handler unit tests (settle service vi.mock'd)
-- 7 rate-limit primitive unit tests
-- Final API suite: **690 pass (+168 net new on Day 27), 256 skipped (DB-gated tests run in CI)**
+- 9 QR token pure unit tests
+- 11 DB-gated attendee-generation integration tests
+- 9 QR image unit tests + 19 PDF render property-based tests
+- 8 raw-MIME builder unit tests + 4 queue no-Redis unit tests
+- 10 DB-gated deliverOrder integration tests
+- Plus `vi.useFakeTimers()` flake fix on 12 pre-existing webhook rate-limit tests
+- Final API suite: **739 pass (+49 net new on Day 28), 277 skipped (+21 DB-gated added; CI runs them)**
 
-**Day 27 staging smoke (all GREEN):**
+**Day 28 staging smoke (all GREEN):**
 
-- main HEAD post-Phase-3 deployed; EC2 HEAD matches `de0faed`; zero drift
-- `STAGING_PAYMENT_BLOCK=1` still enforcing in pm2 env + .env.staging
+- main HEAD post-Phase-3 deployed; EC2 HEAD matches `f4ef282`; zero drift
+- `STAGING_PAYMENT_BLOCK=1` enforcing in pm2 env (process id=1, the API) + `/home/eventpulse/.env.staging`
 - 5 vhosts `/nginx-health`: all 200
-- `/health` DB-aware: 200
-- Google OAuth `/start`: 302 (Day 24 regression-guard holds)
-- Boot log shows `eps.token_cache.backed_by=redis` (Day 26 Phase 2 still wired)
-- **Webhook malformed payload** → 200 OK + `ignored:malformed`
-- **Webhook spoofed-claim-paid for unknown txn** → 200 OK + `kind:unknown_transaction` (the "SUCCESS" status claim was IGNORED — live fraud-prevention proof)
-- **Redirect /success unknown-txn** → 302 to `${WEB_BASE}/orders/return/error` (no orderId leakage)
-- **Redirect missing txn-id** → 302 to error page
+- `/health` DB-aware: 200, db:ok, 11ms ping
+- Google OAuth `/start`: 302 (Day 24 regression guard holds)
+- API log shows: `{"msg":"eps.token_cache.backed_by=redis"}` then `{"queue":"tickets-delivery","concurrency":2,"msg":"tickets.delivery_worker.started"}` then `{"msg":"eventpulse api listening"}` — **clean boot, worker started, no crash**
+- **Day 27 fraud-prevention smoke STILL holds** (regression guard): POST webhook with spoofed `{"status":"SUCCESS"}` for `TXN-day28-spoofed-paid-99999` → 200 + `kind:unknown_transaction` (claim ignored)
+- **Day 27 redirect non-authority smoke STILL holds**: GET /eps-return/success unknown-txn → 302 to /orders/return/error (no orderId leakage)
+- `MAIL_DRY_RUN=1` set; deliveries dry-run (logic exercises end-to-end; real sends gate on SES out-of-sandbox)
 
-## Next concrete step — Day 28: QR + PDF + email post-paid delivery
+## Next concrete step — Day 29: Idempotency middleware + FOR UPDATE capacity lock
 
-Wire the order-paid transition (from Day 27 settle service) to the post-paid delivery surface. Smaller-scope session than Day 26 + 27 because the foundation is in place.
+The two remaining cross-cutting concerns on the order-creation surface before Sprint 3 closeout.
 
-- **QR code generation per attendee row.** The `attendees` table from migration 0013 has a `qr_code` UNIQUE column. On `order.paid` transition (in `settleOrderFromEps`'s success branch — or as a subsequent background step), insert one attendee row per `(order_item × quantity)` with a generated unique qr_code.
-  - QR encoding: cryptographically-random opaque token (mirror the `mintMerchantTransactionId` pattern but for a different namespace). The QR itself encodes a URL like `https://<tenant>.staging.eventpulse.com.bd/scan/${qr_code}` so a future scanner app can hit a single endpoint.
-- **PDF ticket generation per attendee.** One PDF per attendee row. Wraps event title, attendee name, ticket tier name, QR code (rendered as image), event date/venue, tenant brand. Library options: `pdfkit` (well-established Node lib) or `@react-pdf/renderer` (JSX-based — mirrors existing React frontend conventions but heavier).
-- **Email delivery via Day 21 AM bilingual SES templates.** Templates `order_confirmed` (to buyer) + `attendee_ticket` (to attendee, possibly buyer if same person, with PDF attached). Locale per `tenants.preferred_locale` (en/bn).
-- **Wiring options:**
-  - (a) Inline in `settleOrderFromEps`'s success branch — simplest, single-tx delivery + DB writes.
-  - (b) Background worker (BullMQ + Redis — Redis already provisioned) — better for retry semantics + slow PDF generation + email send latency.
-  - **(b) is the right choice for production reliability.** The settle service writes attendee rows + enqueues a "deliver-tickets" job; the worker generates PDFs + sends email. Failure of the worker doesn't break order settlement.
+**Idempotency middleware (per §1.3 R6 + §6.4):**
+
+- Read `Idempotency-Key` header on money-moving endpoints (`POST /api/v1/public/orders`, future refund/disbursement routes).
+- Check Redis cache for `idempotency:${tenantId}:${key}` (24-hour TTL per §6.4) → if hit, return cached response.
+- Check DB partial unique index `idx_orders_idempotency_key` (already in migration 0013) for replay detection.
+- On first call: cache key+response after the route handler returns success.
+- Discriminated outcome: idempotent-replay (return cached body) | new-request (continue) | partial-result (return 202 with retry-after if cached result was an error).
+- Middleware lives in `apps/api/src/middleware/idempotency.ts`.
+
+**FOR UPDATE capacity lock (per gotchas.md "Day 29 scope" carry):**
+
+- Inside the order-creation tx in `services/orders/index.ts createOrder()`, before insert:
+  ```typescript
+  SELECT id, sold, capacity FROM ticket_tiers
+    WHERE id IN (...selected tier ids) FOR UPDATE
+  ```
+- For each selected tier: verify `sold + requestedQuantity <= capacity`. If not, reject with `TIER_SOLD_OUT` error.
+- Update `ticket_tiers.sold = sold + requestedQuantity` in the same tx.
+- The FOR UPDATE serialises concurrent requests against the same tier — no oversell race.
+- The `sold` column already exists in migration 0012.
 
 **Pre-flight reads:**
 
-- CLAUDE.md §16 (notifications + SES templates), §1.3 R12 (bilingual UI), §17 (single EC2 — BullMQ runs in-process there)
-- CLAUDE.md §9.5 (attendees table — already migrated in 0013)
-- `apps/api/src/infra/ses/templates/` for the bilingual templates landed Day 21 AM
-- `apps/api/src/services/orders/settle.ts` — the Day 27 success branch is the trigger point
-- `apps/api/src/db/schema/index.ts` — the `attendees` table shape
-- handoff.md (this file) + decisions.md "Day 27 webhook auth model" (next memory PR)
+- CLAUDE.md §1.3 R6 (idempotency), §6.4 (idempotency-header convention), §9.3 (`ticket_tiers.sold` column)
+- `apps/api/src/services/orders/index.ts` — the trust-boundary handler for the FOR UPDATE addition
+- `apps/api/src/db/migrations/0013_orders.sql` — confirm `idx_orders_idempotency_key` partial unique index is in place
+- `apps/api/src/db/migrations/0012_ticket_tiers.sql` — confirm `sold` column
+- handoff.md (this file) + decisions.md "Day 28 architectural choices" (next memory PR)
 
-**Day 28 STOP-ASK conditions:**
+**Day 29 STOP-ASK conditions:**
 
-- Any pull-forward of Day 29 work (idempotency middleware, FOR UPDATE) → STOP.
-- PDF library choice — `pdfkit` vs `@react-pdf/renderer` vs other — surface tradeoffs before committing the dep.
-- Background-worker infrastructure choice — BullMQ vs inline-async vs other — should be settled with a brief design surface, not assumed.
-- §29 #9 (AIT) opinion still pending → does post-paid delivery surface need a withholding-info line in the PDF? Probably no (the PDF is buyer-facing; AIT is organiser-side). Worth surfacing.
-- Any AWS write beyond migrations + SES template re-create.
+- Any pull-forward of Day 30 work (E2E smoke + §14.10 invariant verification + Sprint 3 tag) → STOP.
+- Cache key shape ambiguity (tenant-scoped vs global) — surface tradeoffs (lean: tenant-scoped per §6.4 + per-tenant Redis namespace).
+- Capacity overcommit semantics for multi-item carts — surface before assuming all-or-nothing rollback.
+- Any AWS write beyond the existing Redis/DB.
 - STAGING_PAYMENT_BLOCK observed not =1 → critical flag.
 
-## Day 29 — Idempotency middleware + FOR UPDATE capacity lock
+## Day 30 — End-to-end smoke + §14.10 invariants + Sprint 3 closeout
 
-- Idempotency middleware reads `Idempotency-Key` header → checks Redis (24h TTL) + DB (the partial unique index on `orders.idempotency_key` from migration 0013 is already in place).
-- Capacity lock: `SELECT ... FROM ticket_tiers WHERE id IN (...) FOR UPDATE` inside the order-creation tx prevents oversell. Schema (ticket_tier_id FK on order_items) already in place.
+- Full E2E buyer journey smoke (against staging, gated by STAGING_PAYMENT_BLOCK — free-event shape only).
+- Verify all four §14.2 fee modes work + accounting reconciles (§14.10 invariants).
+- `/sprint` retro + tag `v0.3.0-sprint-3` + release notes + Sprint 4 kick-off issue.
 
-## Decision N truth gate — pipeline now ready THROUGH verify
+## Decision N truth gate — pipeline now end-to-end (post-Day 28)
 
-After Day 27 ships:
+After Day 28 ships:
 
 - ✅ Init step ready (Day 26 Phase 1; currently block-refused)
 - ✅ Verify step ready (Day 26 Phase 1)
 - ✅ State machine ready (Day 27 Phase 1)
 - ✅ Settlement ready (Day 27 Phase 2 + Phase 3 paths)
-- ⏳ Post-paid delivery (Day 28)
+- ✅ **Post-paid delivery ready (Day 28)** — QR + PDF + email worker, gated on MAIL_DRY_RUN for staging
 
-After Day 28 ships, the pipeline is end-to-end. The truth gate then executes as a SEPARATE controlled real-money run: 4 §14.2-mode transactions, smallest viable amounts, **Moshiur approves amounts first**, STAGING_PAYMENT_BLOCK lifted ONLY for that run then re-enabled. Pre-reqs unchanged:
+After Day 29 ships (idempotency + capacity), the pipeline is feature-complete and the Decision N truth gate becomes the gating milestone. The truth gate then executes as a SEPARATE controlled real-money run: 4 §14.2-mode transactions, smallest viable amounts, **Moshiur approves amounts first**, STAGING_PAYMENT_BLOCK lifted ONLY for that run then re-enabled. Pre-reqs unchanged:
 
 1. **EPS sandbox credentials confirmed** OR explicit STAGING_PAYMENT_BLOCK lift authorisation (4 × small real charges; requires new `decisions.md` entry per §11.0 guardrail).
 2. **§29 #9 (AIT withholding) + #10 (VAT/Mushak) tax opinions.**
 
-## Pending Moshiur actions (procurement / external) — cumulative through Day 27
+## Pending Moshiur actions (procurement / external) — cumulative through Day 28
 
 **Most urgent (gates Decision N truth-gate → blocks Day 30 end-to-end smoke):**
 
 1. **EPS sandbox credentials confirmed** OR explicit STAGING_PAYMENT_BLOCK lift authorisation.
 2. **§29 #9 (AIT withholding) + #10 (VAT/Mushak) tax opinions.**
+3. **SES out-of-sandbox approval** — without it, real ticket emails won't deliver to non-verified addresses; staging stays MAIL_DRY_RUN=1; production launch gated on this.
 
 **Lower urgency (continued):**
 
@@ -108,10 +126,11 @@ After Day 28 ships, the pipeline is end-to-end. The truth gate then executes as 
 2. **Counsel engagement for Trust Center v1.0 drafts** — cross-sprint carry; first paying tenant blocked.
 3. **EPS_WEBHOOK_SECRET / signature mechanism** — when EPS publishes one, single add-point in `apps/api/src/routes/webhooks/eps.ts` (additive defense-in-depth on top of the existing verify-by-callback authority model).
 4. **bootstrap-staging.sh validation guard live-trigger.** PR #154 (Day 25) ran on the OLD bootstrap; new validation runs on the NEXT bootstrap.
+5. **NotoSansBengali font bundling for PDF tickets** — currently English text + Bangla labels in "bn/en" format render correctly; pure-Bangla strings (e.g. attendee Bangla names from future form-builder data) will render as squares until the font lands. Documented as future improvement in `render-ticket-pdf.ts` header.
 
-## Hard guardrails (carry forward + 4 new from Day 27)
+## Hard guardrails (carry forward + 5 new from Day 28)
 
-(Carrying forward all Day 26 guardrails; adding the 4 Day 27 ones at the end.)
+(Carrying forward all Day 27 guardrails; adding 5 Day 28 ones at the end.)
 
 - Single EC2 only. ~$23/mo total. $40/mo canary.
 - No SSH, no port 22. Shell via `aws ssm start-session --target i-02e4fddeb923c14f9 --profile eventpulse`.
@@ -154,14 +173,18 @@ After Day 28 ships, the pipeline is end-to-end. The truth gate then executes as 
 - **Ticket tier CRUD ships without money math.** Tier stores `price_paisa` raw; the fee-calculator is the only consumer at order time.
 - **Ticket tier capacity locking is Day 29 scope** (FOR UPDATE row lock at paid-order transition).
 - **Public event visibility + status gating is application-policy, not RLS.** `withSuperAdmin()` is the correct context for public-side reads/writes (the buyer-write order path mirrors this).
-- **Buyer-write order path uses withSuperAdmin (BYPASSRLS); route handler is the trust boundary.** Settle service (Day 27) follows the same pattern.
+- **Buyer-write order path uses withSuperAdmin (BYPASSRLS); route handler is the trust boundary.** Settle service (Day 27) follows the same pattern. **Delivery service (Day 28) follows the same pattern** — worker has no tenant session.
 - **Order row fee snapshot includes 4 extension columns beyond §9.5 verbatim** (`platform_fee_bps`, `eps_fee_bps`, `platform_fee_handling`, `eps_fee_handling`) per §14.4 + Decision N.
 - **Redis token cache stampede semantic: accept-double-fetch-but-cache-last.**
 - **Drizzle `ANY()` array-binding via raw `sql\`\`` does NOT work; use `inArray()` helper.**
-- **NEW 2026-05-25 — EPS webhook auth model is verify-by-callback (§11.1 step 11), NOT signature verification.** §11 does not specify a signature mechanism; the handler treats payload as notification only + always calls `verifyOrder()` against EPS for authoritative status. Fraud-impossibility proven (spoofed claims cannot fabricate paid status). Signature mechanism is the single add-point when EPS publishes one — `EPS_WEBHOOK_SECRET`-gated check fires BEFORE the verify-by-callback model (additive defense, not replacement).
-- **NEW 2026-05-25 — Browser redirect URLs are NEVER authoritative for payment status (§1.3 R3).** The `/eps-return/{success,fail,cancel}` inbound path is just a notification; outbound redirect target is computed from the RESOLVED order status from `settleOrderFromEps`. Pinned by tests "lands on /success but verify says PENDING → /pending" + "lands on /fail but verify says SUCCESS → /success".
-- **NEW 2026-05-25 — Settlement uses `withSuperAdmin` (BYPASSRLS) — same pattern as the buyer-write order path.** Webhook + redirect both lack tenant session; the service is the trust boundary, setting `tenant_id` from the looked-up order row, never from the trigger payload.
-- **NEW 2026-05-25 — Webhook + redirect handlers ALWAYS return 200 OK on business outcomes** (only generic 500 on uncaught errors). Avoids leaking which txn ids exist + suppresses EPS retry storms on benign conditions like unknown-txn or malformed-payload.
+- **EPS webhook auth model is verify-by-callback (§11.1 step 11), NOT signature verification.** §11 does not specify a signature mechanism; the handler treats payload as notification only + always calls `verifyOrder()` against EPS for authoritative status.
+- **Browser redirect URLs are NEVER authoritative for payment status (§1.3 R3).** Outbound redirect target is computed from the RESOLVED order status from `settleOrderFromEps`.
+- **Webhook + redirect handlers ALWAYS return 200 OK on business outcomes** (only generic 500 on uncaught errors). Avoids leaking + suppresses EPS retry storms.
+- **NEW 2026-05-25 — QR token is 256-bit cryptographically-random opaque base64url.** Forgery-resistance: 256 bits of entropy = effectively unguessable. Revocability via row delete (no shared signing-key compromise surface). The QR image encodes a check-in URL `${API_BASE}/scan/{token}`; the token alone is meaningless without the DB row.
+- **NEW 2026-05-25 — PDF tickets travel as email attachments, NO S3 bucket.** Phase 0 chose this to avoid the AWS-write surface STOP-ASK on a new bucket + KMS pair. SES 40MB attachment limit is comfortable. If/when "resend ticket from dashboard" UX lands, that's a separate decision with its own bucket setup.
+- **NEW 2026-05-25 — Delivery is DECOUPLED from settlement.** `enqueueOrderDelivery()` NEVER throws (Redis blip returns `{enqueued: false}` + logs); settlement commits paid independently; delivery is a downstream retry surface. A failed delivery does NOT roll back the paid status.
+- **NEW 2026-05-25 — `order.delivery_sent` is the append-only delivery marker.** Two markers fire in sequence (`order.attendees_generated` + `order.delivery_sent`) so the worker can retry the delivery half without re-generating attendees. Both live in `order_events` (append-only at GRANT layer per §4.2.1.1).
+- **NEW 2026-05-25 — BullMQ requires a DEDICATED Redis connection with `maxRetriesPerRequest: null`.** The singleton at `infra/redis/client.ts` (`maxRetriesPerRequest: 2`) is incompatible because BullMQ uses blocking commands (BRPOPLPUSH). New `getBullRedis()` in delivery-queue.ts mints a separate ioredis instance for BullMQ; the singleton stays bounded for the EPS token cache hot path. Future BullMQ consumers (refunds, disbursements) reuse `getBullRedis()`.
 
 ## Useful runbook fragments
 
@@ -172,23 +195,31 @@ aws ssm start-session --target i-02e4fddeb923c14f9 --profile eventpulse
 # Trigger staging deploy
 gh workflow run deploy-staging.yml --ref main
 
-# Run Day 27 state machine tests (pure, no DB)
-pnpm --filter @eventpulse/api exec vitest run src/domain/order-state-machine.test.ts
+# Day 28 worker boot signal
+sudo tail -100 /home/eventpulse/logs/api.out.log | grep tickets.delivery_worker
+# Expected: {"queue":"tickets-delivery","concurrency":2,"msg":"tickets.delivery_worker.started"}
 
-# Run webhook + redirect unit tests (settle service vi.mock'd)
-pnpm --filter @eventpulse/api exec vitest run src/routes/webhooks/ src/routes/public/orders-eps-return.test.ts
+# Run Day 28 QR token tests (pure, no DB)
+pnpm --filter @eventpulse/api exec vitest run src/services/attendees/qr-token.test.ts
 
-# Run settle service integration tests (DB-gated)
-pnpm --filter @eventpulse/api exec vitest run src/services/orders/settle.test.ts
+# Run Day 28 PDF tests (pure, no DB)
+pnpm --filter @eventpulse/api exec vitest run src/services/tickets/
 
-# Live smoke: webhook ignores spoofed payload
+# Run Day 28 queue tests (unit, no Redis)
+pnpm --filter @eventpulse/api exec vitest run src/workers/
+
+# Run Day 28 SES raw-MIME tests
+pnpm --filter @eventpulse/api exec vitest run src/infra/ses/raw-email.test.ts
+
+# Run Day 28 deliver-order DB-gated integration tests (needs DATABASE_URL)
+pnpm --filter @eventpulse/api exec vitest run src/services/tickets/deliver-order.test.ts
+
+# Run Day 28 attendee generation DB-gated tests
+pnpm --filter @eventpulse/api exec vitest run src/services/attendees/generate.test.ts
+
+# Live regression smoke (Day 27 fraud-prevention)
 curl -s -X POST -H "content-type: application/json" \
-  -d '{"merchant_transaction_id":"TXN-spoofed-12345","status":"SUCCESS"}' \
+  -d '{"merchant_transaction_id":"TXN-spoofed-paid-12345","status":"SUCCESS"}' \
   https://api.staging.eventpulse.com.bd/api/v1/webhooks/eps/callback
 # Expected: 200 + {"data":{"ok":true,"kind":"unknown_transaction",...}}
-
-# Live smoke: redirect rejects unknown txn safely
-curl -s -o /dev/null -w "HTTP=%{http_code}\nLocation=%{redirect_url}\n" \
-  "https://api.staging.eventpulse.com.bd/api/v1/public/orders/eps-return/success?merchantTransactionId=TXN-unknown-12345"
-# Expected: 302 + Location=https://staging.eventpulse.com.bd/orders/return/error
 ```
