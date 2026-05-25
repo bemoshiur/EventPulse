@@ -1,20 +1,35 @@
-import { GlassCard } from '@/components/ui/glass-card'
-
 /**
- * Placeholder tenant dashboard. Item 11 needs SOMETHING behind the
- * Account-Type modal so the layout has children to render. Real
- * dashboard surface lands across Days 16+ (KYC wizard, event CRUD,
- * attendee list, etc.).
+ * Tenant dashboard — Sprint 4 Day 33 Phase 2.
+ *
+ * URL: /dashboard (under the tenant route group).
+ *
+ * The home of the tenant portal: sales KPIs + time-series chart +
+ * per-event/per-tier breakdown. Replaces the Day-15 placeholder
+ * card that existed just to give the Account-Type modal something
+ * to render behind.
+ *
+ * Auth: the tenant route-group layout handles auth gating; the
+ * API gate runs on each fetch (mirrors other tenant pages).
+ *
+ * Priced-revenue caveat (carried in handoff.md): with
+ * STAGING_PAYMENT_BLOCK on, the only paid orders are free-event
+ * ones — so staging mostly shows zero revenue. The empty state
+ * is the expected look on a fresh tenant.
  */
+
+import { SalesDashboard } from '@/components/tenant/sales-dashboard'
+
 export default function TenantDashboardPage() {
   return (
-    <GlassCard className="p-8">
-      <h1 className="font-display text-ep-ink text-3xl font-medium">Welcome to Event Pulse</h1>
-      <p className="text-ep-graphite mt-3">
-        Your dashboard will land here as Days 16+ ship the event CRUD, KYC wizard, and attendee
-        surfaces. For now this page exists so the Account-Type modal has something to render in
-        front of.
-      </p>
-    </GlassCard>
+    <div className="space-y-8 text-white">
+      <header>
+        <h1 className="text-3xl font-bold">Dashboard</h1>
+        <p className="mt-2 text-base text-white/70">
+          Sales performance across your events — gross, net to you, tickets sold, and the last 30
+          days at a glance.
+        </p>
+      </header>
+      <SalesDashboard />
+    </div>
   )
 }
