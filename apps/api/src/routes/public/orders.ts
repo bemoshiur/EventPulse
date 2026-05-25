@@ -44,6 +44,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 
 import { logger } from '../../lib/logger.js'
+import { idempotencyMiddleware } from '../../middleware/idempotency.js'
 import {
   createOrder,
   EventNotFoundError,
@@ -53,6 +54,12 @@ import {
 } from '../../services/orders/index.js'
 
 export const publicOrdersRoutes = new Hono()
+
+// Day 29 Phase 1: Idempotency-Key middleware on the order-creation
+// money path per §1.3 R6 + §6.4. Sits BEFORE zValidator so the
+// body-hash is computed from the raw bytes; downstream zValidator
+// reads the parsed body from Hono's cached request.
+publicOrdersRoutes.use('/', idempotencyMiddleware({ namespace: 'public_orders_create' }))
 
 // ─── zod input schema ───────────────────────────────────────────────
 
