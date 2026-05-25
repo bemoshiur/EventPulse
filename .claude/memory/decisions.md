@@ -4,6 +4,63 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-25 · Day 25 architectural choices — Public event read uses withSuperAdmin + path-mode URLs only for MVP
+
+**Context:** Sprint 3 Day 25 shipped 3 PRs (ticket tier CRUD #153; bootstrap validation #154; public event landing template #155). Two architectural choices were made that aren't fully captured in code comments + warrant decisions-layer codification.
+
+### Choice A — Public event reads use `withSuperAdmin()` (BYPASSRLS); visibility + status filtering is application-policy, NOT RLS
+
+**Decision:** `fetchPublicEvent(tenantSlug, eventSlug)` at `apps/api/src/domain/public-events/queries.ts` runs under `withSuperAdmin()` context. RLS is bypassed. Visibility filter (`visibility IN ('public', 'unlisted')`) + status filter (`status IN ('published', 'on_sale', 'sold_out', 'live')`) + soft-delete filter (`deleted_at IS NULL` on both events + tenants) are applied in the WHERE clause as application-layer policy.
+
+**Why not RLS:**
+
+- The public read crosses tenant boundaries BY DESIGN — any tenant's public event is fetchable by URL on the platform's public surface. RLS's job is tenant ISOLATION (per §4.2.1, §4.3); using it for cross-tenant access here would invert its purpose.
+- If we ran this under `withTenant()`, we'd need a synthetic "public-reader" tenant id that owns no rows but reads all `visibility = 'public'` events — that's a contortion that obscures the actual policy.
+- Application-layer filtering puts the policy where it belongs: in code that's grep-able for "what counts as publicly visible" alongside any future audit-of-policy questions.
+
+**Why this is a decision-level entry:**
+
+- Future refactors might "tighten" this by running under `withTenant()` to "be safe" — that would silently reduce the public-reader surface to a single tenant's events. The decision pins the rationale so a reviewer can grep.
+- The boundary between "RLS filters" and "application policy filters" is non-obvious; this is the canonical example.
+
+**Consequences:**
+
+- `fetchPublicEvent` always reads `withSuperAdmin()`. Future public-side reads (event list, `/discover` page in Phase 3) follow the same pattern.
+- The audit cost: a super-admin context query that runs for every public event page load. Acceptable because the read is cache-friendly (60s browser / 300s edge per the API's `cache-control` header).
+- A future per-tenant audit trail of "what events were viewed when" would need a separate write into `audit_logs` with `actor_type = 'system'` since there's no acting user. Not in scope today.
+
+### Choice B — Public event URL routing = path-mode only for MVP
+
+**Decision:** The Day 25 landing page ships at `/(public)/[tenant]/[event]/page.tsx` — path-mode URL only. `{tenant}.eventpulse.com.bd/{event}` subdomain mode + custom-domain mode (per §7.5) require middleware rewrites + Cloudflare for SaaS provisioning; both are deferred.
+
+**Sequencing:**
+
+- **MVP (now):** path-mode only. `/publicpulse/summer-sounds-2026` works. No middleware required.
+- **Sprint 6+:** subdomain mode lands via `apps/web/src/middleware.ts` Host-header rewrite (rewrites `{tenant}.eventpulse.com.bd/{event}` → `(public)/_tenant/[tenant=resolvedFromHost]/[event]`).
+- **Sprint 7:** custom-domain mode via Cloudflare for SaaS (per §12 + §9.9 schema). Same middleware extends with a `custom_domains` lookup.
+
+The same `<EventLanding>` component renders in all three modes — only the middleware seam differs.
+
+**Why path-mode first:**
+
+- Zero middleware = zero failure mode. Sprint 8's attendee accounts + Sprint 7's custom domains are large in their own right; bundling them into Day 25's "minimum public landing" would balloon scope.
+- Path-mode URLs are crawler-friendly + share-friendly out of the box. Tenant subdomain is a UX nicety + SEO carrier, not a launch requirement.
+- The handle system (§9.14) is already designed around `users.handle` + `tenants.slug` sharing a global namespace; path-mode uses `tenants.slug` directly — no naming changes needed when subdomain mode lands.
+
+**Consequences:**
+
+- Day 25 cannot test subdomain-mode behaviour (no middleware shipped). Sprint 6+ adds the middleware + integration tests.
+- Marketing copy + early-access invites should use the path-mode URL shape (`eventpulse.com.bd/{handle}/{event}`) for consistency. Subdomain redirects become aliases for the path-mode canonical when middleware lands.
+
+**Cross-references:**
+
+- PR #153 (Day 25 Phase 1 ticket tier CRUD; the tier schema this consumes) — merged `052e5f8`
+- PR #154 (Day 25 Phase 3 bootstrap validation) — merged `307a483`
+- PR #155 (Day 25 Phase 2 landing template; this entry's primary subject) — merged `e3ae382`
+- CLAUDE.md §4.2.1 + §4.3 (RLS scope semantics), §7.5 (custom domain routing), §9.3 (events visibility/status), §9.14 (handle system), §26.1 (Sprint 3 Day 4 scope)
+
+---
+
 ## 2026-05-25 · Day 24 architectural choices — OAuth post-sign-in redirect target + EPS wrapper Part 1 deferral patterns
 
 **Context:** Sprint 3 Day 24 shipped 4 PRs (STAGING_PAYMENT_BLOCK guard #148; OAuth callback fix #149; EPS wrapper Part 1 #150; Decision N truth-gate harness #151). Three architectural choices were made inside the implementation that warrant explicit codification — they're already inline in code comments + commit messages, but pinning them at the decisions layer prevents future drift if anyone refactors the surrounding code without reading the originals.
