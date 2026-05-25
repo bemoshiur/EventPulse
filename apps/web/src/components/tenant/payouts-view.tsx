@@ -88,7 +88,7 @@ export function PayoutsView() {
           {formatBdt(p.pendingPayoutPaisa)}
         </div>
         <div className="mt-3 text-sm text-[var(--ep-graphite)]">
-          Net you're owed across {formatNumber(p.paidOrderCount)} paid order
+          Net you&apos;re owed across {formatNumber(p.paidOrderCount)} paid order
           {p.paidOrderCount === 1 ? '' : 's'}. Automated disbursement (T+5) ships in a future
           sprint; for now this is what your settlement total will be when payouts go live.
         </div>
