@@ -4,6 +4,86 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-26 · Sprint 4 Day 35 — Super-admin revenue dashboard: cross-tenant by design; auth gate is the entire security model
+
+**Context:** Day 35 shipped the §14.7 platform-operator financial cockpit at `/api/v1/admin/revenue` + `/admin/revenue` (PRs #197 service + #198 UI). The Day-33 tenant-dashboard architecture (Choice B — aggregates always run under `withTenant()` + explicit `WHERE tenant_id =` dual defence) is the **inverse** of what §14.7 requires. The Day-33 entry called §14.7 out as the explicit exception; this entry codifies the inverse pattern.
+
+### Decision
+
+For the platform-operator revenue surface (and any future cross-tenant aggregation that the platform itself needs — financial reconciliation, GMV reporting, multi-tenant cohort analysis):
+
+1. **The service runs under `withSuperAdmin()` (BYPASSRLS) with NO tenant filter.** Cross-tenant aggregation IS the point; per-tenant isolation here would defeat the dashboard.
+2. **The entire security perimeter is `requireSuperAdminAuth` at the route layer.** A tenant or attendee token reaching these routes is a security incident.
+3. **The route-layer tests assert the inverse of Day-33's isolation tests:** no token → 401; tenant-audience → **403** (NOT 200 with leaked cross-tenant data); attendee-audience → 403. The "must not leak" assertion is the load-bearing test, not "isolation works."
+4. **Page-level UX reflects this:** the `/admin/revenue` page renders a FORBIDDEN-specific copy when the API returns 403 ("This surface requires a super-admin session. If you arrived here from a tenant session, sign out and sign in again.") — the user sees the security model surfaced as guidance, not just a generic error.
+
+### What this is NOT
+
+- **Not a relaxation of Day-33 Choice B.** Tenant-facing dashboards still aggregate under `withTenant()` + dual defence. The Day-33 rule remains the default for everything; this entry pins the §14.7 exception in writing so a future "let's just add a tenant filter for safety" PR doesn't accidentally defeat the dashboard's purpose.
+- **Not a license to skip auth tests on other admin endpoints.** Every endpoint under `/api/v1/admin/*` MUST keep the same auth-gate test pattern; this is documented in the route file's header comment for `revenue.ts`.
+
+### Why this is a decisions-layer entry
+
+A future PR that:
+
+- Adds a tenant filter to `getPlatformRevenueDashboard()` "for safety" → defeats the dashboard. Pin "cross-tenant by design" here.
+- Skips the audience-rejection tests on a new admin endpoint → the auth gate is the entire security model; the test is the only thing that catches a regression. Pin here.
+- Adds an actual disbursement-EXECUTION endpoint to this router → out of Day-35 scope; settlement queue is READ-ONLY until `disbursement_batches` lands Sprint 7. Pin the scope boundary here so the read-only widget doesn't drift into action by accretion.
+
+### Consequences
+
+- §14.7 platform revenue cockpit live + auth-gated; the four auth tests (revenue.test.ts) are the security backstop.
+- Settlement queue is labelled honestly as "amounts owed; no payout action until Sprint 7."
+- EPS reconciliation anomaly card is a forward-compatible placeholder (`epsReconciliationPlaceholder: true`) — the API surface is stable; only the data lights up when Sprint 7 ships `eps_settlements`.
+- Future Sprint 7 work — actual disbursement execution + EPS reconciliation matching — extends this dashboard, doesn't replace it. The schema for `disbursement_batches` + the cron job land separately; the dashboard widgets then start showing real batch data without API breakage.
+
+### Cross-references
+
+- [`decisions.md` 2026-05-25/26 "Sprint 4 Day 33" Choice B](decisions.md) — the rule this entry is the codified exception to.
+- CLAUDE.md §14.7 (the spec).
+- `apps/api/src/services/admin/revenue.ts` — file header documents the security model in full.
+- `apps/api/src/routes/super-admin/revenue.test.ts` — the four SECURITY tests + 8 dashboard-math/ledger tests.
+- `apps/api/src/auth/middleware.ts:60` `requireSuperAdminAuth` — the entire perimeter.
+
+---
+
+## 2026-05-26 · Sprint 4 Day 35 Phase 0.5 — SES out-of-sandbox case body drafted for Moshiur (1st concrete move on the launch gate)
+
+**Context:** Sprint 4 Day 35 opens with the launch gate at 4 blockers (EPS sandbox creds, AIT tax opinion, SES out-of-sandbox, Trust Center v1.0 docs). The build track has shipped 23 PRs across 5 days; the launch gate had moved 0 times and grew by 1 (Day 34). Moshiur explicitly called this out at the top of Day 35: build velocity + zero gate-track motion can't both be "finishing urgently."
+
+### Decision
+
+For the SES out-of-sandbox blocker specifically — which is a templated AWS Support case that I can draft but cannot submit on Moshiur's behalf — I shipped `docs/ops/ses-out-of-sandbox-request.md` (PR #196) with the complete case body: use-case description (4 transactional email categories — auth, ticket confirmations, tenant operational notifications, event communications; no bulk/marketing); bounce + complaint handling via SNS + suppression list; consent model per category; volume forecast (50k/day, 14/sec — best-guess from §16, edit-before-submit); domain auth state (DKIM/SPF/DMARC per §17.6); a pre-submission checklist (verify SES domain identity FIRST — case will be rejected if domain unverified); and a post-submission reminder to paste outcome into `decisions.md`.
+
+This is the FIRST concrete move on any launch-gate item by the build track. The pattern: any launch-gate item I CAN draft for Moshiur review (rather than requiring him to write from scratch), I will draft as a separate small PR — minimum-viable removal of "I have to write it from scratch" friction. The other three gate items will get similar treatment in future sessions:
+
+- **AIT withholding tax opinion** — I cannot give the legal opinion (this is a tax-counsel decision), but I CAN draft a focused question memo for the tax counsel summarising what the platform does (§14.4 + §15.2), what the calculator math assumes (pre-withholding), and the specific question to be answered. Day-36+ candidate.
+- **Trust Center v1.0 documents** — I cannot replace counsel, but I CAN draft a per-page outline for each placeholder (the headings + intent) so counsel returns drafting input not blank slates. Already partially scoped in the Day-19 placeholders themselves. Day-36+ candidate.
+- **EPS sandbox credentials** — Cannot procure on Moshiur's behalf. Best move: a Day-36+ PR drafting the request to EPS with the integration specs we've built (in-house wrapper per §11.0, the merchantTransactionId format per §11.4, the truth-gate definition) so EPS can issue credentials matching our integration.
+
+### Why this is a decisions-layer entry
+
+A future session that:
+
+- Treats the launch gate as "Moshiur's homework" again → re-read this entry; offer to draft. The build track is responsible for surfacing what we CAN draft, not waiting to be asked.
+- Tries to bundle gate-track drafts into feature PRs → keep separate (Day-19 placeholder docs precedent for separate docs PRs). Reviews are easier; the gate-track motion is visible in the PR history.
+- Forgets the SES draft exists → see `docs/ops/ses-out-of-sandbox-request.md` (PR #196 merged `b26de1e`).
+
+### Consequences
+
+- The SES draft sits in `docs/ops/` ready for Moshiur to review, edit, and submit. If submitted + approved, the launch-gate count drops 4 → 3.
+- Future gate-track drafts land as separate small `docs(ops):` PRs.
+- The build track explicitly owns surfacing what's draftable for the gate — silent omission stops being acceptable.
+
+### Cross-references
+
+- `docs/ops/ses-out-of-sandbox-request.md` (PR #196 `b26de1e`).
+- §16 (notification catalogue — the 4 categories).
+- §17.6 (DKIM/SPF/DMARC — DNS state the case references).
+- handoff.md "Decision Moshiur still owes" — now includes the SES "ready to submit" note.
+
+---
+
 ## 2026-05-26 · Sprint 4 Day 34 Phase 1 — Public buyer form: no blocking consent checkbox under v0.1-placeholder Trust Center
 
 **Context:** Day-34 Phase-1 shipped the public buyer registration/purchase form on the event landing page (PR #193 — `apps/web/src/components/public/buyer-form.tsx`), closing the operational loop across Days 25-33. Form collects buyer name/email/phone (+ optional NID last 4) and POSTs to `/api/v1/public/orders`. The form posts on behalf of a buyer who is, by §21.1 doctrine, entering a contractual relationship with the tenant — not Event Pulse — when the order goes through.
