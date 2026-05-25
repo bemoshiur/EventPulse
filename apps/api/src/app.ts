@@ -13,6 +13,7 @@ import { epsWebhookRoutes } from './routes/webhooks/eps.js'
 import { feeConfigRoutes } from './routes/super-admin/fee-config.js'
 import { adminKycRoutes } from './routes/super-admin/kyc.js'
 import { adminLegalRoutes } from './routes/super-admin/legal.js'
+import { adminRevenueRoutes } from './routes/super-admin/revenue.js'
 import { adminTicketTiersRoutes } from './routes/super-admin/ticket-tiers.js'
 import { accountTypeRoutes } from './routes/tenant/account-type.js'
 import { attendeeRoutes } from './routes/tenant/attendees.js'
@@ -173,6 +174,15 @@ export function createApp() {
   // to know the owning tenant id upfront — withSuperAdmin() bypasses
   // RLS so event_id alone is sufficient.
   app.route('/api/v1/admin/events/:eventId/tickets', adminTicketTiersRoutes)
+
+  // Platform revenue dashboard — Sprint 4 Day 35 §14.7. Cross-tenant
+  // aggregation is INTENDED here (§14.7 is the platform-operator's
+  // financial cockpit), which inverts the Day-33 tenant-dashboard's
+  // isolation guarantee. The entire security model concentrates on
+  // requireSuperAdminAuth at the route layer; the service runs under
+  // withSuperAdmin() (BYPASSRLS). The route-layer tests assert that
+  // tenant-audience tokens receive 403, not 200-with-leaked-data.
+  app.route('/api/v1/admin/revenue', adminRevenueRoutes)
 
   return app
 }
