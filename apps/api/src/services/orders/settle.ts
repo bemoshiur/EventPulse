@@ -68,6 +68,7 @@ import {
 } from '../../domain/order-state-machine.js'
 import { verifyOrder } from '../../infra/eps/client.js'
 import { logger } from '../../lib/logger.js'
+import { enqueueOrderDelivery } from '../../workers/delivery-queue.js'
 import { writeOrderSettled } from '../audit/orders.js'
 
 // ─── error / outcome types ──────────────────────────────────────────
@@ -276,6 +277,16 @@ export async function settleOrderFromEps(input: SettleOrderInput): Promise<Settl
     },
     'order.settle.transitioned',
   )
+
+  // Day 28 Phase 3 — enqueue post-paid delivery (PDF + email). NEVER
+  // blocks settlement: `enqueueOrderDelivery` never throws, returns
+  // `{enqueued: false}` on Redis-absent / Redis-error and logs. The
+  // order stays paid regardless; ops can re-enqueue later. The
+  // delivery worker's own idempotency guard (order.delivery_sent
+  // marker) makes manual re-enqueue safe.
+  if (target === 'paid') {
+    await enqueueOrderDelivery({ orderId: orderRow.id })
+  }
 
   return {
     kind: 'settled',
