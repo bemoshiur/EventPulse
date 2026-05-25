@@ -14,8 +14,20 @@ const redis = getRedis()
 if (redis) {
   setDefaultTokenCache(redisTokenCache(redis))
   logger.info('eps.token_cache.backed_by=redis')
-} else {
-  logger.info('eps.token_cache.backed_by=in-memory (REDIS_URL unset)')
+  // Day 29 Phase 1 hotfix #2: warm up the Redis connection at boot.
+  // The singleton is `lazyConnect: true` + `enableOfflineQueue: false`
+  // (Day 26 design — fail-fast for EPS token cache hot path). Without
+  // explicit warm-up, the FIRST request after pm2 reload races against
+  // the deferred connect: ioredis throws "Stream isn't writeable" before
+  // the socket opens, the idempotency middleware's redis.get() rejects,
+  // Hono returns generic 500. Warm-up moves that race off the request
+  // path. Errors swallowed because Redis-absent is not a fatal boot
+  // condition (each consumer's own absence-handling kicks in — EPS
+  // token cache falls back to in-memory; idempotency middleware
+  // returns 503 cleanly).
+  void redis.connect().catch((err) => {
+    logger.warn({ err: err.message }, 'redis.warmup_failed_at_boot')
+  })
 }
 
 // Day 28 Phase 3 — start the in-process delivery worker. Consumes
