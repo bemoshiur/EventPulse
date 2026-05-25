@@ -91,3 +91,52 @@ export async function writeOrderCreated(tx: Tx, input: WriteOrderCreatedInput): 
     userAgent: input.userAgent ?? null,
   })
 }
+
+// ─── writeOrderSettled (Day 27 Phase 2) ──────────────────────────────
+
+export interface WriteOrderSettledInput {
+  orderId: string
+  tenantId: string
+  eventId: string
+  merchantTransactionId: string
+  /** State machine `from` — captured so the audit row tells a complete story. */
+  previousStatus: string
+  /** State machine `to` — paid / failed / cancelled at Day-27 hot path. */
+  newStatus: string
+  /** EPS canonical status the verify returned (per normalise-status.ts). */
+  epsStatus: 'success' | 'failed' | 'cancelled' | 'pending' | 'unknown'
+  /** Which trigger source caused the settlement: 'webhook' / 'redirect_success' / etc. */
+  source: string
+  /** Optional EPS-side transaction id captured from the verify response (when present). */
+  epsTransactionId?: string
+}
+
+/**
+ * Settlement audit. Fires in the same tx as the orders UPDATE +
+ * order_events INSERT under withSuperAdmin. The diff carries the
+ * previous + new status so a single audit row tells the transition
+ * story without needing to join back to prior audit rows.
+ *
+ * No PII — buyer details stay on the orders row + the order_events
+ * payload. This row is structural + audit-of-money.
+ */
+export async function writeOrderSettled(tx: Tx, input: WriteOrderSettledInput): Promise<void> {
+  await tx.insert(auditLogs).values({
+    tenantId: input.tenantId,
+    actorType: 'system',
+    actorId: null,
+    action: `order.${input.newStatus}`,
+    entityType: 'order',
+    entityId: input.orderId,
+    diff: {
+      previous_status: input.previousStatus,
+      new_status: input.newStatus,
+      eps_status: input.epsStatus,
+      merchant_transaction_id: input.merchantTransactionId,
+      ...(input.epsTransactionId ? { eps_transaction_id: input.epsTransactionId } : {}),
+    },
+    metadata: { source: input.source, event_id: input.eventId },
+    ip: null,
+    userAgent: null,
+  })
+}
