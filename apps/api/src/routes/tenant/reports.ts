@@ -20,6 +20,7 @@ import { z } from 'zod'
 
 import { requireTenantAuth } from '../../auth/middleware.js'
 import { logger } from '../../lib/logger.js'
+import { getTenantPayoutsView } from '../../services/reports/payouts.js'
 import { getTenantSalesMetrics } from '../../services/reports/sales.js'
 
 export const tenantReportsRoutes = new Hono()
@@ -71,5 +72,20 @@ tenantReportsRoutes.get('/sales', zValidator('query', salesQuerySchema), async (
       errorEnvelope('INTERNAL_ERROR', 'failed to compute sales metrics', requestId),
       500,
     )
+  }
+})
+
+// ─── GET /payouts — read-only "what's owed" view ──────────────────────
+
+tenantReportsRoutes.get('/payouts', async (c) => {
+  const tenantId = c.get('tenantId') as string
+  const requestId = c.req.header('x-request-id') ?? null
+
+  try {
+    const result = await getTenantPayoutsView({ tenantId })
+    return c.json(envelope(result))
+  } catch (err) {
+    logger.error({ err: (err as Error).message }, 'tenant.reports.payouts.unhandled_error')
+    return c.json(errorEnvelope('INTERNAL_ERROR', 'failed to compute payouts view', requestId), 500)
   }
 })
