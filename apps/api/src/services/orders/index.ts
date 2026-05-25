@@ -74,6 +74,7 @@ import { initialiseOrder, StagingPaymentBlockedError } from '../../infra/eps/cli
 import { logger } from '../../lib/logger.js'
 import { writeOrderCreated } from '../audit/orders.js'
 import { getEffectiveFees } from '../fee-config/index.js'
+import { enqueueOrderDelivery } from '../../workers/delivery-queue.js'
 import { mintMerchantTransactionId } from './order-id.js'
 
 // ─── error types ────────────────────────────────────────────────────
@@ -172,7 +173,8 @@ export interface CreateOrderInput {
 /**
  * Result of order creation. `paymentInitState` distinguishes:
  *   - `'ready'`     — EPS init succeeded; `redirectUrl` non-null;
- *                     buyer can proceed to checkout.
+ *                     buyer can proceed to checkout. Order status:
+ *                     `awaiting_payment`.
  *   - `'blocked'`   — STAGING_PAYMENT_BLOCK refused the init; order
  *                     persists in `awaiting_payment`; redirectUrl
  *                     is null. This is the documented Day 26 state
@@ -182,8 +184,22 @@ export interface CreateOrderInput {
 export interface CreateOrderResult {
   orderId: string
   merchantTransactionId: string
-  status: 'awaiting_payment'
-  paymentInitState: 'ready' | 'blocked'
+  /**
+   * Order status at return time. `awaiting_payment` for paid events
+   * (buyer must complete EPS hosted checkout); `paid` for free events
+   * (per §13.5 — born-paid, no EPS call, delivery enqueued
+   * immediately).
+   */
+  status: 'awaiting_payment' | 'paid'
+  /**
+   * Discriminator for what happened on the payment-init step:
+   *   - `'ready'`   — paid event, EPS init succeeded
+   *   - `'blocked'` — paid event, STAGING_PAYMENT_BLOCK refused init
+   *   - `'free'`    — free event (every tier price_paisa = 0n);
+   *                   bypassed EPS entirely per §13.5; order born
+   *                   `paid`; delivery enqueued in same flow
+   */
+  paymentInitState: 'ready' | 'blocked' | 'free'
   redirectUrl: string | null
   /** The full calculator snapshot — useful for receipt rendering + tests. */
   fees: FeeCalcResult
@@ -447,6 +463,44 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       .returning({ id: orders.id })
     const oid = orderRow!.id
 
+    // Day 30 Phase 1a — §13.5 free-event auto-settle.
+    //
+    // Per §13.5: "Events where every ticket tier has price_paisa = 0
+    // → No payment integration (no EPS call, no order in
+    // awaiting_payment state). Order goes pending → paid immediately
+    // on form submission (paid for 0 paisa = paid)."
+    //
+    // Implementation: when the calculator's buyer total is 0n (every
+    // tier in the selection is free), we (a) flip the just-inserted
+    // order's status from `awaiting_payment` to `paid` inside the
+    // SAME tx + (b) write the `order.paid` event-sourcing row with
+    // source='free_event_auto_settle'. STEP 7 below SKIPS the EPS
+    // init for these orders + enqueues delivery directly.
+    //
+    // The orders row started life with status='awaiting_payment'
+    // (the calculator runs against the same data path for paid
+    // events, per §13.5: "the fee calculator is called regardless
+    // — never branch on is-this-free? elsewhere"); we transition it
+    // to paid in this tx rather than INSERT it as paid because the
+    // §14.4 fee-snapshot invariants are easier to keep symmetric
+    // with the paid path that always starts in awaiting_payment.
+    if (calc.buyerTotalPaisa === 0n) {
+      await db.update(orders).set({ status: 'paid', paidAt: new Date() }).where(eq(orders.id, oid))
+
+      await db.insert(orderEvents).values({
+        tenantId: event.tenantId,
+        orderId: oid,
+        eventType: 'order.paid',
+        actorType: 'system',
+        actorId: null,
+        payload: {
+          merchant_transaction_id: merchantTransactionId,
+          source: 'free_event_auto_settle',
+          total_paisa: '0',
+        },
+      })
+    }
+
     // order_items — one row per tier selection.
     for (const sel of input.tierSelections) {
       const tier = tierMap.get(sel.tierId)!
@@ -493,6 +547,28 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
     return oid
   })
+
+  // STEP 7 — EPS init OR free-event auto-settle delivery.
+  //
+  // Day 30 Phase 1a: §13.5 free-event branch SKIPS EPS entirely +
+  // enqueues delivery directly. The tx already transitioned the
+  // order to `paid` (born-paid for free events); now we kick the
+  // post-paid delivery pipeline the same way the Day 27 settle
+  // service does for paid events. enqueueOrderDelivery never throws
+  // (Day 28 settlement reliability invariant) — a Redis blip leaves
+  // the order paid + delivery deferrable.
+  if (calc.buyerTotalPaisa === 0n) {
+    await enqueueOrderDelivery({ orderId })
+    logger.info({ orderId, merchantTransactionId }, 'order.created.free_event_auto_settled')
+    return {
+      orderId,
+      merchantTransactionId,
+      status: 'paid',
+      paymentInitState: 'free',
+      redirectUrl: null,
+      fees: calc,
+    }
+  }
 
   // STEP 7 — EPS init (outside the tx; block-guard fires first if on).
   try {
