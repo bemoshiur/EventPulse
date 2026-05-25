@@ -162,3 +162,58 @@ curl -sS -o /dev/null -w "%{http_code} %{redirect_url}\n" https://staging.eventp
 - Add OAuth credentials to Secrets Manager (`eventpulse/staging/oauth-google`, `eventpulse/staging/oauth-apple`) and extend `bootstrap-staging.sh` to materialise them into `.env.staging` — Sprint 2 Day 20 closeout for manual OAuth happy-path testing.
 - Verify `pm2 save` was called so the process list persists across reboot.
 - Document the deploy key fingerprint in this runbook for audit (`gh api /repos/publicpulseagency/EventPulse/keys` lists current keys).
+
+## Memory headroom — 2GB swap (Day 34, 2026-05-26)
+
+Staging runs on `t3.small` (2GB RAM, no instance-store swap). The full stack — Next.js web + Hono API (with inline BullMQ delivery worker) + Postgres + Redis — peaks close enough to the ceiling that a transient spike can OOM-kill into an **in-VM hang**: port 443 + SSM agent both unresponsive, hypervisor still reporting `running`/`ok`. The Day-33 incident (2026-05-25) was this signature; recovery was **EC2 Stop+Start** (a `Reboot` from the console did NOT fire because the guest OS was stuck and never ACK'd the ACPI signal).
+
+Mitigation applied: 2GB swap file at `/swapfile`, `vm.swappiness=10` (swap as safety net, not routine eviction), persisted in `/etc/fstab` + `/etc/sysctl.d/99-eventpulse-swap.conf`. **This is codified in `bootstrap-staging.sh` step 0.0**, so a fresh EC2 rebuild reproduces it. Idempotent — re-running the bootstrap on the existing instance is safe.
+
+Verify:
+
+```bash
+aws ssm send-command --instance-ids i-02e4fddeb923c14f9 \
+  --document-name AWS-RunShellScript --profile eventpulse \
+  --parameters 'commands=["free -h", "swapon --show", "cat /proc/sys/vm/swappiness"]'
+```
+
+Expected: `Swap: 2.0Gi` in `free`, `/swapfile file 2G` in `swapon --show`, `swappiness=10`.
+
+**Production-cutover note:** this is a staging stopgap. Production should run `t3.medium` (4GB) or larger so swap stays defence-in-depth, not the floor. Tracked in `.claude/memory/decisions.md` "Staging EC2 swap stopgap; t3.medium flagged as pre-production capacity decision" (2026-05-26).
+
+## Recovering from an in-VM hang
+
+Signature (all simultaneously):
+
+- TCP `:443` times out for all 5 vhosts
+- `aws ssm describe-instance-information` shows `PingStatus: ConnectionLost`
+- EC2 console shows the instance `running` + status checks `ok`
+- Console screenshot / `get-console-output` shows the OS frozen mid-syscall
+
+This is **not** a hypervisor or networking problem — it's the guest OS frozen (typically OOM-induced). `Reboot` (ACPI) won't help because the kernel can't process the signal.
+
+Recovery: **Stop, then Start** the instance from the EC2 console (or `aws ec2 stop-instances` → wait → `aws ec2 start-instances`). The Elastic IP persists. After ~2 min the instance is back up and PM2's systemd unit auto-restores the saved process list.
+
+Post-recovery checklist:
+
+```bash
+# 1. SSM reconnected
+aws ssm describe-instance-information --filters Key=InstanceIds,Values=i-02e4fddeb923c14f9 \
+  --query 'InstanceInformationList[0].PingStatus' --profile eventpulse
+
+# 2. All 5 vhosts up
+for HOST in staging app.staging admin.staging api.staging my.staging; do
+  echo -n "$HOST → "
+  curl -sS -o /dev/null -w "%{http_code}\n" --max-time 10 "https://${HOST}.eventpulse.com.bd/"
+done
+
+# 3. /health DB-aware
+curl -sS https://api.staging.eventpulse.com.bd/health
+
+# 4. STAGING_PAYMENT_BLOCK still =1 (re-verify after every recovery)
+aws ssm send-command --instance-ids i-02e4fddeb923c14f9 \
+  --document-name AWS-RunShellScript --profile eventpulse \
+  --parameters 'commands=["grep -E ^STAGING_PAYMENT_BLOCK /home/eventpulse/.env.staging"]'
+```
+
+If any of step 1-4 fails repeatedly after Stop+Start, escalate — at that point a t3.medium upgrade may be the actual fix.
