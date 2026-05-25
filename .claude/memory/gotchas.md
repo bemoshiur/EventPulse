@@ -4,6 +4,91 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## Staging EC2 (t3.small, 2GB, no swap) went unreachable mid-session — in-VM hang under the full stack (2026-05-25 / Day 33 incident)
+
+**Symptom.** Mid-Day-33-Phase-4-EOD-smoke, the staging EC2 became unreachable:
+
+- TCP 443 to all 5 vhosts: 10s timeout (`curl: (28)`)
+- SSM Agent: `ConnectionLost`, `LastPingDateTime` frozen
+- The Phase 3 deploy's SSM `SendCommand` was marked `Undeliverable` (never reached the EC2)
+- BUT: EC2 hypervisor still reported `running`, InstanceStatus `ok`, SystemStatus `ok` — both reachability checks passed
+
+The combination is **the canonical "in-VM hang" signature** — the hypervisor sees the VM alive, but the OS/services inside are unresponsive (kernel hung, OOM-killer cascade, network-interface state flipped, etc.).
+
+**Hardware reality of staging:** `t3.small` (2 vCPU, **2 GB RAM**, **no swap**) running the full stack:
+
+- Next.js production server (web, ~120 MB resident)
+- Hono API server (api, ~120 MB resident)
+- Postgres 16 (`postgresql@16-eventpulse_staging`)
+- Redis 7 (multiple connections: pool + BullMQ-dedicated)
+- BullMQ delivery worker (Day 28+)
+- Nginx, SSM agent, CloudWatch agent
+
+Steady-state idle: ~600 MB used (3-quarter free per `free -h` post-recovery). But peaks during deploys (`pnpm install` + `pnpm build` of two TypeScript codebases + 3 packages) compound with already-running pm2 processes — the build's transient memory headroom can spike well past the 1.4 GB available, and with **zero swap** Linux's only option is OOM-killer.
+
+**The cascade.** If OOM-killer takes out a load-bearing process (kernel daemon, init system, networking stack), the VM can wedge — TCP 443 stops responding, SSM Agent stops heartbeating. Post-reboot evidence is gone because `dmesg` clears on reboot (no persistent OOM log; would need `journalctl --boot=-1` from PRIOR boot, which isn't always available either).
+
+**Recovery sequence (what happened on Day 33):**
+
+1. STOP-ASK fired (port 443 dead + SSM dead + hypervisor healthy = exact signature)
+2. **First "Reboot" via console DID NOT FIRE** — graceful reboot is ACPI-based; the hung OS can't process the shutdown signal. EC2 API showed `LaunchTime` unchanged for 10+ min after the reboot was issued; SSM `LastPingDateTime` also unchanged.
+3. **Stop + Start (NOT just Reboot)** is the fix when the VM is truly hung. The hard stop terminates the VM at the hypervisor; the start fires a fresh boot. Both timestamps update.
+4. Post-recovery, the web pm2 process was in a crashloop (130+ restarts, 100% CPU) because `.next` build directory was missing. The Phase 3 deploy's `pnpm build` step regenerated it; pm2 reload healed the crashloop.
+5. The deploy workflow's SSM waiter timed out (~100s default) before the build completed (build takes >100s on t3.small with cold pnpm cache). The SSM command itself succeeded; only the GitHub Action's wait wrapper failed. Verified by reading `aws ssm get-command-invocation` directly → `Status: Success, [...] deploy ok ref=f5012982...`.
+
+**Fix.**
+
+- Recovery: **Stop + Start, not Reboot**, when port 443 + SSM are both dead but hypervisor is healthy. Graceful reboot on a hung OS just queues a shutdown that never fires.
+- Verify recovery via `aws ec2 describe-instances` (`LaunchTime` updates on Start) + `aws ssm describe-instance-information` (`PingStatus: Online`, `LastPingDateTime` advances) + sustained TCP 443 (3 consecutive responses, not 1 — the boot can flap).
+- If the web pm2 process crashloops on missing `.next`, run the deploy (it does `pnpm build`); avoid manual `pnpm build` over SSM which can hit the same memory ceiling that caused the hang.
+
+**How to avoid (root cause + follow-up).**
+
+The 2 GB RAM with no swap is the root cause. The next-cheapest fix:
+
+1. **Add swap (cheap, today-able).** A 2 GB swapfile is `dd if=/dev/zero of=/swapfile bs=1M count=2048 && mkswap /swapfile && swapon /swapfile`. Costs zero. Adds memory headroom for transient build spikes. Recommended as the immediate mitigation.
+2. **Upgrade staging EC2 to t3.medium (4 GB RAM, ~+$15/mo).** Long-term fix; gives real headroom under the full stack + concurrent deploys.
+3. **Split workers off the API process group.** BullMQ delivery worker on a separate pm2 process (already shipped as separate `cron` slot in §17.5 ecosystem plan, but on staging they share a process tree currently).
+4. **Monitoring.** CloudWatch Agent memory metrics + alarm at >85% sustained → alert before OOM. (Currently we have CW Agent reporting CPU/mem; no alarm wired.)
+
+**Carry to Day 34 (handoff.md prominently):** decide between (1) swapfile-now or (2) t3.medium-upgrade. Either fixes the immediate risk; (2) is more durable. Add a small CloudWatch memory alarm regardless.
+
+**Cross-references:**
+
+- `progress.md` "Day 33 incident" carry-forward.
+- `handoff.md` Day-34 first-thing item.
+- §17.2 (EC2 spec — t3.small was the "$40/mo canary" staging size; revisit).
+- §17.11 (Monitoring — CW Agent ships memory metrics; alarm not wired).
+
+---
+
+## React `react/no-unescaped-entities` blocks bare apostrophes in JSX text (2026-05-25 / Day 33 Phase 3 hotfix)
+
+**Symptom.** Day 33 Phase 3 PR shipped with the words `you're` (twice — page header copy + component card hint) in JSX text. CI lint job failed:
+
+```text
+./src/components/tenant/payouts-view.tsx
+  91:18  Error: ` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`.  react/no-unescaped-entities
+```
+
+The E2E Playwright job ALSO failed because `next build` runs `next lint` and fails on the same rule. All other Phase 3 checks passed (unit tests, integration, build, CodeQL).
+
+**Why it happens.** Next.js's default ESLint config enables `react/no-unescaped-entities`, which flags raw `'`, `"`, `>`, `}` in JSX text as ambiguous (could be parser-confusing, especially in code that mixes JSX + string literals). The fix is one of `&apos;`, `&#39;`, `&lsquo;`, `&rsquo;` (or rewriting without contraction). Default behavior, not a project-specific config.
+
+**Why we never hit this before Day 33:** The Day-32 attendees page + Day-32 CSV export UI + Day-33 dashboard page + dashboard card copy all happened to avoid contractions. Phase 3 was the first surface to use possessive contractions in copy ("Net you're owed", "What you're owed").
+
+**Fix.** `you're` → `you&apos;re`. Two-character change per occurrence.
+
+**How to avoid.** When writing UI copy with contractions:
+
+- Use `&apos;` in JSX text (the React-recommended HTML entity).
+- OR rewrite without the contraction ("Amount owed to you" instead of "What you're owed").
+- Running `pnpm --filter @eventpulse/web lint` locally would catch this before CI — worth adding to the pre-push hook if it becomes a recurring stub. For now, treat as a known one-line CI cycle.
+
+**Cross-references:** `decisions.md` "Sprint 4 Day 33" PR #190 hotfix entry; commit `a572c8e`.
+
+---
+
 ## WHATWG `Response.text()` strips a leading UTF-8 BOM during decoding (2026-05-25 / Day 32 Phase 3 hotfix)
 
 **Symptom.** Phase 3 CSV export shipped with UTF-8 BOM (`\xEF\xBB\xBF`) at the start of the body so Excel-on-Windows opens Bangla attendee names correctly. Integration test asserted `expect(body.startsWith('﻿')).toBe(true)` against `await res.text()`. CI Integration + RLS job failed: `expected false to be true`. All other Phase 3 checks (unit tests, Playwright e2e, typecheck, lint, build, CodeQL) passed.
