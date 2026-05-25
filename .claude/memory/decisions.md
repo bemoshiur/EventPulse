@@ -4,6 +4,92 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-26 · Sprint 4 Day 34 Phase 1 — Public buyer form: no blocking consent checkbox under v0.1-placeholder Trust Center
+
+**Context:** Day-34 Phase-1 shipped the public buyer registration/purchase form on the event landing page (PR #193 — `apps/web/src/components/public/buyer-form.tsx`), closing the operational loop across Days 25-33. Form collects buyer name/email/phone (+ optional NID last 4) and POSTs to `/api/v1/public/orders`. The form posts on behalf of a buyer who is, by §21.1 doctrine, entering a contractual relationship with the tenant — not Event Pulse — when the order goes through.
+
+This raised the question of whether the form should require a consent checkbox ("I agree to the Terms / Refund Policy") before submit.
+
+### Decision
+
+**No blocking consent checkbox in the buyer form for MVP.** The form's footer line links to `/terms` and `/refund-policy` as informational reference (`<Link>` from next/link, underlined inline). No `consent_records` row is written by this form. Real binding consent capture lands as a SEPARATE PR when Trust Center v1.0 documents arrive from counsel.
+
+### Why
+
+1. **Trust Center docs are v0.1 placeholder per Day-19 decision** ("Trust Center v0.1 placeholders — skeleton-only", 2026-05-17). Every legal page renders a non-dismissable DRAFT banner with "PLACEHOLDER — to be drafted by counsel covering X" stubs. They carry no contractual weight today; counsel hasn't returned v1.0.
+
+2. **A consent checkbox bound to a v0.1 placeholder is performative.** Writing a `consent_records` row that points at a `legal_document_versions` entry whose body is "PLACEHOLDER" is operationally meaningless — the row says "this user agreed to a draft." It doesn't satisfy GDPR Art. 7 (specific, informed, freely-given), doesn't satisfy DPDP Act consent requirements when those land, and doesn't provide §21.3 host-liability cover. A future audit would have to discount the data anyway.
+
+3. **The link-footer pattern preserves disclosure without faking consent.** Buyers are told what they're agreeing to (the linked policies); they can navigate to read them (and see the DRAFT banner, which is itself a form of fair notice that the docs are not final). No `consent_records` divergence between Day-34-onwards orders and post-v1.0 orders — the post-v1.0 PR can backfill or skip historical orders cleanly.
+
+4. **A real consent-capture PR is a separate concern from form layout.** When v1.0 docs land, the consent surface needs: (a) the checkbox itself, (b) the server-side `consent_records` write coupled to the POST /orders flow, (c) re-consent on material change (per Day-19 architecture), (d) audit trail. That's a focused PR, not a flag to set on this form.
+
+### Why this is a decisions-layer entry
+
+A future PR that:
+
+- Adds a checkbox here "for compliance theater" before v1.0 docs land → loses §21.3 cover anyway + produces audit junk. Pin "no consent under placeholder docs" here.
+- Argues "even a placeholder consent is better than nothing" → no it isn't; it's an audit liability and a user-trust liability when buyers later realise they "agreed" to a draft. Pin here.
+- Wants to ship a real consent capture as a Day-34 follow-up "while we're at it" → that's the v1.0 PR; it depends on counsel returning v1.0 docs. Pin the sequencing here.
+
+### Consequences
+
+- Buyer form ships with footer line "By placing this order you agree to the [Terms] and [Refund Policy]." No checkbox; no submit-blocking; no `consent_records` write.
+- When v1.0 docs land (still gated on counsel — see §29 / handoff truth-gate blockers), a dedicated consent-capture PR adds: the checkbox + server-side write into `consent_records` + the re-consent gate for material changes. The form layout already has room for the checkbox to slot in without restructuring.
+- Free events DO write orders today and the loop works end-to-end (Day-30 born-paid bypass + Day-34 Phase 1 form + Day-34 Phase 2 loop e2e). No consent friction for free events at MVP, consistent with the broader §13.5 free-event simplification.
+- Paid events on staging hit `STAGING_PAYMENT_BLOCK` and never settle real money, so the absence of consent there is moot until the truth gate runs.
+
+### Cross-references
+
+- [`decisions.md` 2026-05-17 "Trust Center v0.1 placeholders — skeleton-only"](decisions.md) — the upstream constraint.
+- CLAUDE.md §20 + §21.3 (host-liability doctrine; what consent capture is supposed to support).
+- §9.11 `consent_records` schema (already in place; the writes land later).
+- §29 open items #9 (AIT tax) + counsel-v1.0-docs (implicit) — same truth-gate scope.
+
+---
+
+## 2026-05-26 · Sprint 4 Day 34 Phase 0 — Staging EC2 swap stopgap; t3.medium flagged as pre-production capacity decision
+
+**Context:** Day-33 mid-session incident (recorded in [`gotchas.md`](gotchas.md) "Staging EC2 (t3.small, 2GB, no swap) went unreachable mid-session — in-VM hang"): the staging EC2 went unreachable under the full stack (web + api + Postgres + Redis + BullMQ delivery worker on 2 GB RAM with zero swap). Hypervisor healthy; OS hung; first console `Reboot` didn't fire (ACPI on a hung guest); recovered via Stop+Start. Handoff to Day 34 mandated this as the **FIRST THING** before any new feature code that would add memory pressure.
+
+### Decision
+
+Apply the **swap stopgap immediately** on staging EC2 `i-02e4fddeb923c14f9` and codify it so a fresh EC2 rebuild reproduces it. Flag the t3.medium upgrade as a pre-production capacity decision for Moshiur.
+
+**What landed Day 34 Phase 0 (this entry):**
+
+- 2 GB swap file at `/swapfile` (`fallocate -l 2G` + `chmod 600` + `mkswap` + `swapon`), persisted in `/etc/fstab` (`/swapfile none swap sw 0 0`).
+- `vm.swappiness=10` (swap as safety net, not routine eviction), persisted via `/etc/sysctl.d/99-eventpulse-swap.conf`.
+- Codified in [`infra/scripts/bootstrap-staging.sh`](../../infra/scripts/bootstrap-staging.sh) step 0.0 (idempotent — re-running on an existing instance is a no-op). A fresh EC2 rebuild via the documented bootstrap procedure will now apply the swap automatically.
+- Recovery procedure documented in [`docs/runbooks/staging-bootstrap.md`](../../docs/runbooks/staging-bootstrap.md) "Recovering from an in-VM hang": Stop+Start (NOT Reboot) when port 443 + SSM are both dead but the hypervisor is healthy; post-recovery checklist including `STAGING_PAYMENT_BLOCK=1` re-verification.
+- PM2 boot-resume verified already in place (`pm2-eventpulse.service` enabled, `dump.pm2` present + saved). No change needed.
+- PM2 `max_memory_restart` per-process verified already in place in [`pm2/ecosystem.config.cjs`](../../pm2/ecosystem.config.cjs) (web=512M, api=256M — sensible headroom over Day-33 actuals of 125 MB + 128 MB). No change needed.
+- Delivery worker confirmed running inline within the api process (`startDeliveryWorker()` in `apps/api/src/index.ts:36`), not a separate pm2 process. The 256M cap on api includes it.
+
+**What's still flagged for Moshiur (NOT autonomously actioned):**
+
+1. **Instance resize to t3.medium (4 GB RAM, ~+$15/mo).** Swap is staging-grade defence-in-depth; production wants real headroom. The full stack peaks under deploy compounded with running processes; the 2 GB ceiling is structurally close to that peak, and swap is slower than RAM. **Decision needed before prod cutover, not blocking for the rest of Sprint 4.** STOP-ASK condition for any future infra session.
+2. **CloudWatch memory alarm at >85% sustained 5min.** CW Agent already ships the metric; just needs the alarm wired. Not done Phase 0 because the brief scoped Phase 0 to `{swap, fstab, swappiness, PM2 config}` only — AWS CW alarm creation is "AWS write beyond capacity fix" → STOP-ASK in this session, but a small follow-up.
+
+### Why swap+swappiness=10 instead of e.g. swappiness=60 default or no swap
+
+- **No swap was the actual cause of the hang.** With swap available, the OOM-killer is a last resort; without, it fires immediately and can take out load-bearing processes.
+- **swappiness=10 keeps swap as a safety valve.** The default 60 means Linux will start swapping fairly aggressively even when there's free RAM — fine on a workstation, wasteful on a server where you'd rather use RAM and only fall back to swap during spikes. 10 means "only swap when really under pressure" — exactly the use case here.
+- **2 GB swap on 2 GB RAM (1:1)** is the standard guidance for "I want a safety net but I'm not building a workstation." Doubling RAM via swap would be excessive (it would imply we expect to routinely run hot, which would be a separate problem to solve at the instance level).
+
+### Why codifying in `bootstrap-staging.sh` (not Ansible)
+
+The repo doesn't have an Ansible playbook in the tree yet (per CLAUDE.md §17.3 it's mentioned as the intended tool but not yet present). The `bootstrap-staging.sh` script is the de facto "fresh-EC2-to-running" runbook today. Adding it there keeps it executable + idempotent + co-located with the rest of the per-instance state. When/if Ansible lands, this section maps cleanly to a `swap` role.
+
+### Consequences
+
+- Day 34 buyer-form work + the rest of Sprint 4 deploys run with 2 GB swap headroom + swappiness=10 — recurrence of the Day-33 in-VM hang under transient build spikes is materially reduced.
+- A fresh EC2 rebuild via the documented bootstrap procedure now reproduces the swap setup — institutional memory captured in code + runbook.
+- The t3.medium upgrade is **not silently deferred**; it's pinned here + in `handoff.md` as a pre-production capacity decision Moshiur owes.
+- A future capacity incident on staging that recurs DESPITE the swap → escalate to the t3.medium upgrade rather than chasing other root causes (swap was the primary OOM mitigation; if it doesn't suffice, the box is undersized).
+
+---
+
 ## 2026-05-25/26 · Sprint 4 Day 33 — Tenant sales dashboard + payouts view; snapshot-vs-current display policy
 
 **Context:** Sprint 4 Day 33 shipped 3 PRs (one per phase) completing §26.1 Sprint 4 Day 5 deliverable (tenant sales dashboard + tenant payouts view with current fee config visibility).

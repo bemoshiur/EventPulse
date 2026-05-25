@@ -53,10 +53,15 @@ The 2 GB RAM with no swap is the root cause. The next-cheapest fix:
 
 **Carry to Day 34 (handoff.md prominently):** decide between (1) swapfile-now or (2) t3.medium-upgrade. Either fixes the immediate risk; (2) is more durable. Add a small CloudWatch memory alarm regardless.
 
+**UPDATE 2026-05-26 (Day 34 Phase 0).** Stopgap (1) applied: 2 GB swap file at `/swapfile` + `vm.swappiness=10`, both persistent + codified in [`infra/scripts/bootstrap-staging.sh`](../../infra/scripts/bootstrap-staging.sh) step 0.0 so a fresh EC2 rebuild reproduces. Recovery procedure documented in [`docs/runbooks/staging-bootstrap.md`](../../docs/runbooks/staging-bootstrap.md) "Recovering from an in-VM hang". Decision rationale + t3.medium pre-production flag + CW alarm follow-up in [`decisions.md`](decisions.md) "2026-05-26 · Sprint 4 Day 34 Phase 0 — Staging EC2 swap stopgap; t3.medium flagged as pre-production capacity decision". Item (2) **still open** as a pre-production capacity decision for Moshiur; item (4) CW memory alarm **still open** (small AWS-write follow-up).
+
 **Cross-references:**
 
 - `progress.md` "Day 33 incident" carry-forward.
 - `handoff.md` Day-34 first-thing item.
+- `decisions.md` 2026-05-26 entry (mitigation + t3.medium flag).
+- `infra/scripts/bootstrap-staging.sh` step 0.0 (codified swap).
+- `docs/runbooks/staging-bootstrap.md` "Recovering from an in-VM hang" + "Memory headroom — 2GB swap".
 - §17.2 (EC2 spec — t3.small was the "$40/mo canary" staging size; revisit).
 - §17.11 (Monitoring — CW Agent ships memory metrics; alarm not wired).
 
