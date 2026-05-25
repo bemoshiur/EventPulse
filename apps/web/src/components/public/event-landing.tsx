@@ -22,6 +22,7 @@
  * they render alongside the English copy.
  */
 
+import { BuyerForm } from '@/components/public/buyer-form'
 import type {
   PublicEventBrandWire,
   PublicEventTierWire,
@@ -32,13 +33,6 @@ export interface EventLandingProps {
   event: PublicEventWire
   brand: PublicEventBrandWire
   tiers: PublicEventTierWire[]
-}
-
-function formatBdt(paisa: string): string {
-  const big = BigInt(paisa)
-  const wholes = big / 100n
-  const fraction = (big % 100n).toString().padStart(2, '0')
-  return `${wholes.toString()}.${fraction}`
 }
 
 function formatDateTime(iso: string, timezone: string): string {
@@ -67,13 +61,6 @@ function formatVenue(venue: unknown): string {
     return parts.join(' · ')
   }
   return ''
-}
-
-function tierAvailability(tier: PublicEventTierWire): string {
-  const remaining = tier.capacity - tier.sold
-  if (remaining <= 0) return 'Sold out'
-  if (remaining <= 10) return `Only ${remaining} left`
-  return `${remaining} available`
 }
 
 export function EventLanding({ event, brand, tiers }: EventLandingProps) {
@@ -160,58 +147,9 @@ export function EventLanding({ event, brand, tiers }: EventLandingProps) {
         </section>
       )}
 
-      {/* ─── tickets ──────────────────────────────────────────────────── */}
-      <section
-        className="mx-auto max-w-3xl px-6 pb-16"
-        aria-labelledby="tickets-heading"
-        data-testid="event-tickets"
-      >
-        <h2 id="tickets-heading" className="font-display text-ep-ink text-2xl font-semibold">
-          Tickets
-        </h2>
-        {tiers.length === 0 ? (
-          <p className="text-ep-graphite mt-4 text-sm" data-testid="tickets-empty">
-            Tickets coming soon.
-          </p>
-        ) : (
-          <ul className="mt-6 grid grid-cols-1 gap-3">
-            {tiers.map((tier) => (
-              <li key={tier.id}>
-                <div
-                  className="border-ep-line bg-ep-paper rounded-2xl border p-5 shadow-sm"
-                  data-testid={`tier-card-${tier.id}`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-ep-ink text-lg font-semibold">{tier.name}</h3>
-                      {tier.description && (
-                        <p className="text-ep-graphite mt-1 text-sm">{tier.description}</p>
-                      )}
-                      <p className="text-ep-graphite mt-2 text-xs">{tierAvailability(tier)}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-ep-ink text-2xl font-semibold tabular-nums">
-                        {tier.isComplimentary ? 'Free' : `৳ ${formatBdt(tier.pricePaisa)}`}
-                      </p>
-                      {/* Placeholder CTA — the buy flow lands Day 26-28 */}
-                      <button
-                        type="button"
-                        disabled
-                        className="mt-3 inline-flex h-9 cursor-not-allowed items-center rounded-md px-4 text-sm font-semibold text-white opacity-60"
-                        style={{
-                          background: `linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-accent) 100%)`,
-                        }}
-                      >
-                        Buy (coming soon)
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {/* ─── tickets + buyer form (Sprint 4 Day 34) ─────────────────── */}
+      <BuyerForm event={event} tiers={tiers} />
+      {/* End buyer form */}
 
       {/* ─── footer ──────────────────────────────────────────────────── */}
       <footer className="border-ep-line border-t py-8">
