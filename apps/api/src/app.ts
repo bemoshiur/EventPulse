@@ -15,6 +15,7 @@ import { adminKycRoutes } from './routes/super-admin/kyc.js'
 import { adminLegalRoutes } from './routes/super-admin/legal.js'
 import { adminTicketTiersRoutes } from './routes/super-admin/ticket-tiers.js'
 import { accountTypeRoutes } from './routes/tenant/account-type.js'
+import { attendeeRoutes } from './routes/tenant/attendees.js'
 import { checkInRoutes } from './routes/tenant/checkin.js'
 import { eventsRoutes } from './routes/tenant/events.js'
 import { kycDraftRoutes } from './routes/tenant/kyc-drafts.js'
@@ -134,6 +135,15 @@ export function createApp() {
   // can't) is a Sprint 4+ carry — no requireRole middleware exists
   // yet; MVP allows any tenant member.
   app.route('/api/v1/tenant/events', checkInRoutes)
+
+  // Attendee list endpoint — Sprint 4 Day 32 Phase 1 per §10.2:
+  //   GET /api/v1/tenant/events/:eventId/attendees
+  // Tenant-staff auth via requireTenantAuth inside the router.
+  // Cross-tenant isolation enforced by RLS + application-layer
+  // event/tenant filter inside the service. No per-row audit on
+  // list reads (Decision G precedent; bulk extraction is what the
+  // Phase-3 CSV-export endpoint audits).
+  app.route('/api/v1/tenant/events', attendeeRoutes)
 
   // Super admin routes — Sprint 2 Day 18 Item 13 + Day 19 Item 15.
   // Mounted under /api/v1/admin/* per §10.4. requireSuperAdminAuth
