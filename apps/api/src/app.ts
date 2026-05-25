@@ -7,6 +7,7 @@ import { authRoutes } from './routes/auth.js'
 import { oauthRoutes } from './routes/oauth-routes.js'
 import { publicEventsRoutes } from './routes/public/events.js'
 import { publicLegalRoutes } from './routes/public/legal.js'
+import { publicOrdersRoutes } from './routes/public/orders.js'
 import { feeConfigRoutes } from './routes/super-admin/fee-config.js'
 import { adminKycRoutes } from './routes/super-admin/kyc.js'
 import { adminLegalRoutes } from './routes/super-admin/legal.js'
@@ -78,6 +79,12 @@ export function createApp() {
   // RLS context is super-admin (BYPASSRLS) because public reads
   // cross tenant boundaries by design.
   app.route('/api/v1/public/events', publicEventsRoutes)
+  // Public order creation — Sprint 3 Day 26 Phase 4. The money endpoint.
+  // STAGING_PAYMENT_BLOCK=1 refuses the EPS init step under the
+  // service layer's guard; the order itself still persists in
+  // awaiting_payment regardless. Day 27 ships the EPS callback
+  // handler that completes the lifecycle.
+  app.route('/api/v1/public/orders', publicOrdersRoutes)
   // Tenant routes — order doesn't matter (Hono routes are matched by
   // exact path prefix), but the `me` + `account-type` mounts deliberately
   // sit alongside `kyc` because they share the /api/v1/tenant/* namespace.
