@@ -4,6 +4,103 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-25 · Day 26 architectural choices — order pipeline schema, Redis token cache stampede semantic, buyer-write RLS path
+
+**Context:** Sprint 3 Day 26 shipped 4 PRs in clean dependency order:
+
+- PR #157 (Phase 1) — EPS wrapper Part 2 real HTTP (`6993492`)
+- PR #158 (Phase 2) — Redis-backed token cache adapter (`f3f8fee`)
+- PR #159 (Phase 3) — order pipeline schema migration 0013 (`bebde7a`)
+- PR #160 (Phase 4) — public order creation endpoint (`63d7a2c`)
+
+Four architectural choices were made inside the implementation that warrant codification at the decisions layer — each pinned by tests + inline code comments, but the decisions-layer entry prevents future drift if anyone refactors the surrounding code without reading the originals.
+
+### Choice A — Order row carries 4 fee-snapshot extension columns beyond §9.5 verbatim
+
+**Decision:** Migration 0013 adds 4 columns to `orders` that are NOT in §9.5 verbatim: `platform_fee_bps integer NOT NULL`, `eps_fee_bps integer NOT NULL`, `platform_fee_handling text NOT NULL CHECK (... IN ('absorb','pass_through'))`, `eps_fee_handling text NOT NULL CHECK (... IN ('absorb','pass_through'))`. The 4 columns are written at order-create time alongside the paisa fields and are NEVER mutated afterward.
+
+**Why these 4 columns are load-bearing (not optional convenience):**
+
+1. **§14.4 explicit guidance.** "The `fee-calculator` reads `tenant_fee_config` at order-creation time, snapshots the bps into the order, and never re-evaluates afterward. The order is immutable on fee." Without the bps + handling columns on the order row, the snapshot lives only in the paisa fields — but those are *derived* outputs. The *inputs* are gone.
+2. **Decision N requires snapshotted inputs for post-mortem.** If the calculator's prediction ever drifts from what EPS actually charged, post-mortem requires the snapshotted inputs to be on the order row — otherwise we'd be reconstructing inputs from foreign-key joins (`tenant_fee_config`, `events.platform_fee_handling`, `events.eps_fee_handling`) that may have CHANGED since order-time. Reconciliation against EPS settlement reports would be unauditable.
+3. **The fields are written ONCE at order-create time.** Service layer (`apps/api/src/services/orders/index.ts`) reads `getEffectiveFees(tenantId)` + the order-time `epsFeeBps` input + the event's two handling fields → snapshots all 4 onto the orders row in the same `withSuperAdmin` transaction as the calculator output. The 4 fields are immutable on the order even if the tenant's `tenant_fee_config` later changes (§14.4 non-retroactive rule).
+
+**Consequences:**
+
+- Tests in `apps/api/src/services/orders/orders.test.ts` pin "for each §14.2 mode, the orders row's snapshot fields exactly equal the calculator's `FeeCalcResult` field-for-field" (4 parameterised cases — PT/PT, AB/AB, AB/PT, PT/AB).
+- Day 27+ callback/reconciliation reads the snapshot when comparing actual EPS settlement against expected.
+- Future "tighten the schema" PR that removes any of the 4 columns would silently degrade reconciliation auditability. This entry pins the rationale.
+- If a future enterprise tier requires a different fee-snapshot shape (e.g. per-payment-method bps capture from the settlement report), it lands as additional columns — never by mutating existing snapshots.
+
+### Choice B — Buyer-write path uses withSuperAdmin (BYPASSRLS); route handler is the trust boundary
+
+**Decision:** `apps/api/src/services/orders/index.ts createOrder()` runs all DB writes (orders + order_items + order_events + audit_logs) inside a `withSuperAdmin` transaction. The route handler at `apps/api/src/routes/public/orders.ts` is the trust boundary: it (a) resolves event_id → tenant_id, (b) validates the event is in a sellable state + tier exists + on-sale, (c) sets tenant_id explicitly on every INSERT. Subsequent reads/updates by tenant context (e.g. the tenant's orders dashboard Day 28+) are RLS-scoped normally.
+
+**Why withSuperAdmin (not a synthetic "public-buyer" RLS role):**
+
+Buyers have no tenant session — they arrive at a public event page, fill the form, POST. No tenant context exists for the request. Options were:
+
+- (a) **withSuperAdmin (BYPASSRLS), explicit tenant_id on insert.** Chosen.
+- (b) Public-buyer RLS policy that allows insertion when tenant_id matches event_id's tenant (validated by trigger/function). Complex, error-prone — RLS becomes the trust boundary instead of the route handler.
+- (c) Constrained service-role with audit log of "buyer-initiated order". Equivalent to (a) since audit row writes regardless.
+
+(a) is the same pattern as the Day 25 public-events READ path (`decisions.md` "Public event reads use withSuperAdmin + path-mode URLs" 2026-05-25, Choice A). The common shape: **any read/write that genuinely crosses tenant scope (because the caller has no tenant context) runs under withSuperAdmin with the route handler as the trust boundary, rather than warping RLS into a synthetic "public-actor" role.**
+
+**Consequences:**
+
+- The route handler is the load-bearing trust boundary. Any future change that moves event-validation out of the route to a helper MUST preserve the property that tenant_id is correct before the INSERT runs (lest the buyer-write path become RLS-bypass-able by URL manipulation).
+- The decision applies symmetrically to Day 27's callback/webhook handler (also runs under withSuperAdmin — buyer is returning to a public URL).
+- Tenant-context reads (the tenant's dashboard) DO go through RLS — they have a tenant session and RLS isolation is exactly what's needed there. The exception is purely the public-buyer write/read path.
+- Test `apps/api/src/db/orders-rls.test.ts > buyer-write path simulation` pins this: a withSuperAdmin INSERT with explicit tenant_id is visible to that tenant via withTenant. Future "tighten" PR that breaks this would fail the test.
+
+### Choice C — Redis token cache stampede semantic = accept-double-fetch-but-cache-last (NOT single-flight)
+
+**Decision:** When two PM2 workers both miss the cache simultaneously, both call `fetchAccessTokenFromEps()`, both write to Redis, last-write-wins. The wasted GetToken calls are bounded (1 per worker per ~14-min cache cycle); no NX-lock-based single-flight is implemented.
+
+**Why this trade-off:**
+
+§11 does not specify a stampede semantic; the Day 26 brief said "STOP-ASK if unspecified" — Auto Mode was active and the reasonable call was to ship the simpler semantic. Three reasons:
+
+1. **TTL bounds the waste.** ~14 min cache TTL means the worst-case wasted GetToken is 1 per worker per cycle. At ~2 PM2 workers, that's ~2 extra GetToken calls per 14 min — negligible vs. the wider order pipeline's HTTP load.
+2. **Cost is cheap.** A wasted GetToken is a single POST against EPS, no charge, no PII, no state mutation.
+3. **Single-flight is 60+ LOC of operational complexity.** Redis NX-lock-based single-flight requires lock-acquire-with-timeout, lock-release-on-error, dead-lock recovery (what if a worker dies mid-fetch?), backoff retry on lock-busy. Each is a failure mode that itself needs testing. For ~2 workers at MVP scale, the complexity isn't justified.
+
+**Consequences:**
+
+- File header in `apps/api/src/infra/eps/redis-token-cache.ts` documents the trade-off + the swap path: if a future scale point (e.g. 20+ workers, sub-second concurrent traffic at TTL expiry) surfaces contention as a real problem, swap to single-flight at the same seam — `redisTokenCache(client)` is a pure function returning the `TokenCache` contract; callers don't change.
+- Test `apps/api/src/infra/eps/redis-token-cache.test.ts > accept-double-fetch (chosen stampede semantics)` pins the semantic: two workers both write, last-write-wins, both see the final value.
+- Future "tighten" PR adding single-flight as a "performance improvement" without surfacing the cost/benefit changes won't accidentally land — the test fails by asserting both writes succeed.
+
+### Choice D — order_events APPEND-ONLY at GRANT layer with eventpulse_admin retention of mutation path
+
+**Decision:** Migration 0013 ends with `REVOKE UPDATE, DELETE, TRUNCATE ON order_events FROM eventpulse_app;`. The standard §4.2.1 GRANT block over-grants UPDATE+DELETE on every newly-created table; the REVOKE moves the denial up to the GRANT layer where Postgres throws "permission denied" (not silent zero-rows-affected). `eventpulse_admin` (BYPASSRLS super-admin role) RETAINS full mutation grants intentionally — there must be a legitimate path to physically remove rows when regulator-required redaction lands (BFIU 5-year retention ceiling; the inverse: redaction within that window when law requires).
+
+**Why this is a decision-layer entry (the pattern was already codified in §4.2.1.1):**
+
+- The §4.2.1.1 pattern (codified Day 14 with `audit_logs`) is the canonical append-only pattern. Day 19 added `legal_document_versions` as the second; Day 26 adds `order_events` as the third.
+- **A future "tighten" PR that adds REVOKE for `eventpulse_admin` would silently break the regulatory-redaction path.** The redaction path's testability is non-obvious until you need it. Pinning the decision means a reviewer can grep before approving the tighten.
+- Test `apps/api/src/db/orders-rls.test.ts > order_events — eventpulse_admin (withSuperAdmin) CAN still UPDATE/DELETE — the redaction path` is the regression guard. If the test starts failing, the regulator-redaction path is broken.
+
+**Consequences:**
+
+- The same pattern applies to future append-only tables (e.g. settlement reconciliation receipts, signed legal-document consent receipts as PDFs). New append-only tables MUST: (1) get standard grants, (2) REVOKE UPDATE/DELETE/TRUNCATE from eventpulse_app explicitly, (3) leave eventpulse_admin grants intact, (4) include the regression-guard test.
+- Tests for append-only invariants use the **capture-or-zero-rows pattern** mirroring `audit_logs` tests in `db/__tests__/rls-cross-tenant.test.ts`, NOT a regex on the error message. Drizzle wraps pg errors as "Failed query: ..." with the underlying "permission denied" in `error.cause`. The capture-or-zero-rows pattern + state-verification read-back is robust to Drizzle's wrapper format changes.
+
+**Cross-references:**
+
+- PR #157 (Phase 1 — EPS HTTP) → merged `6993492`
+- PR #158 (Phase 2 — Redis token cache) → merged `f3f8fee`
+- PR #159 (Phase 3 — order schema migration 0013) → merged `bebde7a`
+- PR #160 (Phase 4 — order creation endpoint) → merged `63d7a2c`
+- CLAUDE.md §9.5 (orders schema), §14.4 (fee snapshot), §4.2.1.1 (append-only pattern + REVOKE), §4.3 (RLS policy template), §11 (EPS flow), §1.3 R2/R3/R5/R6/R8/R10/R11
+- `decisions.md` "Public event reads use withSuperAdmin + path-mode URLs only for MVP" (2026-05-25, Choice A — the read-side mirror of this entry's Choice B)
+- `decisions.md` "EPS fee is NOT per-tenant configurable — pass-through, derived from payment-method metadata at order creation" (2026-05-24)
+- `decisions.md` "Decision N — Fee calculator EPS-base rule locked + mandatory Day 24-25 EPS sandbox truth gate" (2026-05-19)
+- `decisions.md` "EPS wrapper Part 1 ships in-memory token cache; Redis adapter swap is Day 26+" (2026-05-25, Choice B — Day 26 Phase 2 RESOLVES this deferral)
+- `gotchas.md` "`ALTER DEFAULT PRIVILEGES` over-grants UPDATE/DELETE on new append-only tables — REVOKE explicitly" (2026-05-19, the audit_logs entry — Day 26 extends to order_events)
+
+---
+
 ## 2026-05-25 · Day 25 architectural choices — Public event read uses withSuperAdmin + path-mode URLs only for MVP
 
 **Context:** Sprint 3 Day 25 shipped 3 PRs (ticket tier CRUD #153; bootstrap validation #154; public event landing template #155). Two architectural choices were made that aren't fully captured in code comments + warrant decisions-layer codification.
