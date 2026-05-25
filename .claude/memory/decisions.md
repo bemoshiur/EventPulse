@@ -4,6 +4,101 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-25 · Day 29 architectural choices — Idempotency semantics, capacity-lock ORDER BY, Redis warm-up
+
+**Context:** Sprint 3 Day 29 shipped 5 PRs (2 phases + 2 hotfixes + memory) closing the last two hardening concerns on the order-creation surface before Sprint 3's pipeline is feature-complete.
+
+- PR #170 (Phase 1) — Idempotency-Key middleware (`85259fb`)
+- PR #171 (Phase 2) — FOR UPDATE capacity lock (`52e306a`)
+- PR #172 (Phase 1 hotfix #1) — body-clone fix (`21b6a39`)
+- PR #173 (Phase 1 hotfix #2) — Redis warm-up at boot (`1a93740`)
+- PR #174 (memory) — this closeout
+
+Four architectural decisions warrant codification.
+
+### Choice A — Idempotency-Key middleware fails CLOSED on Redis absence (NOT pass-through)
+
+**Decision:** When Redis is unavailable, the middleware returns 503 `IDEMPOTENCY_INFRA_UNAVAILABLE` rather than passing the request through to the route handler.
+
+**Why fail-CLOSED (vs Day 28's fail-OPEN `enqueueOrderDelivery`):**
+
+The two semantics differ by what's on the line:
+
+- **Day 28 `enqueueOrderDelivery` fail-open** is correct because delivery is a downstream consequence; the operator can retry the failed delivery later (the order stays paid; ops can manually re-enqueue). Coupling settlement to Redis would make Redis a single point of failure for the money path.
+- **Day 29 `idempotency-key` middleware fails CLOSED** because it gates the SOURCE OF TRUTH path. Without Redis, the middleware cannot guarantee at-most-once processing. Passing through would let two retries both create orders, defeating R6's at-most-once guarantee.
+
+The right axis is: **does this layer have a deferred retry path, or is it the layer that decides what happened?** Delivery has retries; idempotency IS the layer.
+
+**Pinned by tests + file header rationale.**
+
+### Choice B — Idempotency body hash = SHA-256 of RAW request bytes (NOT canonicalised JSON)
+
+**Decision:** The body-hash compared on replay is `sha256(raw bytes)`. Two requests with the same serialised bytes are TRULY identical; semantically-equivalent payloads with formatting differences (key reorder, whitespace change) are TREATED AS DIFFERENT → 422 `IDEMPOTENCY_KEY_REUSED_DIFFERENT_BODY`.
+
+**Why strict:**
+
+- Client-side serialisers are deterministic. The same code calling the same JSON.stringify on the same data produces the same bytes. A "tiny field reorder" between retries is a SIGNAL that the client code changed (e.g. user edited the form mid-retry) — and silently returning the cached response from the original would be wrong.
+- The safer default is to reject and force a fresh key when the client genuinely intends a different operation. A false positive (rejecting two truly-equivalent payloads) is the client's bug to fix; a false negative (returning the wrong cached response) is OUR bug and silent.
+
+**Trade-off acknowledged:** If a client uses a non-deterministic serialiser (rare but possible), they'll always get 422 on retry. The middleware's behavior is documented; clients must use stable serialisation.
+
+**Pinned by test** `whitespace-only difference in JSON is treated as different body (deliberate strict policy)`.
+
+### Choice C — FOR UPDATE capacity lock uses ORDER BY id for multi-tier deadlock avoidance
+
+**Decision:** The capacity-lock SELECT is `SELECT ... FROM ticket_tiers WHERE id IN (...) ORDER BY id ASC FOR UPDATE`. The ORDER BY is LOAD-BEARING — not stylistic.
+
+**Why it's load-bearing:**
+
+Without ORDER BY, Postgres acquires row locks in the scan order it happens to choose (usually but not guaranteed to be the IN-clause order, which itself can come in any order from the application). For a multi-tier order:
+
+- Order 1 buys tiers {X, Y}; Postgres scans → acquires X first, blocks waiting for Y.
+- Order 2 buys tiers {Y, X}; Postgres scans → acquires Y first, blocks waiting for X.
+- **Deadlock.** Postgres detects after a timeout (`deadlock_timeout`, default 1s) and aborts one of the transactions with `40P01 deadlock_detected`. The user sees a generic 500.
+
+With ORDER BY id, the lock acquisition order is canonical — both Order 1 and Order 2 try to acquire X first (the lower-id tier), then Y. The second order BLOCKS on the first's X lock until the first commits; no deadlock.
+
+**Pinned by test** `multi-tier ORDER BY id deadlock-free: two concurrent orders touching {A,B} and {B,A} both succeed`. Run against real Postgres via Promise.all — the deadlock would surface without the ORDER BY.
+
+### Choice D — Redis singleton needs explicit `await redis.connect()` at boot
+
+**Decision:** `apps/api/src/index.ts` calls `void redis.connect().catch(swallow)` at boot after `getRedis()`.
+
+**Why this is load-bearing for the idempotency middleware:**
+
+The singleton at `infra/redis/client.ts` uses `lazyConnect: true` + `enableOfflineQueue: false`. Day 26 design rationale: fail-fast for the EPS token cache hot path — a slow Redis can't hang token fetches indefinitely. Bounded retries + offline-queue-off means `redis.get()` throws synchronously if the connection isn't ready.
+
+Without explicit warm-up at boot, the FIRST request after pm2 reload races against the deferred connect: ioredis throws "Stream isn't writeable", the idempotency middleware's `redis.get()` rejects, Hono returns generic 500. Production smoke after Phase 1 + Phase 2 deploy revealed this; the Day 26 design was right for runtime resilience (a Redis blip shouldn't hang requests indefinitely) but wrong at boot (the FIRST request should find Redis ready).
+
+**Why warm-up at boot (vs flipping `enableOfflineQueue: true`):**
+
+Flipping `enableOfflineQueue: true` would queue commands while connecting — fine for idempotency but DEFEATS the Day-26-intentional fail-fast on the EPS token cache. Boot-time warm-up preserves BOTH invariants: idempotency works on the first request AND EPS token cache stays bounded under runtime Redis blips.
+
+**Pinned by:**
+
+- Live staging smoke: simulated cold-start via `pm2 reload api`; first request returned typed 404 (not generic 500); boot log shows `redis.connect` + `redis.ready` immediately after `eventpulse api listening`.
+- Decision-layer entry to prevent a future "tighten" PR from removing the warm-up without understanding why.
+
+**Why this surfaced via TWO production hotfixes (#172 + #173) instead of being caught locally:**
+
+Unit tests use `app.request()` which shortcuts Hono's internal caching AND injects mock Redis via `_setRedisClientForTest` BEFORE the singleton ever constructs. Real HTTP traffic goes through `@hono/node-server` (different path) AND uses the real singleton (which is lazy-connecting). The unit-test-vs-production-HTTP gap is the BLIND SPOT. Both hotfixes traced back to the same root.
+
+Future practice: any HTTP-touching middleware change needs a post-deploy live curl smoke as part of the merge gate. Documented in handoff guard rails + gotchas.md.
+
+**Cross-references:**
+
+- PR #170 (Phase 1) → `85259fb`
+- PR #171 (Phase 2) → `52e306a`
+- PR #172 (hotfix #1) → `21b6a39`
+- PR #173 (hotfix #2) → `1a93740`
+- CLAUDE.md §1.3 R6 (idempotency requirement) + §6.4 (Idempotency-Key contract) + §9.3 (ticket_tiers.sold)
+- `decisions.md` "Day 26 architectural choices" Choice C (Redis token cache stampede semantic; same singleton config under different threat model)
+- `decisions.md` "Day 28 architectural choices" Choice C (delivery decoupled from settlement — the contrast that motivates Choice A here)
+- `gotchas.md` "Hono middleware that hashes request body MUST use `c.req.raw.clone().text()`" (the body-stream production blind spot)
+- `gotchas.md` "Redis singleton needs explicit warm-up at boot or the first request after pm2 reload races the lazy-connect"
+
+---
+
 ## 2026-05-25 · Day 28 architectural choices — QR token design, PDF-as-attachment, BullMQ dedicated Redis connection
 
 **Context:** Sprint 3 Day 28 shipped 3 PRs in dependency order, closing the post-paid delivery loop:
