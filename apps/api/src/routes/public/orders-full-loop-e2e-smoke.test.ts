@@ -69,6 +69,8 @@ const ORIGINAL_REDIS_URL = process.env['REDIS_URL']
 const ORIGINAL_MAIL_DRY_RUN = process.env['MAIL_DRY_RUN']
 const ORIGINAL_JWT_ACCESS = process.env['JWT_ACCESS_SECRET']
 const ORIGINAL_JWT_REFRESH = process.env['JWT_REFRESH_SECRET']
+const ORIGINAL_API_BASE = process.env['EVENTPULSE_API_BASE_URL']
+const ORIGINAL_WEB_BASE = process.env['EVENTPULSE_WEB_BASE_URL']
 
 const physicalVenue = {
   type: 'physical' as const,
@@ -97,6 +99,12 @@ describeIfDb('E2E full-loop smoke — buyer form path → attendee → check-in 
     process.env['MAIL_DRY_RUN'] = '1' // SES out of the loop.
     process.env['JWT_ACCESS_SECRET'] = 'x'.repeat(64)
     process.env['JWT_REFRESH_SECRET'] = 'y'.repeat(64)
+    // deliverOrder() renders QR images for attendees — the QR scan URL is
+    // built from EVENTPULSE_API_BASE_URL (qr-image.ts:71 refuses to render
+    // without an absolute URL). Day 30 doesn't need this because it never
+    // calls deliverOrder; this test does (synchronous worker-equivalent).
+    process.env['EVENTPULSE_API_BASE_URL'] = 'https://api-test.example.local'
+    process.env['EVENTPULSE_WEB_BASE_URL'] = 'https://web-test.example.local'
 
     await withSuperAdmin(async (db) => {
       const [owner] = await db
@@ -173,6 +181,10 @@ describeIfDb('E2E full-loop smoke — buyer form path → attendee → check-in 
     else process.env['JWT_ACCESS_SECRET'] = ORIGINAL_JWT_ACCESS
     if (ORIGINAL_JWT_REFRESH === undefined) delete process.env['JWT_REFRESH_SECRET']
     else process.env['JWT_REFRESH_SECRET'] = ORIGINAL_JWT_REFRESH
+    if (ORIGINAL_API_BASE === undefined) delete process.env['EVENTPULSE_API_BASE_URL']
+    else process.env['EVENTPULSE_API_BASE_URL'] = ORIGINAL_API_BASE
+    if (ORIGINAL_WEB_BASE === undefined) delete process.env['EVENTPULSE_WEB_BASE_URL']
+    else process.env['EVENTPULSE_WEB_BASE_URL'] = ORIGINAL_WEB_BASE
     _setRedisClientForTest(null)
     await resetPool()
   })
