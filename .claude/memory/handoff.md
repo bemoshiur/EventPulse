@@ -1,105 +1,106 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-05-26 (Sprint 4 Day 34 SHIPPED — staging capacity fix + buyer form + full free-event loop e2e). **Decision N truth gate REMAINS THE blocker for priced money.**
-**Driver:** Claude Code (Opus 4.7) — Sprint 4 Day 34; **next session opens Day 35.**
+**Last update:** 2026-05-26 (Sprint 4 Day 35 SHIPPED — super-admin platform revenue dashboard §14.7 + first concrete build-track move on the launch gate).
+**Driver:** Claude Code (Opus 4.7) — Sprint 4 Day 35; **next session opens Day 36.**
 
-## ⚠️ CRITICAL: where we are right now
+## ⚠️ FIRST THING DAY 36 — review the SES draft
 
-**Sprint 4 Day 34 SHIPPED.** Three phases / 4 PRs merged today: Phase 0 staging capacity stopgap (PR #192), Phase 1 public buyer form (PR #193), Phase 2 full free-event-loop e2e smoke (PR #194), EOD memory PR (#195 — this session). **The FREE-event operational loop is now end-to-end browser-clickable** (event landing → buyer form → order born-paid → attendee list → check-in scanner → sales dashboard). Truth-gate blockers unchanged; PRICED loop still waits.
+`docs/ops/ses-out-of-sandbox-request.md` (PR #196 merged today) is a complete AWS Support case body — use-case description, bounce/complaint handling, consent model, volume forecast, domain-auth state, pre-submission checklist. Your action:
 
-**STAGING_PAYMENT_BLOCK=1 held all session.** Zero EPS calls fired. Free-event path bypasses EPS by design (§13.5).
+1. Read the draft.
+2. Verify the SES domain identity for `eventpulse.com.bd` is actually verified in `ap-southeast-1` (the case will be rejected if not).
+3. Edit numbers + claims to match your actual operational intent.
+4. Submit via AWS Support Center → Service Limit Increase → SES Sending Limits → Production Access.
+5. Paste the outcome into `decisions.md` once AWS responds.
 
-**Staging EC2 capacity:** swap mitigation applied + codified. Risk of in-VM-hang recurrence under build spikes materially reduced. t3.medium upgrade still flagged as pre-production decision (see below).
+**If submitted + approved, the launch gate drops from 4 to 3.** This is the first build-track move on the gate in 5 days; momentum exists only if you actually submit.
 
-## ⚠️ Decision Moshiur still owes (DOWN to two from three)
+## ⚠️ The launch gate state
 
-The Day-33 capacity carry-forward had three items. **Two now resolved** (autonomously, within Phase-0 brief scope):
+**4 blockers** (unchanged in count from Day 34, but movement on item 3 is now possible):
 
-1. ✅ **2 GB swap file applied + codified.** Live on staging EC2 + step 0.0 of `infra/scripts/bootstrap-staging.sh` reproduces on fresh rebuild. `vm.swappiness=10` persisted. `/etc/fstab` updated. Verified: `Swap: 2.0Gi` in `free -h`.
-2. ⏳ **CloudWatch >85% memory alarm — STILL OPEN.** Small AWS-write follow-up; out of Phase-0 brief scope (brief: scope = {swap, fstab, swappiness, PM2 config}; CW alarm is "AWS write beyond capacity fix" → STOP-ASK). One Bash command + zero code; can land Day 35 as a 5-minute task at the start of any session.
-3. ⏳ **t3.medium upgrade (4 GB, ~+$15/mo) — STILL OPEN.** Moshiur decision; not autonomously actionable. Swap is a stopgap; production wants real headroom. Decision needed before prod cutover, NOT blocking for the rest of Sprint 4. STOP-ASK any infra session that would resize.
+1. **EPS sandbox credentials confirmed** OR authorized controlled `STAGING_PAYMENT_BLOCK` lift + new `decisions.md` entry per §11.0 (4 × small real charges). **No draft yet.** Day-36+ candidate: I can draft a request-to-EPS memo with integration specs.
+2. **§29 #9 (AIT withholding) tax opinion** — fee calculator math is pre-withholding. **No draft yet.** Day-36+ candidate: I can draft a question memo for tax counsel summarising platform mechanics + the specific legal question.
+3. **SES out-of-sandbox approval** — ⚠️ **DRAFT READY** at `docs/ops/ses-out-of-sandbox-request.md`. Awaiting Moshiur review + submission.
+4. **Trust Center v1.0 documents from counsel** — placeholder DRAFT today; buyer form ships without a binding consent checkbox under v0.1 docs (decisions.md 2026-05-26 Day-34 entry). **Partial scoping in the Day-19 placeholders already.** Day-36+ candidate: I can draft a per-page outline (intent + headings) for each placeholder to give counsel a starting point.
 
-**Decision N truth gate REMAINS THE gating milestone for priced money.** Four pending-Moshiur items (3 unchanged + 1 surfaced today):
+**Standing pattern (decisions.md 2026-05-26 Day-35 entry):** the build track owns surfacing what's draftable. If a session ends without proposing a draft for at least one gate item that I CAN draft, I have silently treated the gate as Moshiur's homework and should be called out.
 
-1. **EPS sandbox credentials confirmed** OR authorized controlled `STAGING_PAYMENT_BLOCK` lift + new `decisions.md` entry per §11.0 (4 × small real charges)
-2. **§29 #9 (AIT withholding) tax opinion** — fee calculator math is pre-withholding
-3. **SES out-of-sandbox approval**
-4. **Trust Center v1.0 documents from counsel** — placeholder DRAFT today; buyer form deliberately ships WITHOUT a binding consent checkbox under v0.1 docs (decisions.md 2026-05-26). Real `consent_records` capture lands as a separate PR once counsel returns v1.0. NEW today as a surfaced blocker.
+## ⚠️ Carry-items from Day 34
 
-## Day 34 deliverables (4 PRs merged today, all green on staging)
+- ⏳ **CloudWatch >85% memory alarm — STILL OPEN.** Small AWS-write follow-up; out of Day-35 Phase-3 scope because no Moshiur pre-authorization for the AWS write. 5-minute task when authorized. Suggested: start any future infra-touching session with this.
+- ⏳ **t3.medium upgrade (4 GB, ~+$15/mo) — STILL OPEN.** Pre-production Moshiur decision. Swap is a stopgap; production wants real headroom. STOP-ASK any infra session that would resize.
 
-**PR #192 (Phase 0) — staging EC2 swap stopgap (`caa292d`):**
+## Day 35 deliverables (3 PRs merged today + EOD memory)
 
-- `infra/scripts/bootstrap-staging.sh` gains step 0.0: 2 GB swap file + chmod 600 + mkswap + swapon + persistent `/etc/fstab` entry + `vm.swappiness=10` via `/etc/sysctl.d/99-eventpulse-swap.conf`. Idempotent — re-running on the already-mitigated instance is a no-op.
-- `docs/runbooks/staging-bootstrap.md` adds "Memory headroom — 2GB swap" section AND a full "Recovering from an in-VM hang" runbook (Stop+Start NOT Reboot when port 443 + SSM both dead but hypervisor healthy; post-recovery checklist).
-- Applied to running staging EC2 via SSM before commit. Verified `Swap: 2.0Gi` + `swappiness=10`.
-- Pre-existing checks confirmed: `pm2-eventpulse.service` enabled, `dump.pm2` saved (boot-resume works); `max_memory_restart` already set in `pm2/ecosystem.config.cjs` (web=512M, api=256M); delivery worker runs inline within api process (not a separate pm2 entry).
+**PR #196 (Phase 0.5) — SES out-of-sandbox case body DRAFT (`b26de1e`):**
 
-**PR #193 (Phase 1) — public buyer registration/purchase form (`789e8c4`):**
+- `docs/ops/ses-out-of-sandbox-request.md` (89 lines) — full AWS Support case body + pre-submission checklist + post-submission "update decisions.md" reminder.
+- Best-guess volume forecast (50k/day, 14/sec) sourced from §16 + §26; edit before submitting if actual differs.
+- This is the FIRST build-track move on any launch-gate item in 5 days.
 
-- `apps/web/src/components/public/buyer-form.tsx` — Client Component island. Inline tier-card quantity steppers + buyer fields (name/email/phone/optional NID-last-4) + subtotal preview + single submit button with bilingual label.
-- Handles all 3 response paths from POST `/api/v1/public/orders`:
-  - FREE (born-paid §13.5) → success state with order reference
-  - PRICED + READY → `window.location.assign(redirectUrl)` to EPS
-  - PRICED + BLOCKED (staging) → sensible "Payments temporarily unavailable" state with order reference (NOT a crash)
-- `Idempotency-Key` per form mount via `crypto.randomUUID()` (fallback for jsdom) — sent on every submit; regenerated only after hard server error.
-- Bilingual labels per §1.3 R12 (English-first with Bangla sub-labels on headings + principal fields).
-- Footer line links to `/terms` + `/refund-policy` via `<Link>` (no blocking consent checkbox — see decisions.md).
-- `EventLanding` rewired to host `<BuyerForm>` in place of the Day-25 placeholder "Buy (coming soon)" CTA.
-- 12 new component tests + 2 updated EventLanding tests (thousand-grouped BDT format; new submit-testid). Axe-clean.
+**PR #197 (Phase 1) — super-admin revenue service + endpoints (`56c5db4`):**
 
-**PR #194 (Phase 2) — full free-event loop e2e smoke (`be9170a` after `be9170a` prettier hotfix):**
+- `apps/api/src/services/admin/revenue.ts` — `getPlatformRevenueDashboard()` (full payload in one query batch: headline 24h KPIs + 30-day time-series in Asia/Dhaka + top-20 leaderboards × 3 + settlement queue + 3 anomaly cards) + `getRevenueLedger()` (drillable detail with §14.10 Invariant 1 per-row check).
+- `apps/api/src/routes/super-admin/revenue.ts` — `GET /api/v1/admin/revenue` + `GET /api/v1/admin/revenue/ledger`, both behind `requireSuperAdminAuth`.
+- 12 DB-gated tests: **4 SECURITY-CRITICAL auth-gate tests** (no token 401, tenant-audience 403, attendee-audience 403, ledger-also-rejects-tenant 403) + 6 dashboard-math tests + 2 ledger drill tests.
+- Service file header documents the security model in full — cross-tenant aggregation IS the point; auth gate is the entire perimeter.
 
-- `apps/api/src/routes/public/orders-full-loop-e2e-smoke.test.ts` — DB-gated single-test 5-step walk: buyer-form POST → free order born-paid → `deliverOrder()` synchronous materialise → tenant attendee list → check-in → sales dashboard headline. Proves the loop the Phase 1 form opened in the browser actually closes end-to-end through every Days-25-33 service.
-- Synchronous `deliverOrder()` (worker's per-job entry point) instead of waiting on the BullMQ worker (the worker boots in `index.ts`, not `createApp()`; calling it directly is the e2e equivalent of "worker processed the queue").
-- QR code read from DB after delivery (the list endpoint deliberately omits it — listing is a browse surface, scanning reads from the physical ticket).
-- `MAIL_DRY_RUN=1` keeps SES out. Zero outbound network.
-- Phase 2 hotfix: prettier-format only; no logic change.
+**PR #198 (Phase 2) — super-admin revenue dashboard UI (`edf25c1`):**
 
-**EOD staging smoke (Phase 3, expected green at session-end re-verification):**
+- `apps/web/src/hooks/use-admin-revenue.ts` — TanStack Query hooks; wire types mirror the API exactly; `credentials: 'include'`.
+- `apps/web/src/app/(admin)/admin/revenue/page.tsx` — 4-card KPI grid + Recharts 2-series LineChart + 2 leaderboards + settlement queue table + 3 anomaly cards + FORBIDDEN-specific error copy.
+- 6 unit tests including loading/empty/happy/403-renders-hint/anomalies/axe-clean.
+- Settlement queue labelled honestly: "Aggregated from paid orders not yet refunded. Disbursement batching lands Sprint 7; no payout action here."
+- EPS reconciliation card is a placeholder stub stating "lands Sprint 7 when `eps_settlements` ships."
 
-- main HEAD = `789e8c4` post-Phase-1; Phase 2 (loop smoke) pending CI / merge / deploy at the time of writing handoff
-- `STAGING_PAYMENT_BLOCK=1` enforcing in `.env.staging` + pm2 env (id=1)
-- 5 vhosts: all 200 / 404 (api 404 at root is correct — only /health + /api/* routes)
-- `/health` DB-aware: 200, db:ok
-- Swap active: 2.0Gi
-- Free-event browser walk-through now possible end-to-end (Moshiur can click through)
+**EOD staging verification (all GREEN):**
 
-## One decision codified today (decisions.md "Sprint 4 Day 34")
+- main HEAD = `edf25c1` post-Phase-2; staging matches; zero drift
+- `STAGING_PAYMENT_BLOCK=1` in `.env.staging` + pm2 env (id=1)
+- Swap: 2.0Gi active, 106Mi used (working under build), swappiness=10
+- 5 vhosts all 200/404 (api 404 at root is correct)
+- `/health`: db=ok
+- `GET /api/v1/admin/revenue` (unauth) → **401 AUTH_REQUIRED** (auth gate live on staging)
 
-- **Phase 0 entry — Staging EC2 swap stopgap; t3.medium flagged.** Swap applied + codified in bootstrap. t3.medium pinned as pre-production capacity decision. swappiness=10 + 1:1 swap rationale documented. The pattern map-cleanly to a future Ansible `swap` role.
-- **Phase 1 entry — No blocking consent checkbox in buyer form under v0.1-placeholder Trust Center.** Footer-link-only pattern. Why: a checkbox bound to a placeholder is performative + audit liability. Real `consent_records` capture lands as a separate PR when counsel returns v1.0 docs. Form layout already has room for the checkbox to slot in.
+## Two decisions codified today (decisions.md "Sprint 4 Day 35")
 
-## One existing gotcha amended today (gotchas.md)
+- **Cross-tenant-by-design + auth-gate-is-the-entire-security-model** for §14.7 platform-revenue surface. Inverse of Day-33 Choice B (which remains the default for everything tenant-facing). The 4 auth-gate tests in `revenue.test.ts` are the security backstop. Settlement queue is READ-ONLY until Sprint 7 — pinned so the widget doesn't drift into action by accretion.
+- **Build-track owns gate-track drafts.** SES draft today is the first; drafts for AIT/Trust Center/EPS land as separate `docs(ops):` PRs when I can produce them. Silent omission is no longer acceptable — if a session ends without proposing a draft for at least one gate item I CAN draft, call it out.
 
-- **Day-33 in-VM-hang entry** — added 2026-05-26 update noting the swap stopgap is applied + codified, with cross-references to the bootstrap script + runbook + Day-34 decisions entry. Items 2 (t3.medium) + 4 (CW alarm) still flagged open.
+## Day 36 — recommended sequence
 
-## Day 35 — what's next
+Sprint 4 (Days 31-40) — five days remain (36/37/38/39/40). Buildable items still in play per §26.1:
 
-Sprint 4 (Days 31-40) — six days remain (35/36/37/38/39/40). Buildable items still in play per §26.1 Sprint 4:
-
-- **Super admin Revenue Dashboard per §14.7** (§26.1 Day 6). Cross-tenant platform-revenue view — the EXCEPTION to the Day-33 Choice-B aggregation guardrail (deliberately cross-tenant; its own audit + access control is the security model). Read-mostly; payment-independent at the display layer. Logical next pickup.
-- **Refund flow + manual disbursement** (§26.1 Day 7-8). Refund flow has free-event applicability (refund-of-paid-zero is a no-op, but the workflow is testable for the priced case once truth-gate clears). Manual disbursement is payment-gated (no real money to disburse until truth gate runs); the UI + BEFTN CSV export can be built+tested with seed data.
+- **Refund flow + manual disbursement** (§26.1 Day 7-8). Refund flow has free-event applicability today (refund-of-paid-zero is a no-op; the workflow is testable for the priced case once truth-gate clears). Manual disbursement UI + BEFTN CSV export can be built + tested with seed data; actual money movement is truth-gate-gated.
 - **Marketing pages** (§26.1 Day 9) — apex `/`, `/features`, `/pricing`, `/contact`, `/legal/changelog`. Mostly static + design-system work. Payment-independent.
-- **Launch readiness** (§26.1 Day 10) — AUP review, prod EC2 cutover, first paying tenant. Cutover is truth-gate-gated.
-- **CW memory alarm** (Phase-0 follow-up) — small 5-minute AWS-write item; do it at the start of the next infra-touching session.
+- **Launch readiness** (§26.1 Day 10) — AUP review, prod EC2 cutover (truth-gate-gated), first paying tenant (gated).
+- **CW memory alarm follow-up** — 5-minute AWS-write item; start session with it if Moshiur pre-authorizes.
 
-**Recommended Day 35 sequence:** super-admin Revenue Dashboard (closes the §14.7 deliverable cleanly + uses the same snapshot-vs-current display discipline as Day 33). Pair with the 5-minute CW alarm at the start of the session if Moshiur authorizes the AWS write.
+**Plus build-track moves on launch-gate drafts** (per Day-35 decision):
 
-## Where things live (quick map)
+- AIT withholding tax-counsel question memo (Day 36+ candidate)
+- Trust Center v1.0 per-page outlines for counsel (Day 36+ candidate)
+- EPS credential request memo with integration specs (Day 36+ candidate)
 
-- **Public buyer form:** `apps/web/src/components/public/buyer-form.tsx` (+ test) — Client Component island.
-- **Public event landing:** `apps/web/src/app/(public)/[tenant]/[event]/page.tsx` + `apps/web/src/components/public/event-landing.tsx` (Server Component hosts BuyerForm).
-- **Public order endpoint:** `apps/api/src/routes/public/orders.ts` + `apps/api/src/services/orders/index.ts` (3 paymentInitState branches: free / ready / blocked).
-- **Free-event bypass:** §13.5 born-paid path inside `createOrder` (`status: 'paid'`, `paymentInitState: 'free'` at return).
-- **Delivery worker entry:** `apps/api/src/workers/delivery-worker.ts` boots in `apps/api/src/index.ts:36`; per-job invocation is `apps/api/src/services/tickets/deliver-order.ts` `deliverOrder()`.
-- **Loop e2e:** `apps/api/src/routes/public/orders-full-loop-e2e-smoke.test.ts` — single 5-step walk from buyer form → dashboard.
-- **Staging bootstrap (with swap):** `infra/scripts/bootstrap-staging.sh` step 0.0.
-- **In-VM-hang recovery runbook:** `docs/runbooks/staging-bootstrap.md` "Recovering from an in-VM hang".
+**Recommended Day 36 sequence:** refund flow service + UI (closes §26.1 Day 7 cleanly) — payment-independent for display; truth-gate-gated for actual EPS refund execution. Pair with one gate-track draft (AIT memo OR Trust Center outlines) so the gate moves AND the build track moves. Pair with the 5-minute CW alarm if Moshiur authorizes the AWS write at session start.
+
+## Where things live (quick map — Day 35 additions)
+
+- **Admin revenue service:** `apps/api/src/services/admin/revenue.ts` (cross-tenant aggregates under `withSuperAdmin`)
+- **Admin revenue routes:** `apps/api/src/routes/super-admin/revenue.ts` (auth-gated)
+- **Admin revenue tests:** `apps/api/src/routes/super-admin/revenue.test.ts` (4 security tests + 8 math/ledger)
+- **Admin revenue UI:** `apps/web/src/app/(admin)/admin/revenue/page.tsx`
+- **Admin revenue hook:** `apps/web/src/hooks/use-admin-revenue.ts`
+- **SES out-of-sandbox draft:** `docs/ops/ses-out-of-sandbox-request.md`
+- **App route mount:** `apps/api/src/app.ts:185` — `app.route('/api/v1/admin/revenue', adminRevenueRoutes)`
 
 ## Standing invariants (still enforcing)
 
-- `STAGING_PAYMENT_BLOCK=1` in `.env.staging` + pm2 env id=1 + `cfg()` enforces in `apps/api/src/infra/eps/client.ts`. Removing it requires a new `decisions.md` entry per §11.0.
+- `STAGING_PAYMENT_BLOCK=1` in `.env.staging` + pm2 env id=1 + `cfg()` in `apps/api/src/infra/eps/client.ts`. Removing requires a new `decisions.md` entry per §11.0.
 - Branch protection: pre-push hook + workflow_dispatch gates on `main`; no direct commits to `main`.
 - Memory protocol: decisions land in `decisions.md` the turn they're made; gotchas the moment learned.
-- Money math single source: `apps/api/src/domain/payments/fee-calculator.ts`. No fee arithmetic elsewhere (`/review` greps for it).
+- Money math single source: `apps/api/src/domain/payments/fee-calculator.ts`. No fee arithmetic elsewhere.
+- Snapshot-vs-current display discipline (Day-33 Choice A, extended to cross-tenant Day-35): money dashboards read snapshotted fee fields, NEVER recompute from current config.
+- Auth-gate-is-the-entire-security-model for `/api/v1/admin/*` (Day-35): every admin endpoint MUST have audience-rejection tests pinning 403 for tenant/attendee tokens.
+- Build-track owns surfacing what's draftable for the launch gate (Day-35): drafts for SES/AIT/Trust-Center/EPS land as separate `docs(ops):` PRs; silent omission flagged.
