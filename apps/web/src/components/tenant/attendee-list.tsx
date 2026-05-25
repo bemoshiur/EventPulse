@@ -119,6 +119,23 @@ export function AttendeeList({ eventId, tiers }: AttendeeListProps) {
     setFilter((prev) => ({ ...prev, ...patch }))
   }
 
+  // CSV export — anchor (not button) so the browser handles the
+  // download naturally. Respects the current search + filter.
+  function buildExportHref(): string {
+    const fromEnv = process.env['NEXT_PUBLIC_API_BASE_URL']
+    const base = fromEnv && fromEnv.length > 0 ? fromEnv.replace(/\/$/, '') : ''
+    const params = new URLSearchParams()
+    const searchVal = searchInput.trim()
+    if (searchVal.length > 0) params.set('search', searchVal)
+    if (filter.tierId) params.set('tierId', filter.tierId)
+    if (filter.checkIn && filter.checkIn !== 'all') params.set('checkIn', filter.checkIn)
+    if (filter.orderStatus && filter.orderStatus !== 'all') {
+      params.set('orderStatus', filter.orderStatus)
+    }
+    const qs = params.toString()
+    return `${base}/api/v1/tenant/events/${eventId}/attendees/export${qs ? `?${qs}` : ''}`
+  }
+
   return (
     <section aria-label="Attendees" className="space-y-6">
       {/* Filter bar */}
@@ -205,6 +222,18 @@ export function AttendeeList({ eventId, tiers }: AttendeeListProps) {
             ))}
           </select>
         </div>
+
+        {/* Export CSV — respects the active search + filter. Anchor
+            (not button) so the browser handles the download naturally;
+            the server writes an audit row per Phase-3 decision. */}
+        <a
+          href={buildExportHref()}
+          download
+          className="inline-flex items-center gap-2 rounded-md border border-[var(--ep-violet)]/40 bg-[var(--ep-violet)]/10 px-3 py-2 text-sm font-medium text-[var(--ep-violet)] hover:bg-[var(--ep-violet)]/20"
+          data-testid="export-csv-link"
+        >
+          ⬇ Export CSV
+        </a>
       </div>
 
       {/* Results */}
