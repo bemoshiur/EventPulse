@@ -4,6 +4,32 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## WHATWG `Response.text()` strips a leading UTF-8 BOM during decoding (2026-05-25 / Day 32 Phase 3 hotfix)
+
+**Symptom.** Phase 3 CSV export shipped with UTF-8 BOM (`\xEF\xBB\xBF`) at the start of the body so Excel-on-Windows opens Bangla attendee names correctly. Integration test asserted `expect(body.startsWith('﻿')).toBe(true)` against `await res.text()`. CI Integration + RLS job failed: `expected false to be true`. All other Phase 3 checks (unit tests, Playwright e2e, typecheck, lint, build, CodeQL) passed.
+
+**Why it happens.** The WHATWG fetch spec's `Response.text()` decodes the body as UTF-8 and consumes a leading BOM as an encoding marker (not as content). It is by-spec behaviour, not a bug — the BOM tells the decoder "this is UTF-8", and the decoder eats the marker. The exact byte sequence `\xEF\xBB\xBF` IS on the wire; `text()` just doesn't surface it.
+
+This is consistent across Node 18+ fetch, undici, browser fetch, and Hono's response wrapper.
+
+**Fix.** Verify BOMs via `arrayBuffer()`, not `text()`:
+
+```ts
+const buf = new Uint8Array(await res.arrayBuffer())
+expect(buf[0]).toBe(0xef)
+expect(buf[1]).toBe(0xbb)
+expect(buf[2]).toBe(0xbf)
+const body = new TextDecoder('utf-8').decode(buf) // BOM-aware; use only AFTER the byte assertion
+```
+
+The service code (which writes the BOM byte-sequence as the first character of the CSV string) is unchanged and correct. The test was looking at the post-decoder view; the wire bytes are what matter for Excel-on-Windows.
+
+**How to avoid.** Any test that asserts on encoding markers (BOM, byte-order mark, or any control-byte sequence that decoders may consume) MUST read the response as `ArrayBuffer` and assert on bytes directly. `text()` is the wrong tool for byte-level assertions.
+
+**Cross-references:** `decisions.md` "Sprint 4 Day 32" Choice A (CSV export with UTF-8 BOM is the load-bearing format detail for Excel-on-Windows Bangla rendering); commit `84ac4ff` (the hotfix).
+
+---
+
 ## Hono middleware that hashes request body MUST use `c.req.raw.clone().text()`, NOT `c.req.text()` (2026-05-25 / Day 29 Phase 1 hotfix #1)
 
 **Symptom.** Day 29 Phase 1 idempotency middleware shipped with `await c.req.text()` for body hashing. All 12 unit tests against `app.request()` passed. Production smoke after deploy returned plain-text "Internal Server Error" (not the route handler's typed 4xx envelope) for any POST with a non-trivial body.
