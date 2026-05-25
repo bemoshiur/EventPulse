@@ -250,6 +250,10 @@ describeIfDb('POST /api/v1/tenant/events/:eventId/checkin', () => {
   let tenantB: ScopeFixture
 
   beforeAll(async () => {
+    // Test JWT secret — matches the test-only pattern in
+    // kyc-drafts.test.ts. signTokens() reads at call time.
+    process.env['JWT_ACCESS_SECRET'] = 'x'.repeat(64)
+    process.env['JWT_REFRESH_SECRET'] = 'y'.repeat(64)
     tenantA = await seedTenantScope(`${Date.now()}-a`)
     fxs.push(tenantA)
     tenantB = await seedTenantScope(`${Date.now()}-b`)
@@ -523,6 +527,8 @@ describeIfDb('GET /api/v1/tenant/events/:eventId/checkin/stats', () => {
   let fx: ScopeFixture
 
   beforeAll(async () => {
+    process.env['JWT_ACCESS_SECRET'] = 'x'.repeat(64)
+    process.env['JWT_REFRESH_SECRET'] = 'y'.repeat(64)
     fx = await seedTenantScope(`${Date.now()}-stats`)
   })
 
