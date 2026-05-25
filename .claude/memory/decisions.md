@@ -4,6 +4,92 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-26 · AIT (Advance Income Tax) treatment under ITA 2023 — RESOLVED (CA consultation + follow-up)
+
+**Resolves:** CLAUDE.md §29 #9 "AIT withholding classification" — open since v1.0 (16 May 2026).
+
+**Context:** Bangladesh income-tax withholding treatment for Event Pulse's two-leg money flow (tenant ticket revenue disbursement + platform commission collection) had been an open §29 item flagged as "MUST get legal opinion before MVP launch" — and one of the four launch-gate blockers carried through Days 31–35. Moshiur consulted a CA on 2026-05-25, with a follow-up confirming the provisional commission-handling option. The decision below captures the CA's FINAL position, supersedes any earlier provisional drafts of this entry, and removes AIT from the launch-gate blocker list.
+
+### Decision — leg-by-leg
+
+#### Leg 1 — Disbursement of net ticket revenue to organiser: **NO AIT withholding**
+
+Event Pulse operates as a **disclosed Agent / payment facilitator**, NOT a Principal/reseller. Ticket revenue legally belongs to the organiser from the moment of sale; we collect in a fiduciary capacity and take a fee for the software + payment-gateway service. Remitting the organiser's own money to them is not a "payment for a supply/service" under ITA 2023, so no AIT is deducted on disbursement.
+
+**Code impact: NONE.** The fee calculator's pre-withholding `netToOrganiserPaisa` is CONFIRMED CORRECT as-is. The `withholdingTaxPaisa` column on `orders` (migration 0013) stays 0 for the disbursement leg in the steady-state design. The §14.10 ledger invariant 1 (`total = net + platformFee + epsFee + withholdingTax`) holds with `withholdingTax = 0` for ordinary tenant-disbursement orders.
+
+**Hard dependency on Trust Center v1.0 / counsel blocker:** This Agent treatment holds **ONLY IF** the Terms of Service + Organiser Agreement explicitly establish the agency / facilitator relationship. If the contracts characterise us as a principal/reseller (or are silent), we risk Principal characterisation → 5% AIT withholding on gross organiser payments under ITA 2023 §89/§140 ("specified person" if turnover > BDT 1 Crore). **The legal docs are now a tax-correctness requirement, not only a consent gate.** Counsel must establish agency in the contracts.
+
+#### Leg 2 — Platform commission (~0.25% fee): 10% AIT under ITA 2023 §93 — **organiser self-deposit (Option 1, CONFIRMED compliant by CA)**
+
+Two organiser types behave differently:
+
+- **Specified-person organisers** (registered company / NGO / trust / partnership per §140): organiser is solely responsible for withholding + depositing the 10% AIT on the commission and providing us a valid A-Challan within **10–15 days of transaction month-end**. The A-Challan is our absolute audit protection. If not provided in time, we may recover the 10% from future disbursements / hold-back / direct invoice (recovery clause in the Organiser Agreement).
+- **Individual (unregistered) organisers:** NO AIT obligation at the transaction level. We take the full 0.25% commission as gross revenue; it flows into normal corporate income tax at year-end. No per-transaction handling.
+
+**PSR (Proof of Submission of Return) conditional:** organiser without PSR → AIT rate is effectively 15% (50% surcharge per §93). This is the organiser's obligation to compute and deposit, not ours.
+
+**Code impact: calculator UNCHANGED — we take the full commission in both cases.** New requirements are COMPLIANCE TRACKING, not fee math:
+
+1. **A-Challan tracking field + status** (`pending` / `received` / `overdue`) on specified-person organisers' tenant rows or a dedicated `tenant_ait_challans` table, keyed off the existing `tenants.type` ('organisation' = specified person; 'individual' = exempt at transaction level).
+2. **Recovery trigger on overdue A-Challan** — ties to the disbursement flow (Sprint-7-era; deferred until disbursement_batches exists). Data model should anticipate this so the recovery hold-back lands cleanly on top.
+
+The organiser-type branch reads existing KYC data (`tenants.type`); no new tenant-typing work is required for this AIT handling.
+
+### Contract requirements (the counsel brief for Trust Center v1.0)
+
+Two concrete clause families needed in the legal docs counsel returns. These are the tax-correctness scaffolding for the decisions above:
+
+**A. Agency model — Terms of Service + Organiser Agreement** (load-bearing for Leg-1 no-withholding):
+
+- Platform = exclusive technology provider + payment facilitator.
+- Organiser = sole Seller of tickets.
+- Platform NEVER takes title to inventory.
+- Organiser controls pricing, inventory, terms of sale.
+- All risk (cancellations / chargebacks / disputes / refunds) sits on the organiser.
+- Ticket revenues held in fiduciary / trust capacity; disbursed minus fees.
+
+**B. Commission AIT — Organiser Agreement** (load-bearing for Leg-2 Option 1):
+
+- Specified-person organiser is **solely responsible** for withholding + depositing the AIT on the platform fee.
+- A-Challan delivery within strict timeframe (10–15 days post month-end).
+- Recovery + indemnification if A-Challan not provided in time.
+
+### What this is NOT
+
+- **Not a license to skip the calculator's withholding column.** The column stays in the schema + ledger invariant. The steady-state value is 0 for disbursement; if a future tax treatment ever requires non-zero values on the disbursement leg, the schema is ready and the §14.10 invariant verifier already catches misuse.
+- **Not a deferral of the A-Challan tracking work.** It's Sprint-7-adjacent (lands when disbursement batching does), but the data model should anticipate the tracking field so the eventual implementation is a clean addition rather than a schema migration scramble.
+- **Not approval to ship before counsel returns the agency clauses.** The Leg-1 no-withholding treatment is contingent on agency being explicit in the contracts. Shipping with placeholder TOS would technically risk a Principal characterisation; the gate-track Trust Center v1.0 blocker now carries this tax-correctness weight, not only the consent-capture weight.
+
+### Why this is a decisions-layer entry
+
+A future PR that:
+
+- Adds a withholding calculation on the disbursement leg "for safety" → ITA 2023 doesn't require it for agents; pinning agency means we don't withhold; calculator stays correct. Don't add code that fights the legal model.
+- Treats individual organisers as if they owed AIT on the commission → they don't, per §140 specified-person definition. The branch on `tenants.type` matters.
+- Ships an Organiser Agreement without the agency clauses or the A-Challan recovery clause → re-opens the tax exposure. Counsel brief above is the requirements list.
+- Treats §29 #9 as still-open → it's resolved as of this entry. The Trust-Center-v1.0 blocker absorbs the residual contract-clause work; the AIT semantics are settled.
+
+### Consequences
+
+- **Launch gate drops from 4 to 3 blockers.** Remaining: (1) EPS sandbox credentials, (2) SES out-of-sandbox (DRAFT ready at `docs/ops/ses-out-of-sandbox-request.md` PR #196), (3) Trust Center v1.0 from counsel — **now carrying the AIT contract-clauses requirement as a tax-correctness gate, not only consent.**
+- **Truth-gate calculator verification is UNAFFECTED.** The pre-withholding `netToOrganiserPaisa` is now confirmed correct, not a gap to be reconciled at truth-gate time. The §14.10 invariants verifier (PR #177, Day 30) continues to enforce conservation per order; `withholdingTax = 0` for the disbursement leg is the steady-state, not a placeholder.
+- **A-Challan tracking** is a Sprint-7-era data-model addition (alongside `disbursement_batches`). Today's `tenants` + `orders` schema is sufficient; the tracking field lands when disbursement does.
+- **CLAUDE.md §29 #9 should be marked resolved** in the next playbook revision, with a reference back to this decisions entry.
+
+### Cross-references
+
+- CLAUDE.md §15.2 (NBR — VAT, withholding) — the spec section that flagged this as OPEN.
+- CLAUDE.md §14.4 + §14.10 (fee + ledger invariants) — the calculator's correctness contract this decision confirms.
+- CLAUDE.md §29 #9 (Open Decisions) — the item this entry resolves.
+- CLAUDE.md §20 + §21 (Trust Center + legal positioning) — where the agency-model + commission-AIT clauses land in the v1.0 contracts.
+- `apps/api/src/domain/payments/fee-calculator.ts` — the calculator confirmed correct by this decision.
+- `apps/api/src/db/schema/index.ts` `orders.withholdingTaxPaisa` (migration 0013) — column stays in steady-state design.
+- `apps/api/src/services/orders/verify-invariants.ts` (Day 30, PR #177) — §14.10 invariant verifier; correctness confirmed for `withholdingTax = 0` on the disbursement leg.
+- `decisions.md` 2026-05-26 Day 35 Phase 0.5 entry — the build-track-owns-gate-track-drafts pattern; the counsel brief above is the next concrete brief to hand to legal.
+
+---
+
 ## 2026-05-26 · Sprint 4 Day 35 — Super-admin revenue dashboard: cross-tenant by design; auth gate is the entire security model
 
 **Context:** Day 35 shipped the §14.7 platform-operator financial cockpit at `/api/v1/admin/revenue` + `/admin/revenue` (PRs #197 service + #198 UI). The Day-33 tenant-dashboard architecture (Choice B — aggregates always run under `withTenant()` + explicit `WHERE tenant_id =` dual defence) is the **inverse** of what §14.7 requires. The Day-33 entry called §14.7 out as the explicit exception; this entry codifies the inverse pattern.

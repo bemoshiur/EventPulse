@@ -1,7 +1,16 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-05-26 (Sprint 4 Day 35 SHIPPED — super-admin platform revenue dashboard §14.7 + first concrete build-track move on the launch gate).
+**Last update:** 2026-05-26 (Sprint 4 Day 35 SHIPPED + **AIT blocker RESOLVED via CA consultation — launch gate 4 → 3**).
 **Driver:** Claude Code (Opus 4.7) — Sprint 4 Day 35; **next session opens Day 36.**
+
+## ⚠️ Major gate-state change (2026-05-26 post-EOD)
+
+**AIT (Advance Income Tax) treatment under ITA 2023 — RESOLVED via CA consultation.** Decision codified in `decisions.md` (2026-05-26 entry, top of file). Net effect:
+
+- **Leg 1 (disbursement to organiser): NO AIT withholding.** Calculator's pre-withholding `netToOrganiserPaisa` confirmed CORRECT. `withholdingTaxPaisa = 0` is the steady-state, not a placeholder. **§29 #9 closed.**
+- **Leg 2 (platform commission): 10% AIT under §93 — organiser self-deposit (Option 1).** Specified-person organisers withhold + deposit themselves + provide A-Challan within 10-15 days post month-end. Individual (unregistered) organisers exempt at transaction level. **Calculator UNCHANGED.** Compliance is A-Challan tracking (Sprint-7-era; data model anticipates).
+- **Coupling created:** the Leg-1 no-withholding treatment is contingent on the TOS + Organiser Agreement establishing the agency model explicitly. The Trust-Center-v1.0 blocker (item 3 below) now carries this tax-correctness weight on top of consent. Counsel brief documented in the decisions entry (agency-model clauses + commission-AIT recovery clauses).
+- **Launch gate: 4 → 3.**
 
 ## ⚠️ FIRST THING DAY 36 — review the SES draft
 
@@ -13,18 +22,17 @@
 4. Submit via AWS Support Center → Service Limit Increase → SES Sending Limits → Production Access.
 5. Paste the outcome into `decisions.md` once AWS responds.
 
-**If submitted + approved, the launch gate drops from 4 to 3.** This is the first build-track move on the gate in 5 days; momentum exists only if you actually submit.
+**If submitted + approved, the launch gate drops from 3 to 2.** AIT moved the gate from 4 to 3 today already; SES is the next-cheapest move.
 
-## ⚠️ The launch gate state
+## ⚠️ The launch gate state — NOW 3 blockers (was 4)
 
-**4 blockers** (unchanged in count from Day 34, but movement on item 3 is now possible):
+1. **EPS sandbox credentials confirmed** OR authorized controlled `STAGING_PAYMENT_BLOCK` lift + new `decisions.md` entry per §11.0 (4 × small real charges). **No draft yet.** Day-36+ candidate: I can draft a request-to-EPS memo with integration specs (the in-house wrapper at `apps/api/src/infra/eps/`, the merchantTransactionId format per §11.4, the truth-gate definition) so EPS issues credentials matching our integration.
+2. **SES out-of-sandbox approval** — ⚠️ **DRAFT READY** at `docs/ops/ses-out-of-sandbox-request.md`. Awaiting Moshiur review + submission.
+3. **Trust Center v1.0 documents from counsel** — placeholder DRAFT today; buyer form ships without a binding consent checkbox under v0.1 docs (decisions.md 2026-05-26 Day-34 entry). **Now also carrying the AIT contract-clauses requirement** — the agency-model clauses + commission-AIT recovery clauses from the AIT decision are part of the counsel brief. Day-36+ candidate: I can draft a per-page outline + the specific tax-correctness contract clauses (agency model + commission-AIT recovery) for counsel to flesh out — the clauses are now well-specified by the AIT decision.
 
-1. **EPS sandbox credentials confirmed** OR authorized controlled `STAGING_PAYMENT_BLOCK` lift + new `decisions.md` entry per §11.0 (4 × small real charges). **No draft yet.** Day-36+ candidate: I can draft a request-to-EPS memo with integration specs.
-2. **§29 #9 (AIT withholding) tax opinion** — fee calculator math is pre-withholding. **No draft yet.** Day-36+ candidate: I can draft a question memo for tax counsel summarising platform mechanics + the specific legal question.
-3. **SES out-of-sandbox approval** — ⚠️ **DRAFT READY** at `docs/ops/ses-out-of-sandbox-request.md`. Awaiting Moshiur review + submission.
-4. **Trust Center v1.0 documents from counsel** — placeholder DRAFT today; buyer form ships without a binding consent checkbox under v0.1 docs (decisions.md 2026-05-26 Day-34 entry). **Partial scoping in the Day-19 placeholders already.** Day-36+ candidate: I can draft a per-page outline (intent + headings) for each placeholder to give counsel a starting point.
+~~4. §29 #9 AIT withholding tax opinion~~ — ✅ **RESOLVED 2026-05-26** via CA consultation. See decisions.md top-of-file entry. Calculator unchanged; compliance tracking Sprint-7-era.
 
-**Standing pattern (decisions.md 2026-05-26 Day-35 entry):** the build track owns surfacing what's draftable. If a session ends without proposing a draft for at least one gate item that I CAN draft, I have silently treated the gate as Moshiur's homework and should be called out.
+**Standing pattern (decisions.md 2026-05-26 Day-35 entry):** the build track owns surfacing what's draftable. If a session ends without proposing a draft for at least one gate item that I CAN draft, I have silently treated the gate as Moshiur's homework and should be called out. With AIT resolved, the natural Day-36+ draft is the Trust-Center-v1.0 counsel brief (now with concrete agency + commission-AIT clauses to specify).
 
 ## ⚠️ Carry-items from Day 34
 
