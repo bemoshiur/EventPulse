@@ -253,15 +253,21 @@ describeIfDb('GET /api/v1/tenant/events/:eventId/attendees/export', () => {
     expect(res.headers.get('content-disposition')).toMatch(/^attachment; filename="attendees-/)
     expect(res.headers.get('x-row-count')).toBe('2')
 
-    const body = await res.text()
-    // BOM + header line
-    expect(body.startsWith('﻿')).toBe(true)
+    // BOM check must be against the RAW bytes — WHATWG Response.text()
+    // strips a leading UTF-8 BOM during decoding (it treats it as an
+    // encoding marker, not content). Verify EF BB BF in the buffer.
+    const buf = new Uint8Array(await res.arrayBuffer())
+    expect(buf[0]).toBe(0xef)
+    expect(buf[1]).toBe(0xbb)
+    expect(buf[2]).toBe(0xbf)
+    const body = new TextDecoder('utf-8').decode(buf)
     expect(body).toMatch(
       /attendee_id,attendee_name,attendee_email,attendee_phone,ticket_tier,order_status,checked_in_at,checked_in_gate,voided_at,registered_at/,
     )
-    // Two data rows (3 lines incl header; CRLF + trailing newline)
-    const dataLines = body.split('\r\n').filter((l) => l && !l.startsWith('﻿'))
-    expect(dataLines.length).toBe(3) // header + 2 attendees (the first line has the BOM stripped above)
+    // Three CRLF-terminated lines: header + 2 attendees. (Trailing \r\n
+    // means the split yields one extra empty element at the end.)
+    const dataLines = body.split('\r\n').filter((l) => l.length > 0)
+    expect(dataLines.length).toBe(3)
 
     // Audit row written exactly once for this export
     const audits = await withSuperAdmin((db) =>
