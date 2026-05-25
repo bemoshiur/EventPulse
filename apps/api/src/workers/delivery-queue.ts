@@ -41,8 +41,8 @@
  */
 
 import { Queue } from 'bullmq'
+import { Redis } from 'ioredis'
 
-import { getRedis } from '../infra/redis/client.js'
 import { logger } from '../lib/logger.js'
 
 export const DELIVERY_QUEUE_NAME = 'tickets-delivery'
@@ -53,6 +53,35 @@ export interface DeliveryJobData {
 }
 
 let _queue: Queue<DeliveryJobData> | null = null
+let _bullRedis: Redis | null = null
+
+/**
+ * BullMQ requires a DEDICATED Redis connection with
+ * `maxRetriesPerRequest: null` (BullMQ uses blocking commands like
+ * BRPOPLPUSH; the singleton at `infra/redis/client.ts` is bounded to
+ * 2 retries for the EPS token-cache hot path).
+ *
+ * If we reused the singleton, BullMQ's Worker constructor throws:
+ *   "Your redis options maxRetriesPerRequest must be null."
+ *
+ * So delivery-queue + delivery-worker share a SEPARATE Redis
+ * connection. Both queue (producer) + worker (consumer) get it via
+ * `getBullRedis()`.
+ */
+export function getBullRedis(): Redis | null {
+  if (_bullRedis) return _bullRedis
+  const url = process.env['REDIS_URL']
+  if (!url) return null
+  _bullRedis = new Redis(url, {
+    maxRetriesPerRequest: null, // BullMQ requirement
+    enableReadyCheck: true,
+    lazyConnect: true,
+  })
+  _bullRedis.on('error', (err) => {
+    logger.warn({ err: err.message }, 'tickets.bull_redis.error')
+  })
+  return _bullRedis
+}
 
 /**
  * Lazy-init the queue. Returns null if REDIS_URL isn't set (BullMQ
@@ -60,7 +89,7 @@ let _queue: Queue<DeliveryJobData> | null = null
  */
 export function getDeliveryQueue(): Queue<DeliveryJobData> | null {
   if (_queue) return _queue
-  const redis = getRedis()
+  const redis = getBullRedis()
   if (!redis) {
     return null
   }
@@ -115,9 +144,17 @@ export async function enqueueOrderDelivery(input: DeliveryJobData): Promise<Enqu
 }
 
 /**
- * Test helper — reset the queue singleton so a test can inject a
- * different Redis client (e.g. ioredis-mock).
+ * Test helper — reset the queue + Bull-Redis singletons so a test
+ * can re-init with different env / mock injection.
  */
 export function _resetDeliveryQueueForTest(): void {
   _queue = null
+  if (_bullRedis) {
+    try {
+      _bullRedis.disconnect()
+    } catch {
+      // best effort
+    }
+  }
+  _bullRedis = null
 }

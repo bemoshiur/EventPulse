@@ -36,12 +36,16 @@
 
 import { Worker, type Job } from 'bullmq'
 
-import { getRedis } from '../infra/redis/client.js'
 import { logger } from '../lib/logger.js'
 
 import { deliverOrder } from '../services/tickets/deliver-order.js'
 
-import { DELIVERY_JOB_NAME, DELIVERY_QUEUE_NAME, type DeliveryJobData } from './delivery-queue.js'
+import {
+  DELIVERY_JOB_NAME,
+  DELIVERY_QUEUE_NAME,
+  getBullRedis,
+  type DeliveryJobData,
+} from './delivery-queue.js'
 
 let _worker: Worker<DeliveryJobData> | null = null
 
@@ -52,7 +56,10 @@ let _worker: Worker<DeliveryJobData> | null = null
  */
 export function startDeliveryWorker(): Worker<DeliveryJobData> | null {
   if (_worker) return _worker
-  const redis = getRedis()
+  // Use the dedicated BullMQ Redis connection (singleton's
+  // maxRetriesPerRequest=2 is incompatible with BullMQ blocking
+  // commands per delivery-queue.ts comment).
+  const redis = getBullRedis()
   if (!redis) {
     logger.warn('tickets.delivery_worker.not_started.no_redis')
     return null
