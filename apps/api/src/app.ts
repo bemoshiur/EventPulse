@@ -7,6 +7,7 @@ import { authRoutes } from './routes/auth.js'
 import { oauthRoutes } from './routes/oauth-routes.js'
 import { publicEventsRoutes } from './routes/public/events.js'
 import { publicLegalRoutes } from './routes/public/legal.js'
+import { epsReturnRoutes } from './routes/public/orders-eps-return.js'
 import { publicOrdersRoutes } from './routes/public/orders.js'
 import { epsWebhookRoutes } from './routes/webhooks/eps.js'
 import { feeConfigRoutes } from './routes/super-admin/fee-config.js'
@@ -86,6 +87,13 @@ export function createApp() {
   // awaiting_payment regardless. Day 27 ships the EPS callback
   // handler that completes the lifecycle.
   app.route('/api/v1/public/orders', publicOrdersRoutes)
+  // EPS browser redirect handlers — Sprint 3 Day 27 Phase 3. Buyer
+  // lands here from EPS hosted page after success/fail/cancel. The
+  // redirect URL itself is NEVER authoritative (§1.3 R3); the handler
+  // reconciles via settleOrderFromEps (same verify-by-callback model
+  // as the webhook), then redirects the browser to the appropriate
+  // frontend page at ${EVENTPULSE_WEB_BASE_URL}/orders/return/*.
+  app.route('/api/v1/public/orders/eps-return', epsReturnRoutes)
   // EPS server-to-server webhook — Sprint 3 Day 27 Phase 2. The
   // authentication model is "verify-by-callback" per §11.1 step 11:
   // the handler treats the payload as a notification trigger only;
