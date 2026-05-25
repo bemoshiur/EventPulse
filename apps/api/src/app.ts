@@ -15,6 +15,7 @@ import { adminKycRoutes } from './routes/super-admin/kyc.js'
 import { adminLegalRoutes } from './routes/super-admin/legal.js'
 import { adminTicketTiersRoutes } from './routes/super-admin/ticket-tiers.js'
 import { accountTypeRoutes } from './routes/tenant/account-type.js'
+import { checkInRoutes } from './routes/tenant/checkin.js'
 import { eventsRoutes } from './routes/tenant/events.js'
 import { kycDraftRoutes } from './routes/tenant/kyc-drafts.js'
 import { kycRoutes } from './routes/tenant/kyc.js'
@@ -125,6 +126,14 @@ export function createApp() {
   // inside the sub-router; the tenant scope comes from requireTenantAuth
   // applied inside the router.
   app.route('/api/v1/tenant/events/:eventId/tickets', tenantTicketTiersRoutes)
+  // Check-in routes — Sprint 4 Day 31 Phase 1 per §10.2.
+  // POST /api/v1/tenant/events/:eventId/checkin     {qrCode, gate}
+  // GET  /api/v1/tenant/events/:eventId/checkin/stats
+  // Tenant-staff authed via requireTenantAuth inside the router.
+  // Per-role gate (Owner/Admin/Editor/Scanner per §5.4 vs Finance
+  // can't) is a Sprint 4+ carry — no requireRole middleware exists
+  // yet; MVP allows any tenant member.
+  app.route('/api/v1/tenant/events', checkInRoutes)
 
   // Super admin routes — Sprint 2 Day 18 Item 13 + Day 19 Item 15.
   // Mounted under /api/v1/admin/* per §10.4. requireSuperAdminAuth
