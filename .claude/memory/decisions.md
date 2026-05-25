@@ -4,6 +4,79 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-25 · Sprint 4 Day 32 — Attendee list (CRM) + CSV export; bulk-PII-extraction audit policy
+
+**Context:** Sprint 4 Day 32 shipped 3 PRs (one per phase) completing §26.1 Sprint 4 Day 1-2 deliverable (Attendee CRM — search, filter, export CSV).
+
+- PR #184 (Phase 1) — tenant attendee list service + endpoint (`4d9a2b3`)
+- PR #185 (Phase 2) — attendee list UI (TanStack hook + plain-table page + filter bar) (`e41db45`)
+- PR #186 (Phase 3) — CSV export — audited, UTF-8, RLS-scoped (`2c71520`); 1 hotfix for the WHATWG-BOM-strip gotcha (caught in CI)
+
+Two architectural choices warrant codification.
+
+### Choice A — Bulk PII extraction audit policy (list ≠ export)
+
+**Decision:** The attendee LIST endpoint does NOT write per-row audit; the CSV EXPORT endpoint writes exactly ONE audit row per request, regardless of row count (including row_count=0 cross-tenant probes).
+
+**Why the asymmetry:**
+
+The list endpoint is per-page operational read — tenant viewing OWN attendees. Per-row audit on a paginated list of N attendees would write N audit rows per page load, drowning out the interesting state-changing events. This mirrors the Decision G precedent (Item 13 / Day 18 / 2026-05-18) where the KYC list view does NOT audit per row but the detail view DOES.
+
+The CSV export is fundamentally different — it's a **discrete operational event** where potentially thousands of PII records leave the platform as a single user action. The right audit granularity is one row per export, capturing:
+
+- Actor user (who clicked Export)
+- Event id (whose data left)
+- Row count (how much)
+- Filter snapshot (search + tier + check-in + order-status applied at export time)
+- IP + user-agent
+
+Crucially, the audit row does NOT capture per-attendee names/emails. Those still live on the attendees rows themselves; replicating them in the audit trail violates §1.3 R5 (PII spreading) without adding regulator value. The audit answers "who exported whose data, when, with what filter" — enough for forensic reconstruction, no more.
+
+**Cross-tenant export attempts get audited too.** The audit row is written inside `withTenant(tenantId)` so it carries the CALLER's tenant id (not the target's). When tenant B probes for tenant A's data, the audit row records "tenant B's actor exported event A, row_count=0". That's operationally interesting — ops dashboards can surface "tenant X has been probing other tenants' exports" as anomaly signal.
+
+**Why this is a decisions-layer entry:**
+
+A future PR that "simplifies" by either:
+
+- Adding per-row audit to the list endpoint → would generate N rows per page load, noise that drowns out real state-changing events. Pin "list does NOT audit" here.
+- Removing the export audit because "it's just a read" → loses the regulator-facing trail for PII extraction. Pin "export DOES audit" here.
+- Capturing PII fields in the export audit "for completeness" → violates §1.3 R5 spreading. Pin "audit captures action+filter only, never row content" here.
+
+**Consequences:**
+
+- Pinned by `apps/api/src/routes/tenant/attendees.test.ts` test "list endpoint does NOT write per-row audit_logs entries" (the negative test).
+- Pinned by `apps/api/src/routes/tenant/attendees-export.test.ts` test "happy path writes exactly one audit row" + "cross-tenant export → 0 rows + audit row recording the attempt".
+- Future PII-export-class endpoints (financial-statement export, attendee-list-emailed-to-bcc, etc.) inherit this pattern: one audit row per discrete operational event, capturing action+filter, never row content.
+
+### Choice B — Phase boundary ≠ scope boundary
+
+**Decision (process-level, worth codifying):** Phases are boundaries for PR shape (one focused PR per logical change), NOT boundaries for scope splits when the scope is naturally one logical change.
+
+Phase 3's `feat(attendees): CSV export` bundled:
+
+- New service (`exportEventAttendees`)
+- New audit helper (`writeAttendeesExported`)
+- New route handler with text/csv response shaping
+- New unit tests (11) + integration tests (6)
+- **New UI download button (1 anchor + 3 tests)**
+
+The download button (~10 lines) is meaningless without the endpoint, and the endpoint is unverified-end-to-end without the button. Splitting them into 3a (backend) + 3b (frontend) would have produced two PRs that are each individually unhelpful. They're one logical change.
+
+**Why this is worth codifying:**
+
+The brief's "ONE focused PR per logical change" rule could be misread as "one PR per file group / per app / per app-tier." The actual intent is "what could a reviewer hold in their head as a single atomic shipped feature." For CSV export, that's "the user can now click Export CSV and get an audited file." Backend-only OR frontend-only doesn't satisfy that bar.
+
+Counter-example where splits ARE appropriate: Days 27-29's order pipeline shipped as Phase 1 (idempotency middleware) + Phase 2 (capacity lock) as separate PRs because each was independently shippable + testable — middleware works without the lock, lock works without the middleware.
+
+The principle: **a logical change is one whose value can't be measured without all its parts.**
+
+**Cross-references:**
+
+- `decisions.md` "Day 28 architectural choices" Choice C (delivery decoupled from settlement) — opposite case: separable concerns get separable PRs
+- `decisions.md` "Day 29 architectural choices" Choice A + B (idempotency fail-closed + capacity lock fail-open) — separable concerns even though both touch the same endpoint
+
+---
+
 ## 2026-05-25 · Sprint 4 Day 31 — Web QR scanner + Check-In; optimistic-admit offline door policy
 
 **Context:** Sprint 4 Day 31 shipped 3 PRs (one per phase) consuming Day 28's QR tokens via the §26.1 Sprint 4 Day 3-4 deliverable.
