@@ -131,6 +131,61 @@ secret_put() {
   rm -f "$tmp"
 }
 
+# ─── 0.0) Memory headroom — swap file ────────────────────────────────
+#
+# Staging runs on t3.small (2GB RAM, no instance-store swap). The full
+# stack — Next.js web + Hono API (with inline BullMQ delivery worker) +
+# Postgres + Redis — peaks close enough to that ceiling that a transient
+# spike can OOM-kill the kernel into an in-VM hang (port 443 + SSM agent
+# both unresponsive, hypervisor still healthy). The Day-33 incident
+# (2026-05-25, recovered via EC2 Stop+Start) was this signature.
+#
+# A 2GB swap file gives the kernel a safety valve. swappiness=10 keeps
+# swap as a fallback rather than a routine eviction target — staging
+# should still feel hot-memory under normal load.
+#
+# Idempotent: re-running skips each substep when the desired state is
+# already in place.
+#
+# This is a STAGING stopgap. Production cutover should size the instance
+# to t3.medium (4GB) or larger so swap stays a defence-in-depth layer,
+# not the floor. See `.claude/memory/decisions.md` "Staging EC2 swap
+# stopgap; t3.medium flagged as pre-production capacity decision"
+# (2026-05-26).
+
+log "step 0.0: swap file (2GB)"
+if [[ ! -f /swapfile ]]; then
+  log "  allocating /swapfile (2G)"
+  fallocate -l 2G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile >/dev/null
+else
+  log "  /swapfile already present — skipping allocate/mkswap"
+fi
+
+if ! swapon --show=NAME --noheadings | grep -qE '^/swapfile$'; then
+  log "  activating /swapfile"
+  swapon /swapfile
+else
+  log "  /swapfile already active — skipping swapon"
+fi
+
+if ! grep -qE '^/swapfile' /etc/fstab; then
+  log "  persisting /swapfile in /etc/fstab"
+  echo '/swapfile none swap sw 0 0' >>/etc/fstab
+else
+  log "  /etc/fstab already lists /swapfile — skipping"
+fi
+
+SWAPPINESS_FILE="/etc/sysctl.d/99-eventpulse-swap.conf"
+if [[ ! -f "$SWAPPINESS_FILE" ]] || ! grep -qE '^vm.swappiness=10$' "$SWAPPINESS_FILE"; then
+  log "  setting vm.swappiness=10 (persistent)"
+  echo 'vm.swappiness=10' >"$SWAPPINESS_FILE"
+  sysctl -p "$SWAPPINESS_FILE" >/dev/null
+else
+  log "  vm.swappiness=10 already persisted — skipping"
+fi
+
 # ─── 0) Postgres superuser prep — must run BEFORE migration 0001 ─────
 #
 # The migration runner connects as the non-superuser `eventpulse` role.
