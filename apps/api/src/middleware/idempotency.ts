@@ -84,14 +84,25 @@
  * tiny field reorder and we returned the wrong cached response."
  *
  * ════════════════════════════════════════════════════════════════════
- * Body re-availability for downstream handlers
+ * Body re-availability for downstream handlers (the body-clone gotcha)
  * ════════════════════════════════════════════════════════════════════
  *
- * The middleware reads the body via `c.req.text()` for hashing. Hono's
- * HonoRequest caches the parsed body, so a downstream `zValidator('json')`
- * call reads from the cached text and parses fresh. No body-stream
- * exhaustion. (Verified at integration test time — the existing route
- * still receives the parsed body via zValidator.)
+ * The middleware MUST NOT consume the underlying Request body stream
+ * because downstream zValidator + route handlers re-read it. The
+ * naive `await c.req.text()` consumes the stream — works in
+ * `app.request()` unit tests (Hono shortcuts internal caching) but
+ * BREAKS in production HTTP traffic where the second read returns
+ * undefined and triggers Hono's generic "Internal Server Error".
+ *
+ * Fix: `await c.req.raw.clone().text()`. The `.raw` accessor returns
+ * the underlying standard `Request` object; `.clone()` is a Web-API
+ * standard that returns a fresh-body clone leaving the original
+ * stream intact. Reading from the clone hashes the body without
+ * affecting downstream consumers.
+ *
+ * Surfaced in production smoke at Day 29 Phase 1 deploy; pinned by
+ * gotchas.md "Hono middleware body-stream gotcha — use c.req.raw.clone()
+ * for hashing, not c.req.text()".
  *
  * ════════════════════════════════════════════════════════════════════
  * Redis absence (degraded behaviour)
@@ -205,11 +216,13 @@ export function idempotencyMiddleware(opts: IdempotencyMiddlewareOptions): Middl
       )
     }
 
-    // STEP 2 — read body for hashing. Hono caches the parsed body so
-    // downstream handlers (zValidator) can still read it.
+    // STEP 2 — read body for hashing. Use raw.clone() to avoid
+    // consuming the original stream — downstream zValidator +
+    // handlers must still be able to read it. See file header
+    // "body re-availability" rationale + gotchas.md entry.
     let bodyText: string
     try {
-      bodyText = await c.req.text()
+      bodyText = await c.req.raw.clone().text()
     } catch (err) {
       logger.error({ err: (err as Error).message, namespace, key }, 'idempotency.body_read_failed')
       return c.json(
