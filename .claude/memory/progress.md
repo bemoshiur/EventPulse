@@ -2,7 +2,24 @@
 
 ## In flight
 
-**Sprint 3 (Days 21-30) — Events + Fee Calculator + EPS + Orders (per §26.1 Sprint plan).** Planned scope, opens with Day 21 kick-off session. Sprint 2 closed at v0.2.0-sprint-2 (Day 20).
+**Sprint 4 (Days 31-40) — Attendees + Check-in + Reports + Settlement + Marketing (per §26.1 Sprint 4 plan).** Planned scope. Sprint 3 closed at `v0.3.0-sprint-3` (Day 30). **Decision N truth gate is the gating milestone for anything touching real money** — pending-Moshiur blockers (EPS sandbox creds + AIT tax opinion + SES out-of-sandbox) must clear before priced transactions ship.
+
+Sprint 4 buildable work that CAN proceed in parallel while truth-gate blockers resolve:
+- Attendee list UI + search/filter + CSV export (§26.1 Day 1-2)
+- Web QR scanner for check-in (§26.1 Day 3-4) — the consumer of the Day-28 QR tokens
+- Tenant sales dashboard + payouts dashboard (§26.1 Day 5)
+- Super admin Revenue Dashboard per §14.7 (§26.1 Day 6)
+- Refund flow + manual disbursement (§26.1 Day 7-8)
+- Marketing pages — apex, /features, /pricing, /contact, /legal/changelog (§26.1 Day 9)
+- Launch readiness — AUP review, prod EC2 cutover, first paying tenant (§26.1 Day 10)
+
+Sprint 4 work GATED by truth-gate (cannot ship until pending-Moshiur clears):
+- Buyer form UI (the Sprint-4 surface that would exercise the Day-29 idempotency + Day-30 free-event paths from the browser); without truth gate, the form can be built but only validated against free events
+- Anything that depends on PRICED-order behavior (refund flows, settlement, payouts) — the code can land but its priced-money correctness is gated on the truth gate
+
+**Sprint 3 buildable work is DONE.** All §26.1 Day-21-through-30 deliverables shipped. See Sprint 3 closeout in `## Done`.
+
+### Sprint 3 — Events + Fee Calculator + EPS + Orders (released as `v0.3.0-sprint-3`)
 
 ### Pre-Day-23 consolidation — ✅ COMPLETE (2026-05-20 → 2026-05-24, 4 sessions)
 
@@ -153,11 +170,22 @@ After Day 26 Phase 4 ships, the pipeline is live-call-capable through `initialis
 - Idempotency on order creation (`Idempotency-Key` header → Redis 24-hour TTL).
 - Capacity locking via row-level lock on `ticket_tiers`.
 
-**Day 30 — End-to-end smoke + Sprint 3 closeout.**
+**Day 30 — Sprint 3 closeout + E2E smoke + §14.10 invariants + v0.3.0 tag. ✅ SHIPPED (4 PRs; 2026-05-25).**
 
-- E2E smoke of buyer journey in EPS sandbox/production (staging EPS gated by STAGING_PAYMENT_BLOCK → exercises only free-event-shape orders against the production endpoints).
-- Verify all four fee modes work + accounting reconciles (§14.10 invariants).
-- `/sprint` retro + tag `v0.3.0-sprint-3` + release notes + Sprint 4 kick-off issue.
+- ✅ **Phase 0 STOP-ASK surfaced + fixed: §13.5 free-event bypass (PR #175, merged `aeb006b`).** Latent bug found reading createOrder ahead of the E2E smoke: §13.5 has spec'd since playbook v1.0 that "events where every ticket tier has `price_paisa = 0` → No payment integration, order goes pending → paid immediately." Never implemented. `createOrder()` hardcoded `status: 'awaiting_payment'` + always called `initialiseOrder()` regardless of `totalPaisa`. The block guard allowed 0n through, but EPS would have rejected 0-amount InitializeEPS → order stuck forever, delivery never fires. Phase 1b's E2E smoke would have failed on this bug. Fix per §13.5: when `buyerTotalPaisa === 0n`, inside the same withSuperAdmin tx: UPDATE orders SET status='paid', paid_at=NOW() + INSERT order_events with eventType='order.paid', source='free_event_auto_settle'; after tx commits, SKIP `initialiseOrder` entirely + enqueueOrderDelivery; return `{status:'paid', paymentInitState:'free', redirectUrl:null}`. CreateOrderResult union widened: `status: 'awaiting_payment' | 'paid'`, `paymentInitState: 'ready' | 'blocked' | 'free'`. Paid path unchanged byte-for-byte. 7 new DB-gated tests (happy path, persisted state, both event-sourcing rows, quantity>1, §14.10 invariant trivially satisfied, mixed paid+free takes paid path, block invariant preserved).
+- ✅ **Phase 1b: E2E full-stack smoke (PR #176, merged `2c6f36f`).** The Day 30 brief asked for a Playwright browser smoke. Reality: Day 25's `<EventLanding>` template ships only a disabled "Buy (coming soon)" CTA — the buyer-form UI doesn't exist yet (Sprint 4 scope per §26.1). Building it to satisfy the brief literally would violate the brief's own "no new feature surface" constraint. Shipped honest scope: DB-gated integration test at `apps/api/src/routes/public/orders-e2e-smoke.test.ts` exercising HTTP through the COMPLETE pipeline (Idempotency-Key middleware → zValidator → createOrder service → FOR UPDATE capacity lock → §13.5 free-event bypass → enqueueOrderDelivery). 3 tests: CANONICAL happy-path with quantity=2 free tickets + asserting §14.10 Invariant 1 trivially holds; REPLAY same key + same body (cached + `x-idempotency-replay: true` + sold incremented exactly once + no duplicate orders row); §14.10 Invariant 1 across ALL e2e-smoke orders. **The browser-form path lands Sprint 4 alongside the buyer UI.**
+- ✅ **Phase 2: §14.10 ledger-invariant verifier (PR #177, merged `2cba41d`).** The most important Phase of Day 30. New `apps/api/src/domain/ledger/invariants.ts` ships pure functions `checkInvariant1PerOrder` + `checkInvariant2PerBatch` + typed `LedgerInvariantError` with full violation list + `assert*` convenience wrappers that throw (matches §14.10 "any violation halts new batch creation"). BIT-EXACT bigint arithmetic — single paisa discrepancy IS a real money bug. **332 tests including 320 PROPERTY tests** (4 §14.2 modes × 5 subtotals 0→BDT 1M × 4 platform_bps × 4 eps_bps) proving the fee-calculator's outputs satisfy Invariant 1 BY CONSTRUCTION. The §14.10 invariant result for Sprint 3: **HOLDS BY CONSTRUCTION across all 320 parameterized cases + HOLDS on every free order persisted via Phase 1b** (trivially: total=0=0+0+0+0). Invariant 1 on PRICED orders cannot be exercised until Decision N truth gate runs real charges; **the verifier is READY**. Invariant 2 pure function + fixture-tested; DB verifier deferred to Sprint 7 when `disbursement_batches` schema lands per §26.2.
+- ✅ **Phase 3: Sprint 3 closeout + v0.3.0-sprint-3 tag + Sprint 4 kickoff (this PR).** Tag annotated `v0.3.0-sprint-3` on the closeout commit. Tag message: pipeline feature-complete behind block; not truth-gate-verified; not production-ready. Sprint 4 kickoff issue opened with §26.1 Sprint 4 scope + the truth gate + pending-Moshiur blockers prominently called out. Issue #110 (Sprint 3 kickoff) closed against the merged work.
+
+**Days 27-30 — the back-half of Sprint 3 in numbers:**
+
+- **5 days, 17 PRs, 5 hotfixes (Day 27: 0; Day 28: 1; Day 29: 2; Day 30: 0; misc: 2)** — production hotfix density tracks complexity: Day 29's idempotency middleware ate 2 hotfixes from the unit-tests-vs-production-HTTP gap (body-stream + Redis cold-start).
+- **Test runner growth: 690 → 1083** (+393 pass, all green).
+- **DB-gated tests: 256 → 294** (+38; CI runs them).
+- **4 architectural decisions per day codified in decisions.md** (Day 27 webhook auth; Day 28 QR + PDF + BullMQ; Day 29 idempotency semantics + capacity lock; Day 30 free-event bypass + ledger).
+- **STAGING_PAYMENT_BLOCK held EVERY hour** of every session. Zero real EPS calls fired.
+
+**Sprint 3 — released as `v0.3.0-sprint-3`. Pipeline feature-complete behind block. Decision N truth gate now THE gating milestone.**
 
 ### Sprint 3 pre-flight (gating items)
 
