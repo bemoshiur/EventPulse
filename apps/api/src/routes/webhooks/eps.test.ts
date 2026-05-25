@@ -90,6 +90,19 @@ describe('webhook route — malformed payload boundary', () => {
 })
 
 describe('webhook route — IP rate-limit', () => {
+  // The fixed-window limiter uses Date.now() to bucket. Without
+  // frozen time, a slow CI runner can push the 100th and 101st hits
+  // into different buckets and the test flakes ("expected throttled
+  // got allowed"). Freezing the clock for the budget-exhaustion tests
+  // makes window boundaries deterministic without changing the
+  // limiter's semantics.
+  beforeEach(() => {
+    vi.useFakeTimers({ now: new Date('2026-05-25T12:00:00Z') })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('100 hits from same IP pass; 101st throttled', async () => {
     const ip = '203.0.113.1'
     let allowed = 0
@@ -119,6 +132,16 @@ describe('webhook route — IP rate-limit', () => {
 })
 
 describe('webhook route — txn-id rate-limit', () => {
+  // Same flake-prevention as the IP rate-limit suite above — freeze
+  // Date.now() for the duration of the budget-exhaustion tests so
+  // the limiter's fixed-window bucket cannot roll mid-test.
+  beforeEach(() => {
+    vi.useFakeTimers({ now: new Date('2026-05-25T12:00:00Z') })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('20 hits on the same txn-id pass; 21st throttled (independent of IP budget)', async () => {
     // Each hit from a different IP so IP limiter never trips; txn
     // limiter is the constraint.

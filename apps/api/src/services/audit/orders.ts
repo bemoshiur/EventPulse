@@ -140,3 +140,39 @@ export async function writeOrderSettled(tx: Tx, input: WriteOrderSettledInput): 
     userAgent: null,
   })
 }
+
+// ─── writeOrderDelivered (Day 28 Phase 3) ────────────────────────────
+
+export interface WriteOrderDeliveredInput {
+  orderId: string
+  tenantId: string
+  eventId: string
+  attendeeCount: number
+  /** Locale the buyer + attendee emails were rendered in (en/bn). */
+  locale: 'en' | 'bn'
+}
+
+/**
+ * Delivery audit. Fires after buyer email + per-attendee emails
+ * succeed (or dry-run succeeds). The diff captures count + locale
+ * for ops triage; no PII (recipient addresses live on the orders +
+ * attendees rows; SES message-ids live on the order_events marker).
+ */
+export async function writeOrderDelivered(tx: Tx, input: WriteOrderDeliveredInput): Promise<void> {
+  await tx.insert(auditLogs).values({
+    tenantId: input.tenantId,
+    actorType: 'system',
+    actorId: null,
+    action: 'order.delivery_sent',
+    entityType: 'order',
+    entityId: input.orderId,
+    diff: {
+      attendee_count: input.attendeeCount,
+      emails_sent: input.attendeeCount + 1, // +1 for buyer summary
+      locale: input.locale,
+    },
+    metadata: { source: 'delivery_worker', event_id: input.eventId },
+    ip: null,
+    userAgent: null,
+  })
+}
