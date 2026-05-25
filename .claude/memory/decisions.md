@@ -4,6 +4,86 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-25/26 · Sprint 4 Day 33 — Tenant sales dashboard + payouts view; snapshot-vs-current display policy
+
+**Context:** Sprint 4 Day 33 shipped 3 PRs (one per phase) completing §26.1 Sprint 4 Day 5 deliverable (tenant sales dashboard + tenant payouts view with current fee config visibility).
+
+- PR #188 (Phase 1) — tenant sales metrics service + endpoint (`9b7b662`); 1 hotfix for the eventId-filter test fixture (`3b99fad`)
+- PR #189 (Phase 2) — sales dashboard UI with Recharts time-series (`f428050`)
+- PR #190 (Phase 3) — read-only payouts view (`f501298`); 1 hotfix for `react/no-unescaped-entities` on `you're` apostrophes
+- **Incident:** mid-session, staging EC2 went unreachable (in-VM hang). Reboot → web crashloop on missing `.next` (deploy regenerates it) → final deploy succeeded after one workflow-waiter timeout. See incident section in handoff.md + new gotchas.
+
+Two architectural choices warrant codification.
+
+### Choice A — Snapshot-vs-current display policy for money dashboards
+
+**Decision:** Dashboards that display money figures across paid orders MUST read the **snapshotted** fee fields stored on each order (`platformFeePaisa`, `epsFeePaisa`, `netToOrganiserPaisa`, etc.) — NEVER recompute via the fee calculator from current `tenant_fee_config`. The CURRENT fee config is displayed separately as "your current fee terms going forward."
+
+**Why the snapshot is authoritative for display:**
+
+1. **Per-tenant fee terms can change** (§14.4 + Decision N — super-admin per-tenant override; 4-eyes principle on >10 bps swings). A dashboard recomputing from current terms would lie about what was actually charged — including how much was actually owed to the organiser at the time.
+2. **The fee calculator is the SINGLE SOURCE of money truth at order time** (§14.3). Recomputing it at display time risks divergence with what the buyer + EPS actually settled. The order row's snapshot IS the ledger; the dashboard reflects the ledger.
+3. **§14.10 Invariant 1 already holds on the snapshot:** `total = subtotal + platformFee + epsFee + withholdingTax`. The dashboard surfaces what's already conserved.
+4. **Regulator-facing semantics.** "Show me my revenue last quarter" must mean "what the books say you earned at the prices in effect then", not "what you would have earned under today's rates."
+
+**Why current fee config is displayed separately:**
+
+The payouts view's "Your current fee terms" panel reads `getEffectiveFees(tenantId)` directly. This is what NEW orders going forward will be charged. A tenant whose fee was raised from 25 bps to 100 bps sees:
+
+- **Snapshot panel:** "Platform fee on these orders: ৳ 50.00" (the 25 bps that was actually charged)
+- **Current terms panel:** "Platform fee rate: 1.00% (Custom rate set by Event Pulse)" (the new 100 bps)
+
+Both true; neither contradicts the other. The dashboard makes the distinction visible.
+
+**Why this is a decisions-layer entry:**
+
+A future PR that:
+
+- Recomputes net from current bps "for accuracy" → would lie about historical orders. Pin "snapshot for display, current for forward-looking" here.
+- Removes the current-fees panel as "redundant" → loses forward visibility for the tenant. Pin "show both" here.
+- Adds a refund-or-net adjustment that recomputes mid-view → same risk. Pin "the snapshot is the ledger" here.
+
+**Consequences:**
+
+- Pinned by `apps/api/src/routes/tenant/reports-payouts.test.ts` test "mutating tenant_fee_config does NOT change the payable total (snapshot stays)" — directly demonstrates the asymmetry.
+- Pinned by `apps/api/src/routes/tenant/reports-sales.test.ts` test "fees come from order SNAPSHOT, NOT live tenant_fee_config recomputation".
+- Future report endpoints (financial summary, monthly statements, ops reconciliation) inherit: snapshot for past, current for future, both labelled.
+- The Sprint 7 super-admin Revenue Dashboard (§14.7) is the same shape one level up — it MUST also snapshot-read; that future PR's reviewer should pin this rule again.
+
+**Priced-revenue verification caveat:** with STAGING_PAYMENT_BLOCK=1, only free-event paid orders exist on staging. Dashboard LOGIC is correct + tested (DB-gated synthetic orders); PRICED-revenue display is unverified until the truth gate produces real paid orders. The Decision N truth-gate run will be the first real proof.
+
+### Choice B — Dashboard aggregation under withTenant() — RLS is the security boundary
+
+**Decision:** All aggregate queries (`SUM`, `COUNT`, conditional `FILTER (WHERE ...)`) for the tenant dashboard run inside `withTenant(tenantId)`. The `eventpulse_app` role engages RLS via `orders_tenant_select` + sibling policies; aggregate sums only see rows visible to the policy. Aggregate queries also include an explicit `WHERE orders.tenant_id = $tenantId` predicate as defence in depth (belt + braces — RLS is the primary guard, the app-layer filter is the redundant second).
+
+**Why both layers:**
+
+The classic dashboard footgun is an unscoped `SUM(...)` that crosses tenants. One tenant seeing another's revenue is a data breach with regulatory consequences. The aggregate-isolation surface is uniquely dangerous because:
+
+- The single number returned (a SUM) carries the leak silently — no PII row to flag, no per-row audit to catch it. The wrong-by-a-factor-of-10x revenue figure looks just like the right one to a naive reviewer.
+- A future "performance" refactor that switches from `withTenant` to `withSuperAdmin` for speed (BYPASSRLS is faster on aggregates) would silently leak. The explicit `WHERE tenant_id =` is the secondary defence that catches that mistake.
+
+**Why this is a decisions-layer entry:**
+
+A future PR that:
+
+- "Speeds up" by moving aggregates to `withSuperAdmin` without the app-layer filter → leaks. Pin "both layers always" here.
+- Drops the explicit `WHERE tenant_id` thinking RLS makes it redundant → drops the redundancy that catches a future RLS regression. Pin "both layers always" here.
+- Adds a new aggregate endpoint (e.g., funnel report, attendance reports) without the same dual defence → security regression. Pin the pattern as the canonical shape for ALL future aggregate-over-tenant-data endpoints here.
+
+**Consequences:**
+
+- Pinned by `apps/api/src/routes/tenant/reports-sales.test.ts` test "cross-tenant aggregate isolation: tenant A SUM excludes tenant B orders" — seeds 10M paisa under tenant B + asserts tenant A's gross stays well under 10M.
+- Pinned by `apps/api/src/routes/tenant/reports-payouts.test.ts` test "cross-tenant aggregate isolation: tenant A view excludes tenant B orders" — same shape, different endpoint.
+- The Sprint 7 super-admin Revenue Dashboard (§14.7) is the EXCEPTION — it's deliberately super-admin-scoped + cross-tenant-aggregating (that's its job). It does NOT inherit this pattern; its own audit + access-control surface is the security model. Future contributors should not mistakenly apply this pattern there.
+
+**Cross-references:**
+
+- `decisions.md` "Day 32 Choice A" (bulk PII extraction audit policy) — same security-class concern at the row layer; dashboard aggregates extend it to the SUM layer.
+- §4.2.1 (Postgres role hierarchy — `eventpulse_app` vs `eventpulse_admin`) — the role-switch is the load-bearing primary defence.
+
+---
+
 ## 2026-05-25 · Sprint 4 Day 32 — Attendee list (CRM) + CSV export; bulk-PII-extraction audit policy
 
 **Context:** Sprint 4 Day 32 shipped 3 PRs (one per phase) completing §26.1 Sprint 4 Day 1-2 deliverable (Attendee CRM — search, filter, export CSV).
