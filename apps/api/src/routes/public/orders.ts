@@ -49,6 +49,7 @@ import {
   createOrder,
   EventNotFoundError,
   EventNotSellableError,
+  InsufficientCapacityError,
   TierNotFoundError,
   TierNotOnSaleError,
 } from '../../services/orders/index.js'
@@ -154,6 +155,23 @@ publicOrdersRoutes.post('/', zValidator('json', createOrderInputSchema), async (
       return c.json({ error: { code: 'NOT_FOUND', message: err.message } }, 404)
     }
     if (err instanceof TierNotOnSaleError) {
+      return c.json(
+        {
+          error: {
+            code: 'TIER_SOLD_OUT',
+            message: err.message,
+          },
+        },
+        409,
+      )
+    }
+    // Day 29 Phase 2: the FOR UPDATE capacity lock raises this when
+    // the requested quantity would exceed `capacity - sold` at the
+    // moment of locking. Mapped to the same TIER_SOLD_OUT error code
+    // per §6.3 — from the buyer's perspective, the outcome is the
+    // same ("this tier doesn't have room"); the lock just makes the
+    // determination authoritative under concurrency.
+    if (err instanceof InsufficientCapacityError) {
       return c.json(
         {
           error: {

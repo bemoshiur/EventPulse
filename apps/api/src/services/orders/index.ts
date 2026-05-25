@@ -54,7 +54,7 @@
  *     orthogonal to order persistence.
  */
 
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 
 import { withSuperAdmin } from '../../db/client.js'
 import {
@@ -111,6 +111,28 @@ export class TierNotOnSaleError extends Error {
     this.name = 'TierNotOnSaleError'
     this.tierId = tierId
     this.reason = reason
+  }
+}
+
+/**
+ * Thrown when a tier's remaining capacity (`capacity - sold`) cannot
+ * absorb the requested quantity, AFTER the FOR UPDATE lock has been
+ * acquired. Day 29 Phase 2 — closes the oversell race left open by
+ * the soft availability check.
+ *
+ * The route handler maps this to HTTP 409 with code `TIER_SOLD_OUT`
+ * (per §6.3 canonical error code list).
+ */
+export class InsufficientCapacityError extends Error {
+  public readonly tierId: string
+  public readonly requested: number
+  public readonly available: number
+  constructor(tierId: string, requested: number, available: number) {
+    super(`tier ${tierId} sold out — requested ${requested}, available ${available}`)
+    this.name = 'InsufficientCapacityError'
+    this.tierId = tierId
+    this.requested = requested
+    this.available = available
   }
 }
 
@@ -301,7 +323,100 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
   const merchantTransactionId = mintMerchantTransactionId(tenantSlug)
 
   // STEP 6 — INSERT under withSuperAdmin (single tx for atomicity).
+  // Day 29 Phase 2 adds the FOR UPDATE capacity lock INSIDE this tx,
+  // before any inserts. See the long comment inside.
   const orderId = await withSuperAdmin(async (db) => {
+    // ════════════════════════════════════════════════════════════════
+    // FOR UPDATE capacity lock — Day 29 Phase 2.
+    // ════════════════════════════════════════════════════════════════
+    //
+    // Closes the oversell race that the soft availability check from
+    // Day 26 left open. Without this lock, N concurrent buyers can
+    // all read sold=K, all compute K+q <= capacity, all insert their
+    // orders, and the tier silently oversells.
+    //
+    // The SELECT ... FOR UPDATE acquires a row-level write lock on
+    // each ticket_tiers row in the order; the lock holds until this
+    // tx commits or rolls back. Concurrent buyers on the same tier
+    // wait at the SELECT FOR UPDATE; they see the updated sold count
+    // when their lock acquires and can accept-or-reject based on
+    // fresh state.
+    //
+    // **Deadlock avoidance — ORDER BY id.** When a buyer purchases
+    // multiple tiers in one order, we lock them ALL in a single
+    // SELECT. Postgres acquires locks in scan order. If two orders
+    // touch overlapping tier sets but in DIFFERENT orders, classic
+    // deadlock: A holds tier X waiting for tier Y; B holds Y waiting
+    // for X. ORDER BY id makes the scan order consistent — both
+    // orders acquire locks in the same id order, so the second blocks
+    // on the FIRST's lock and waits cleanly instead of dead-locking.
+    //
+    // **Lock scope — minimal.** Row-level FOR UPDATE on ticket_tiers
+    // only. The orders / order_items / order_events INSERTs that
+    // follow don't take row locks (the rows don't exist yet); they
+    // do take normal MVCC write locks on their own new rows, but no
+    // contention with concurrent buyers on other orders.
+    //
+    // **Why not SELECT FOR NO KEY UPDATE.** §9.3 ticket_tiers has FK
+    // references (events, tenants) but no incoming FK references
+    // pointing AT it that would benefit from the weaker lock. FOR
+    // UPDATE is the simpler choice with no observable cost.
+    //
+    // **Pinned by test** `db-gated-oversell-race` (Phase 2 test
+    // file): N concurrent buyers racing for M < N tickets — exactly
+    // M succeed, N-M get InsufficientCapacityError; sold NEVER
+    // exceeds capacity. The test runs the racers via Promise.all
+    // against a real Postgres so the lock semantics are exercised.
+    //
+    // **Note on decrement.** Phase 2 increments sold at order-create
+    // time. Decrement on cancellation / failure / chargeback is NOT
+    // in Day 29 scope (handoff documents this as a future cleanup
+    // sweep + Day 30+ work). Abandoned `awaiting_payment` orders
+    // permanently consume capacity until a future timeout sweep
+    // OR a manual super-admin void. Acceptable for MVP given the
+    // EPS hosted-page checkout speed (sub-minute typical) + the
+    // Decision N truth-gate test set (4 small transactions).
+    const tierIdsAsc = input.tierSelections.map((s) => s.tierId)
+    const lockedRows = await db
+      .select({
+        id: ticketTiers.id,
+        sold: ticketTiers.sold,
+        capacity: ticketTiers.capacity,
+      })
+      .from(ticketTiers)
+      .where(inArray(ticketTiers.id, tierIdsAsc))
+      .orderBy(asc(ticketTiers.id))
+      .for('update')
+
+    const lockedById = new Map<string, { sold: number; capacity: number }>()
+    for (const row of lockedRows) {
+      lockedById.set(row.id, { sold: row.sold, capacity: row.capacity })
+    }
+
+    // Capacity check against locked rows. The order of selections
+    // matters for the error: the first tier that fails is reported.
+    for (const sel of input.tierSelections) {
+      const locked = lockedById.get(sel.tierId)
+      if (!locked) {
+        // Shouldn't happen — earlier resolve step verified tier
+        // existence — but defence in depth.
+        throw new TierNotFoundError(sel.tierId)
+      }
+      const available = locked.capacity - locked.sold
+      if (sel.quantity > available) {
+        throw new InsufficientCapacityError(sel.tierId, sel.quantity, available)
+      }
+    }
+
+    // Increment sold per tier. Each UPDATE runs against a row we
+    // already hold the FOR UPDATE lock on, so no contention.
+    for (const sel of input.tierSelections) {
+      await db
+        .update(ticketTiers)
+        .set({ sold: sql`${ticketTiers.sold} + ${sel.quantity}` })
+        .where(eq(ticketTiers.id, sel.tierId))
+    }
+
     const [orderRow] = await db
       .insert(orders)
       .values({
