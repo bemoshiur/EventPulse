@@ -12,6 +12,8 @@
  * pipeline, not this component.
  */
 
+import Link from 'next/link'
+
 import type { LegalDocumentRender } from '@/lib/legal'
 import { DraftBanner } from './draft-banner'
 
@@ -32,9 +34,9 @@ export function LegalDocumentPage({ doc }: { doc: LegalDocumentRender }) {
   return (
     <article className="mx-auto max-w-3xl px-6 py-16 md:py-24">
       <nav aria-label="Breadcrumb" className="mb-6 text-sm text-[var(--ep-graphite)]">
-        <a href="/trust" className="hover:text-[var(--ep-violet)]">
+        <Link href="/trust" className="hover:text-[var(--ep-violet)]">
           Trust Center
-        </a>
+        </Link>
         <span aria-hidden="true" className="px-2">
           ·
         </span>
@@ -58,9 +60,9 @@ export function LegalDocumentPage({ doc }: { doc: LegalDocumentRender }) {
       <hr className="mt-16 border-[var(--ep-line)]" />
       <p className="mt-8 text-sm text-[var(--ep-graphite)]">
         Questions about this document?{' '}
-        <a href="/contact" className="text-[var(--ep-violet)] hover:underline">
+        <Link href="/contact" className="text-[var(--ep-violet)] hover:underline">
           Contact us →
-        </a>
+        </Link>
       </p>
     </article>
   )
