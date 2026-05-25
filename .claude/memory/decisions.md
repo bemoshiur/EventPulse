@@ -4,6 +4,112 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-25 · Day 28 architectural choices — QR token design, PDF-as-attachment, BullMQ dedicated Redis connection
+
+**Context:** Sprint 3 Day 28 shipped 3 PRs in dependency order, closing the post-paid delivery loop:
+
+- PR #166 (Phase 1) — Per-attendee QR token + attendee row generation (`4392307`)
+- PR #167 (Phase 2) — PDF ticket generation with embedded QR (`64e13dd`)
+- PR #168 (Phase 3) — BullMQ delivery worker, end-to-end on paid (`f4ef282`)
+
+Four architectural decisions were taken across these phases that warrant codification at the decisions layer.
+
+### Choice A — QR token = 256-bit cryptographically-random opaque base64url (NOT a signed JWT-shape token)
+
+**Decision:** `mintQrToken()` returns 32 random bytes from `crypto.randomBytes` → base64url-encoded (43 chars). Stored in `attendees.qr_code` (UNIQUE constraint from migration 0013); the QR image wraps the token in `${EVENTPULSE_API_BASE_URL}/scan/{token}`.
+
+**Why opaque random (NOT signed):**
+
+1. **Revocability via row delete.** Voiding a ticket = delete or null the row; the token becomes invalid instantly. A signed-JWT approach would need a blocklist surface that's expensive to consult at scan time.
+2. **No shared signing key to compromise.** A key-compromise scenario on a JWT-signed scheme = mass-forgery across every ticket ever issued. Opaque-random has nothing to leak (other than the DB, which already has the tokens — the attacker who has DB access has already won).
+3. **Simpler verifier.** Check-in (Sprint 4 Day 3-4) is a single `SELECT ... WHERE qr_code = $1 AND voided_at IS NULL` — no signature math, no key rotation, no clock-skew.
+4. **§10.1 already documents** `POST /public/attendees/checkin` as the scanner pattern — DB lookup is the design.
+5. **§ silent on encoding scheme** → opaque-random is the standard defensible MVP choice; the handoff plan documented this approach in advance.
+
+**Why 256 bits of entropy:**
+
+Brute-force at 1 billion attempts/second to enumerate the keyspace = ~3.7×10^60 years. The practical forge surface is zero. Birthday-paradox collision probability is vanishingly small (~10^38 tokens before collision becomes likely); DB UNIQUE constraint is the hard backstop and would surface any collision as a hard error, not silent overlap.
+
+**Why URL-wrapping (not bare token):**
+
+Camera apps + iOS Camera + Android Camera all recognise URLs and offer "open this link" out of the box. A bare opaque token doesn't trigger that affordance. Wrapping in a URL doesn't degrade security — the token is still 256 bits of opaque random; the URL just makes it scannable without a custom app.
+
+**Consequences:**
+
+- A future "tighten ticket security" PR that switches to signed tokens would need to justify the operational complexity (revocability + key rotation surface) — pin this entry as the prior decision.
+- Token shape pinned by tests (43-char base64url, no `=`/`+`/`/`).
+- The scanner endpoint (Sprint 4 Day 3-4) reads token from URL path param → DB row lookup → check-in.
+
+### Choice B — PDF tickets travel as email attachments; NO S3 bucket (avoid AWS-write surface STOP-ASK)
+
+**Decision:** `renderTicketPdf()` returns a Buffer; the delivery worker hands it to SES via `sendEmailRaw()` with the Buffer as an `application/pdf` MIME attachment. There is NO S3 bucket for tickets.
+
+**Why no S3:**
+
+1. **Day 28 brief explicit STOP-ASK condition:** "Tickets S3 bucket/KMS not established (AWS-write surface)". Going attachment-only avoids the surface entirely; no new bucket, no new KMS CMK, no IAM policy changes, no bucket policy review.
+2. **SES 40MB attachment limit** is comfortable for ticket payloads (each PDF is ~10-50KB depending on QR density). A multi-attendee order with 10 tickets would be ~500KB. Well under the limit.
+3. **Email IS the ticket delivery surface** in MVP. Buyers expect a "your ticket is attached" email — the PDF in-line is exactly what they want, not a click-to-download link that requires DB lookup + bucket policy traversal.
+4. **Resend UX (future) re-generates.** No archival need at MVP — tickets are derivable from order + attendee + tenant brand at any time.
+
+**When to revisit:**
+
+If/when "resend ticket from dashboard" UX lands AND the regeneration latency becomes user-facing, we'd add a tickets bucket. That's a separate decision with its own KMS pattern (likely `alias/eventpulse-tickets-<env>` per the §17.9 per-purpose pattern). For Day 28's purpose, attachment-only is the cleanest MVP path.
+
+**Consequences:**
+
+- No bucket = no archive of historical tickets. The information IS in the DB (attendees + order rows); the PDF is the rendered surface.
+- A future "ticket archive" requirement gets its own STOP-ASK + decision entry + bucket setup.
+
+### Choice C — Delivery is DECOUPLED from settlement (settlement reliability invariant)
+
+**Decision:** `enqueueOrderDelivery()` NEVER throws. A Redis blip / queue construct failure returns `{enqueued: false, reason: 'no_redis'}` + logs; settlement still commits paid. The delivery worker is a downstream retry surface; a failed delivery does NOT roll back the paid status.
+
+**Why this is load-bearing:**
+
+1. **Settlement IS the source-of-truth for money state.** A verified-paid order whose delivery hits a transient blip (Redis restart, SES throttle, PDF generator OOM) must still be paid in the DB. The order's `status='paid'` is the authoritative record; ticket delivery is a service consequence the operator can re-trigger.
+2. **Without decoupling, a Redis outage would cascade into a payment processing outage.** That's the opposite of MVP scale-up readiness — Redis is the most-likely-to-blip component, and tying it to the paid transition would make Redis a single point of failure for payments.
+3. **Idempotency on the worker side absorbs retries cleanly.** The `order.delivery_sent` append-only marker prevents double-send across worker retries; the operator can safely re-enqueue any time without risking double-delivery.
+
+**Pinned by tests:**
+
+- Unit test `enqueueOrderDelivery — no Redis (settlement reliability invariant) > does not throw — settlement must never be blocked by delivery infra`.
+- Integration test `deliverOrder > idempotency — delivery marker > second invocation returns already_delivered without resending`.
+
+**Consequences:**
+
+- A future "tighten" PR that adds `await enqueueOrderDelivery(...)` outside a try/catch in settle.ts would silently re-couple settlement to delivery — pin this entry as the prior decision so reviewers grep before approving.
+- The worker's own failure handling (BullMQ retry, DLQ) is the operator surface for delivery failures, NOT settlement rollback.
+
+### Choice D — BullMQ requires a DEDICATED Redis connection with `maxRetriesPerRequest: null` (different threat model than the EPS token cache)
+
+**Decision:** New `getBullRedis()` factory in `apps/api/src/workers/delivery-queue.ts` mints a SEPARATE ioredis instance for BullMQ with `maxRetriesPerRequest: null` + `lazyConnect: true`. The singleton at `apps/api/src/infra/redis/client.ts` (`maxRetriesPerRequest: 2`) stays bounded for the EPS token-cache hot path. Both the BullMQ Queue (producer) and Worker (consumer) consume the dedicated connection.
+
+**Why this surfaced as a real bug:**
+
+The first push of PR #168 crashed CI's E2E job with `Error: BullMQ: Your redis options maxRetriesPerRequest must be null.` BullMQ uses blocking Redis commands (BRPOPLPUSH, XREAD) that hold the connection open indefinitely; unbounded retries are part of the contract. The EPS token cache, by contrast, uses simple GET/SETEX commands and benefits from bounded retries (a slow Redis can't hang the EPS init path indefinitely).
+
+**Why two clients (not one with the broader setting):**
+
+Reusing the singleton with `maxRetriesPerRequest: null` would weaken the EPS token cache's bounded-retry property — a slow Redis could hang token fetches indefinitely, cascading into payment-init latency. Different threat models, different clients.
+
+**Consequences:**
+
+- A future BullMQ consumer (refunds queue, disbursement queue) reuses `getBullRedis()` — single source of truth for the BullMQ connection.
+- Each Redis connection holds its own TCP socket + retry state. Two connections is operationally trivial.
+- The `_resetDeliveryQueueForTest()` helper now resets the Bull-Redis singleton too so tests can re-init cleanly.
+
+**Cross-references:**
+
+- PR #166 (Phase 1 — QR + attendees) → merged `4392307`
+- PR #167 (Phase 2 — PDF render) → merged `64e13dd`
+- PR #168 (Phase 3 — BullMQ delivery worker) → merged `f4ef282`
+- CLAUDE.md §1.3 R5 (no PII in logs; reviewed for QR token payload), §1.3 R12 (bilingual UI), §9.5 (attendees schema), §16.3 notification catalogue (`order_confirmed`, `attendee_ticket`)
+- `decisions.md` "Day 27 architectural choices" — Choice A verify-by-callback authority that settle.ts implements; Day 28's delivery hook is the downstream consequence
+- `decisions.md` "Auth foundation library choice" (2026-05-17) — same risk class: don't adopt a dependency for security-critical surface; opaque-random tokens have no external dependency
+- `decisions.md` "Dedicated KMS CMK for KYC bucket" (2026-05-17) — same per-purpose pattern; if/when tickets bucket lands, it gets its own CMK
+
+---
+
 ## 2026-05-25 · Day 27 architectural choices — EPS webhook auth model + browser-redirect non-authority
 
 **Context:** Sprint 3 Day 27 shipped 3 PRs in clean dependency order:

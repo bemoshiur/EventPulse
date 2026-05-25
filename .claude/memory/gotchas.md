@@ -4,6 +4,83 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## BullMQ Worker requires `maxRetriesPerRequest: null` on its Redis connection — incompatible with the bounded singleton (2026-05-25 / Day 28 Phase 3)
+
+**Symptom.** PR #168 first push crashed CI E2E job at API boot:
+
+```
+Error: BullMQ: Your redis options maxRetriesPerRequest must be null.
+    at RedisConnection.checkBlockingOptions
+    at new Worker
+    at startDeliveryWorker (apps/api/src/workers/delivery-worker.ts:63:13)
+    at <anonymous> (apps/api/src/index.ts:24:1)
+```
+
+The API process never reached `listen()` because the worker startup crashed in `index.ts` at module-load time. Playwright's WebServer timed out waiting 120s. All other tests (unit, integration, CodeQL, build, lint, format) had passed — the failure was a real CI-only regression that local unit tests couldn't catch because we used `_setRedisClientForTest(null)` to skip the real-Redis path.
+
+**Why it happens.** BullMQ uses blocking Redis commands (`BRPOPLPUSH`, `XREAD`) that hold the connection open indefinitely waiting for a job. Bounded retries would let ioredis abandon the blocking command early, and BullMQ would lose track of jobs. So BullMQ refuses to construct a Queue/Worker with anything other than `maxRetriesPerRequest: null`.
+
+The singleton at `apps/api/src/infra/redis/client.ts` (used by the EPS token cache) sets `maxRetriesPerRequest: 2` — bounded so a slow Redis can't hang the EPS init path. Different threat model: GET/SETEX in the cache benefits from bounded retries; blocking commands in BullMQ don't.
+
+**Fix (Day 28 Phase 3).** New `getBullRedis()` factory in `apps/api/src/workers/delivery-queue.ts` that mints a SEPARATE ioredis instance with `maxRetriesPerRequest: null`. Both Queue (producer) and Worker (consumer) consume this dedicated connection. Singleton stays bounded for the EPS path. Cost of a second TCP socket is operationally trivial.
+
+**How to avoid.** Any new BullMQ surface (refunds queue, disbursement queue) reuses `getBullRedis()` from `workers/delivery-queue.ts` — single source of truth for the BullMQ connection. Do NOT plumb the singleton (`getRedis()`) into BullMQ constructs; the typecheck will pass but boot will crash. The `decisions.md` "Day 28 architectural choices" Choice D pins the rationale.
+
+---
+
+## Fixed-window rate limiters flake under increased test load (real time crosses bucket boundary mid-test) (2026-05-25 / Day 28 Phase 3 hotfix)
+
+**Symptom.** PR #168 second-push CI: unit test `webhook route — IP rate-limit > different IPs have independent IP budgets` failed:
+
+```
+AssertionError: expected undefined to be true // Object.is equality
+- Expected: true
++ Received: undefined
+```
+
+The test fires 101 requests to a single IP and expects the 101st to be `throttled: true`. Under the Phase 3 test workload (more tests = slower per-test wall-clock progress), the 100th and 101st requests landed in different fixed-window buckets and the budget reset — the 101st was allowed (throttled: undefined) instead of throttled.
+
+**Why it happens.** The rate-limit primitive at `apps/api/src/lib/rate-limit.ts` buckets requests by `Math.floor(Date.now() / windowMs) * windowMs`. With `windowMs=60000` (1 minute), the bucket changes every wall-clock minute boundary. Without frozen time, a slow CI runner can push hits 100 and 101 across the boundary and the test silently fails.
+
+This is a PRE-EXISTING flake from Day 27 — it just hadn't surfaced because the test suite was smaller. Phase 3 added enough tests that the cumulative time pushed the test across a wall-clock minute often enough to fail.
+
+**Fix.** `vi.useFakeTimers({ now: ... })` in the two affected `describe` blocks (`webhook route — IP rate-limit` and `webhook route — txn-id rate-limit`). Frozen time = deterministic bucket = test always within the same window. Doesn't change limiter semantics; gives the test a stable clock.
+
+**How to avoid.** Any test that exhausts a fixed-window or fixed-interval budget MUST freeze time. Add `vi.useFakeTimers()` in `beforeEach` + `vi.useRealTimers()` in `afterEach` of the describe block. The limiter's clock injection (`opts.now`) is also available for direct injection but `vi.useFakeTimers` is the path of least resistance.
+
+---
+
+## SSM probes need exact paths: `.env.staging` lives at `/home/eventpulse/`, NOT `/home/eventpulse/app/` (2026-05-25 / Day 28 Phase 0)
+
+**Symptom.** Day 28 Phase 0 first SSM block-invariant probe returned `NOT_IN_PM2` for `pm2 env 0` and `NOT_IN_ENV_FILE` for `grep ... /home/eventpulse/app/.env.staging`. Looked like the STAGING_PAYMENT_BLOCK invariant had been silently broken — was actually a wrong-probe-path issue.
+
+**Why it happens.** Two issues stacked:
+
+1. **pm2 process IDs are zero-indexed but not predictable by name.** PM2 list shows `id=0 → web` and `id=1 → api`. STAGING_PAYMENT_BLOCK is in the API env, not the web env. `pm2 env 0` returns the WEB env which doesn't have the variable. Need `pm2 env 1` (or look it up by name first).
+2. **`.env.staging` lives at `/home/eventpulse/.env.staging`, NOT `/home/eventpulse/app/.env.staging`.** The bootstrap-staging.sh writes to the eventpulse user's home directory, not the app deploy directory. The deploy directory has `.env.example` only.
+
+**Fix.** Probe both: `sudo -u eventpulse pm2 env 1 | grep STAGING_PAYMENT_BLOCK` AND `sudo grep STAGING_PAYMENT_BLOCK /home/eventpulse/.env.staging`. Confirms both pm2 env + on-disk env file.
+
+**How to avoid.** Future block-invariant probes use the verified path. If the deploy infrastructure ever moves the env file (unlikely), `pm2 describe 1` shows the env file path in JSON output as a fallback.
+
+---
+
+## PM2 log paths: `/home/eventpulse/logs/api.out.log`, NOT `/home/eventpulse/.pm2/logs/` (2026-05-25 / Day 28 Phase 4)
+
+**Symptom.** Day 28 Phase 4 staging worker-boot probe via `sudo -u eventpulse pm2 logs api --lines 200 --nostream | grep delivery_worker` returned NO_MATCH. Suggested the worker hadn't started. Investigation showed `/home/eventpulse/.pm2/logs/` was empty (`total 8` — just `.` and `..`).
+
+**Why it happens.** PM2 was configured to log to `/home/eventpulse/logs/` instead of the default `~/.pm2/logs/`. This was likely set at Sprint 1 Day 9-10 PM2 ecosystem setup. `pm2 logs <name>` reads from PM2's internal log buffer but on some configurations this can be sparse or filtered; the on-disk file is the durable record.
+
+**Fix.** Probe the on-disk file directly: `sudo tail -300 /home/eventpulse/logs/api.out.log | grep tickets.delivery_worker`. Once probed correctly, the worker boot signal was clearly present:
+
+```json
+{"queue":"tickets-delivery","concurrency":2,"msg":"tickets.delivery_worker.started"}
+```
+
+**How to find next time.** `sudo -u eventpulse pm2 jlist | python3 -c "import json,sys; d=json.load(sys.stdin); print([(p.get('name'), p.get('pm2_env',{}).get('pm_out_log_path')) for p in d])"` returns the actual log file paths from PM2's process config. This is the definitive lookup.
+
+---
+
 ## API routes live ONLY on `api.staging` vhost — hitting them on the web vhost returns Next.js 404 HTML (2026-05-24)
 
 **Symptom.** User reports `https://staging.eventpulse.com.bd/api/v1/auth/oauth/google/start` "not working." Curl shows:
