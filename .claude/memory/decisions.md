@@ -4,6 +4,84 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-25 · Sprint 4 Day 31 — Web QR scanner + Check-In; optimistic-admit offline door policy
+
+**Context:** Sprint 4 Day 31 shipped 3 PRs (one per phase) consuming Day 28's QR tokens via the §26.1 Sprint 4 Day 3-4 deliverable.
+
+- PR #180 (Phase 1) — server check-in validation + endpoint (`37a2241`)
+- PR #181 (Phase 2) — browser QR scanner UI (`f4aa8d8`)
+- PR #182 (Phase 3) — offline-tolerant scan queue + sync-on-reconnect (`302a76a`)
+
+Three architectural choices warrant codification.
+
+### Choice A — Door-correctness invariant via atomic compare-and-swap
+
+**Decision:** Check-in admission is the conditional UPDATE `WHERE checked_in_at IS NULL` `RETURNING` row, run inside the `withTenant` tx. Postgres row-lock serialises concurrent scans of the same ticket; the winning scan returns the row + transitions it to admitted; the loser returns zero rows + disambiguates via a follow-up `SELECT` that returns the prior `checked_in_at` / `checked_in_by` / `checked_in_gate` for the ALREADY_CHECKED_IN response.
+
+**Why CAS, not check-then-update:**
+
+A check-then-update sequence (SELECT … then UPDATE … if not checked in) is racey under concurrent scanners. Two device-side scanners can both SELECT the unchecked row, both decide "admit", and both UPDATE. Postgres' row-lock under conditional UPDATE collapses this race down to "one wins, one returns zero rows" — which is exactly the door semantic we want.
+
+**Schema reality:** `attendees` has no `event_id` column; admission scoping is via a subquery through `ticket_tiers` (`inArray(attendees.ticketTierId, tierIdsForEvent)` for the UPDATE, `innerJoin(ticketTiers, eq(attendees.ticketTierId, ticketTiers.id))` for the SELECT). The wrong-event case never leaks data — the UPDATE simply matches zero rows + a separate SELECT against `attendees` alone returns the row only for the disambiguation outcome (NOT a different event).
+
+**Consequences:**
+
+- Door-correctness pinned by `apps/api/src/routes/tenant/checkin.test.ts` 11 DB-gated tests including a 50-concurrent-scan race that always admits exactly one and returns ALREADY for the other 49.
+- Sprint 4+ refactors that "tighten" the check-in service MUST preserve atomic-CAS semantics. A future refactor that splits "validate" from "transition" into separate tx ticks would re-introduce the race.
+- The `checked_in_by` / `checked_in_gate` columns are the audit trail; the audit_logs row is the secondary record.
+
+### Choice B — Optimistic-admit offline door policy (§-spec silent; Auto Mode call)
+
+**Decision (Auto Mode call, §-spec silent on door UX):** When the scanner has no network, the door admits the attendee under a clearly-labelled "TENTATIVE (offline)" banner; the scan is queued to IndexedDB; flushed to the server on reconnect; the server's compare-and-swap from Choice A is the FINAL authority.
+
+When two offline devices both admitted the same ticket during a network outage, the first to sync wins (server's CAS admits one), the second's sync receives `ATTENDEE_ALREADY_CHECKED_IN`, the sync orchestrator tags the outcome as `duplicate_on_sync`, and the sync report surfaces a `duplicateCount` for ops review (the existing dashboard would also see the audit_logs row).
+
+**Why optimistic-admit:**
+
+1. **Bad connectivity is the WHOLE reason §26.1 specified offline-tolerant.** Queue-and-wait would unwork festival / venue door staff at exactly the moment they need to keep moving.
+2. **The §13.5 free-event bypass + Day 28 cryptographically-random QR token combination means the door-side validation is "this token format looks plausible, mark tentative, queue for server resolution."** The server is the ONLY source of admit-truth — that boundary already exists.
+3. **The threat model is honest-mistake double-scan, not coordinated 2-device fraud.** A coordinated attacker could double-admit before sync, but the duplicate is detected the moment ONE device syncs + ops gets a forensic trail (the `duplicate_on_sync` flag + per-row audit).
+4. **Industry standard for festival / venue ticketing.** Eventbrite, Universe, Frontgate all operate this way.
+
+**Why this is a decisions-layer entry:**
+
+The §-spec was silent on door UX. A future "tighten" PR that:
+
+- Switches to queue-and-wait ("no server, no admit") — would unwork venues with bad connectivity. The whole point of §26.1 Day 3-4 is offline tolerance.
+- Removes the duplicate_on_sync flag — would lose the forensic trail. Pin the flag here.
+- Removes the "(tentative — offline)" UI banner — would let staff treat an unsynced admit as definitive. Pin the banner here.
+
+**Consequences:**
+
+- Pinned by `apps/web/src/lib/offline-checkin-queue.test.ts` 12 unit tests including the canonical OFFLINE-DOUBLE-ENTRY: two enqueued scans of SAME-QR → first admitted, second duplicate_on_sync, BOTH removed, `duplicateCount=1`.
+- The sync orchestrator removes rows on ANY definitive outcome (admitted / duplicate_on_sync / invalid / wrong_event / voided) — "the server has decided" is the removal trigger. Network errors leave rows queued for retry.
+- Future ops dashboard (Sprint 4+ admin reports) will surface duplicateCount alerts. Schema is ready.
+- IndexedDB persistence survives page reload + OS sleep; door staff can refresh the scanner page without losing queued scans.
+
+**Cross-references:**
+
+- `decisions.md` "Day 28 architectural choices" Choice A (QR token is 256-bit cryptographically-random opaque base64url; brute-force ~3.7×10⁶⁰ years; no signature verification needed)
+- `decisions.md` "Day 30 / Sprint 3 closeout" Choice B (§14.10 ledger invariants — same pattern: pure functions over rows, deterministic, property-testable)
+
+### Choice C — Frontend offline-storage tests via injected `IDBFactory` (not `fake-indexeddb/auto` globals)
+
+**Decision:** `apps/web/src/lib/offline-checkin-queue.ts` exposes every public function with an explicit `factory: IDBFactory | null = defaultFactory()` parameter. Production callers pass nothing (the default reads `globalThis.indexedDB`). Tests pass `(globalThis as { indexedDB: IDBFactory }).indexedDB` after `import 'fake-indexeddb/auto'` at the top of the test file — the fake-indexeddb package patches globals; we just hand the patched value into our pure-functions.
+
+**Why dependency injection over global patching:**
+
+1. **Testable without global mutation cascades.** A test failure in one storage test doesn't leave globals dirty for the next test (each test gets `clearAll(factory)` in `beforeEach` / `afterEach`).
+2. **Composable with the sync orchestrator.** `syncCheckinQueue({ apiBase, fetcher?, factory? })` takes the same factory dep + a `fetcher` dep, so the orchestrator is testable end-to-end with both deps mocked — no `vi.spyOn(window, 'fetch')` shenanigans.
+3. **Pattern matches `withTenant` / `withSuperAdmin` discipline.** Same idea: pure functions over an injected resource, not closure-captured singletons.
+
+**Consequences:**
+
+- A future "factor out the queue" refactor must preserve the `factory` parameter. Removing it would force tests back to global mutation.
+- The pattern applies to future browser-storage work: localStorage (settings), Cache API (offline event pages), Service Worker registration (push notifications) all get the same shape.
+
+**Pinned by:** `apps/web/src/lib/offline-checkin-queue.ts` defaultFactory pattern + `apps/web/src/lib/sync-checkin-queue.ts` syncCheckinQueue({factory}) shape.
+
+---
+
 ## 2026-05-25 · Day 30 / Sprint 3 closeout — free-event bypass, ledger invariant verifier, sprint-close pivot
 
 **Context:** Sprint 3 Day 30 — closeout day. 4 PRs shipped (the bypass fix + E2E smoke + ledger verifier + closeout). Tag `v0.3.0-sprint-3` cut. Sprint 3 buildable work DONE.

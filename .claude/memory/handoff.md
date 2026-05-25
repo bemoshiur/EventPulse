@@ -1,116 +1,83 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-05-25 (Sprint 3 CLOSED at `v0.3.0-sprint-3`. Pipeline feature-complete behind STAGING_PAYMENT_BLOCK. **Decision N truth gate is THE blocker for priced money.**)
-**Driver:** Claude Code (Opus 4.7) — Sprint 3 closeout (Day 30); **next session opens Sprint 4 Day 31.**
+**Last update:** 2026-05-25 (Sprint 4 Day 31 SHIPPED — Web QR scanner + Check-In end-to-end. **Decision N truth gate REMAINS THE blocker for priced money work.**)
+**Driver:** Claude Code (Opus 4.7) — Sprint 4 Day 31; **next session opens Day 32 — Moshiur picks scope from §26.1 Sprint 4 plan or carries the truth gate forward.**
 
 ## ⚠️ CRITICAL: where we are right now
 
-**Sprint 3 buildable work is DONE.** Tag `v0.3.0-sprint-3` cut. The pipeline is feature-complete behind block:
+**Sprint 4 Day 31 SHIPPED.** First §26.1 Sprint 4 deliverable done (Web QR scanner + Check-In, the consumer of Day 28's QR tokens). 3 PRs merged (server check-in service + browser scanner UI + offline-tolerant queue + sync-on-reconnect). Pipeline now ships scan → admit → audit + offline-tolerant fallback. **STAGING_PAYMENT_BLOCK=1 held all session; zero EPS calls fired.**
 
-- Order creation (Day 26) → Settlement (Day 27) → Delivery (Day 28) → Idempotency middleware (Day 29 Phase 1) → Capacity lock (Day 29 Phase 2) → §13.5 free-event bypass (Day 30 Phase 1a) → §14.10 ledger invariant verifier (Day 30 Phase 2).
-
-**Decision N truth gate is now THE gating milestone.** It's blocked on pending-Moshiur items deferred for over a week:
+**Decision N truth gate REMAINS THE gating milestone for priced money work.** Three pending-Moshiur items unchanged (deferred ~11 days):
 
 1. **EPS sandbox credentials confirmed** OR authorized controlled STAGING_PAYMENT_BLOCK lift + new `decisions.md` entry per §11.0 (4 × small real charges)
 2. **§29 #9 (AIT withholding) tax opinion** — calculator math is pre-withholding per file header
 3. **SES out-of-sandbox approval** — without it, real ticket emails won't deliver to non-verified addresses
 
-**Sprint 4 has buildable work that CAN proceed in parallel** while truth-gate blockers resolve (attendee list + QR scanner + dashboards + marketing). The project isn't fully blocked, but **anything touching real money** (refunds, payouts, first paying tenant) **is gated on the truth gate.**
+**Sprint 4 Day-31 work was purely payment-independent** (check-in surface consumes Day-28 QR tokens, no money state change). The rest of Sprint 4's buildable-in-parallel work (attendee list, dashboards, marketing) remains available; anything touching priced money is still gated.
 
-## Controlled truth-gate protocol (restated for next session)
+## Day 31 deliverables (all merged today, all green on staging)
 
-- 4 §14.2-mode transactions (PT/PT, AB/AB, AB/PT, PT/AB)
-- Smallest viable amounts (probably BDT 100 each = ~$1)
-- **Moshiur approves amounts FIRST** (no agent-initiated real-money fires)
-- STAGING_PAYMENT_BLOCK lifted ONLY for that run; re-enabled immediately after
-- New `decisions.md` entry MUST land alongside the lift recording rationale + amounts + Moshiur sign-off
-- §14.10 Invariant 1 verified against the 4 priced rows (verifier is shipped + ready)
-- Post-mortem entry capturing actual vs calculated fees
+**PR #180 (Phase 1) — server check-in validation + endpoint (`37a2241`):**
 
-## State right now (2026-05-25 EOD)
+- `apps/api/src/services/checkin/checkin.ts` `checkInAttendee()` — atomic compare-and-swap (UPDATE … WHERE checked_in_at IS NULL RETURNING) inside `withTenant` tx; Postgres row-lock serialises concurrent scans; winner gets RETURNING row, loser disambiguates via secondary SELECT for the ALREADY_CHECKED_IN response.
+- Schema reality: `attendees` has no `event_id` column; admission scoping via subquery through `ticket_tiers` (`inArray(attendees.ticketTierId, tierIdsForEvent)` for UPDATE, `innerJoin(ticketTiers, eq(attendees.ticketTierId, ticketTiers.id))` for SELECT).
+- 3 sibling audit helpers (`writeAttendeeCheckedIn` / `writeAttendeeCheckInAlready` / `writeAttendeeCheckInRejected`) at `services/audit/attendees.ts`, one-per-domain pattern.
+- POST `/api/v1/tenant/events/:eventId/checkin` + GET `/stats`; userId via `c.get('auth')!.sub` (AccessClaims has `sub`, not `userId`).
+- 11 DB-gated tests pinning door-correctness (concurrent double-scan, cross-tenant RLS, wrong-event no info leak, 50-concurrent-scan race that always admits exactly one).
+- CI Integration first push failed `JWT_ACCESS_SECRET is not set` — `signTokens` reads env at call time; test beforeAll ran before env setup. Fixed by setting `process.env.JWT_*_SECRET = 'x'.repeat(64)` in beforeAll matching kyc-drafts.test.ts pattern.
 
-**Sprint 3 CLOSED.** 5 PRs shipped Day 30 (free-event bypass + E2E smoke + ledger invariants + closeout + memory).
+**PR #181 (Phase 2) — browser QR scanner UI (`f4aa8d8`):**
 
-**Branches + PRs Day 30:**
+- `apps/web/src/hooks/use-checkin.ts` — `useScan` TanStack mutation + `useCheckInStats` polls /stats every 5s.
+- `apps/web/src/components/tenant/checkin-scanner.tsx` — big-result display per outcome, dynamic-imported `qr-scanner` library (MIT, ~21KB) for SSR-safety, camera fallback to manual entry.
+- `apps/web/src/app/(tenant)/events/[eventId]/checkin/page.tsx` — server-component shell.
+- 16 web tests covering token extraction + all 5 result variants + manual entry + mount smoke (all axe-clean).
 
-- `origin/main` HEAD = `<closeout-sha>` (Sprint 3 closeout commit; v0.3.0-sprint-3 tag pinned here)
-- Staging EC2 deployed code = matches main
-- **4 Day 30 PRs MERGED:**
-  - PR #175 (Phase 1a) `fix(orders): §13.5 free-event bypass — born-paid, no EPS call` → merged `aeb006b`
-  - PR #176 (Phase 1b) `test(e2e): free-event buyer-journey smoke — HTTP through full stack` → merged `2c6f36f`
-  - PR #177 (Phase 2) `feat(ledger): §14.10 invariant verifier — money split sums to total` → merged `2cba41d`
-  - PR #178 (Phase 3) — this PR (closeout + retro + tag + Sprint 4 issue)
-- **Sprint 4 kickoff issue:** #178 (truth-gate prominently surfaced as gating)
-- **Sprint 3 tracker issue #110:** CLOSED against shipped work
-- **PR #72 still DEFERRED** — `@noble/hashes` 1→2 awaits post-truth-gate
+**PR #182 (Phase 3) — offline-tolerant queue + sync-on-reconnect (`302a76a`):**
 
-**Day 30 deliverables (all merged):**
+- `apps/web/src/lib/offline-checkin-queue.ts` — IndexedDB persistence (`eventpulse-checkin-v1` / `pending` store). Pure functions over injected `IDBFactory` so tests inject `fake-indexeddb` without global patching (Choice C pattern).
+- `apps/web/src/lib/sync-checkin-queue.ts` — sync orchestrator; sequential POSTs; removes row on DEFINITIVE outcome (admitted / duplicate_on_sync / invalid / wrong_event / voided); retains on network_error; returns SyncReport with `duplicateCount` for ops alerting.
+- 12 unit tests including the canonical OFFLINE-DOUBLE-ENTRY (two enqueued scans of SAME-QR → first admitted, second duplicate_on_sync, BOTH removed, duplicateCount=1).
+- checkin-scanner extended with offline-tentative banner + pending-count banner + duplicate-on-sync banner + on-mount + on-'online' sync trigger.
 
-- ✅ **§13.5 free-event bypass** at `apps/api/src/services/orders/index.ts createOrder()`. STOP-ASK surfaced + fixed in same session per brief framing. Free events born-paid; no EPS call; delivery enqueued directly. 7 DB-gated tests pinned the contract.
-- ✅ **E2E full-stack smoke** at `apps/api/src/routes/public/orders-e2e-smoke.test.ts`. HTTP through complete pipeline (middleware → route → service → delivery enqueue). 3 DB-gated tests including REPLAY (no double-count) + §14.10 Invariant 1 across all orders. Browser-form happy path deferred to Sprint 4 (UI doesn't exist).
-- ✅ **§14.10 ledger invariant verifier** at `apps/api/src/domain/ledger/invariants.ts`. Pure functions over row arrays; bit-exact bigint; typed LedgerInvariantError. **332 tests including 320 PROPERTY tests** proving Invariant 1 holds by construction across (4 §14.2 modes × 5 subtotals × 4 platform_bps × 4 eps_bps) — the fee-calculator's outputs ALWAYS satisfy the invariant.
-- ✅ **Sprint 3 closeout** — `v0.3.0-sprint-3` tag pushed on the closeout commit; release notes (in tag message body) summarise Sprint 3 with the explicit note that pipeline is feature-complete but NOT truth-gate-verified and NOT production-ready.
+**Phase 4 EOD staging smoke (all GREEN):**
 
-**Day 30 staging smoke (all GREEN):**
-
-- main HEAD post-Phase-2 deployed; EC2 HEAD matches; zero drift
-- `STAGING_PAYMENT_BLOCK=1` enforcing in pm2 env (id=1) + `/home/eventpulse/.env.staging`
+- main HEAD = `302a76a` post-Phase-3 merge; staging EC2 HEAD matches; zero drift
+- `STAGING_PAYMENT_BLOCK=1` enforcing in `.env.staging` + pm2 env (id=1)
 - 5 vhosts `/nginx-health`: all 200
-- `/health` DB-aware: 200, db:ok
+- `/health` DB-aware: 200, db:ok, checkedMs:11
 - Google OAuth `/start`: 302 (regression guard holds)
-- Boot log: `eps.token_cache=redis` + `tickets.delivery_worker.started` + `redis.ready` after `eventpulse api listening`
-- Day 27 fraud-prevention regression guard still holds (spoofed webhook → unknown_transaction)
-- Day 29 idempotency live: missing key → 400; valid key + bogus event → typed 4xx; replay → cached + `x-idempotency-replay: true`
+- Day 27 fraud-prevention regression guard: spoofed webhook → `unknown_transaction` (signature non-authority)
+- Day 29 idempotency live: missing key → 400 (fail-closed)
 
-**Tests at sprint close: 1083 pass (+332 ledger from Day 30 Phase 2), 294 skipped (CI runs DB-gated).**
+**Tests at Day 31 close: ~1122 pass (+39 from Day 31 across api + web), 294+ skipped (CI runs DB-gated).**
 
-## Days 27-30 retro (the back-half of Sprint 3 in numbers)
+## Three decisions codified today (decisions.md "Sprint 4 Day 31")
 
-- **5 days, 17 PRs, 5 hotfixes** — production hotfix density tracks complexity: Day 29's idempotency middleware ate 2 hotfixes from the unit-tests-vs-production-HTTP gap (body-stream exhaustion + Redis cold-start). Both gotchas captured.
-- **Test runner growth: 690 → 1083** (+393 pass, all green).
-- **DB-gated tests: 256 → 294** (+38; CI runs them).
-- **4 architectural decisions per day codified in decisions.md** (Day 27 webhook auth + redirect non-authority; Day 28 QR + PDF + BullMQ; Day 29 idempotency + capacity lock; Day 30 free-event bypass + ledger).
-- **STAGING_PAYMENT_BLOCK held every hour** of every session. Zero real EPS calls fired.
+- **Choice A — Door-correctness via atomic compare-and-swap.** Conditional UPDATE WHERE checked_in_at IS NULL RETURNING; row-lock collapses concurrent-scan races to "one wins, one returns zero rows + disambiguates." Future refactors that split validate from transition would re-introduce the race; pin atomic-CAS here.
+- **Choice B — Optimistic-admit offline door policy (§-spec silent; Auto Mode call).** Offline scans admitted with "(tentative — offline)" banner; queued to IndexedDB; flushed on reconnect; server's CAS is FINAL authority; duplicate_on_sync flag surfaces 2-device-offline conflicts to ops. Why: bad connectivity is the WHOLE reason §26.1 specified offline-tolerant — queue-and-wait would unwork venues. Threat model is honest-mistake double-scan, not coordinated fraud.
+- **Choice C — Frontend offline-storage tests via injected IDBFactory.** Pure functions over passed-in `factory: IDBFactory` (default reads `globalThis.indexedDB`); tests inject `fake-indexeddb` without global mutation cascades. Pattern applies to future browser-storage work (localStorage, Cache API, Service Worker).
 
-### What worked
+## Next concrete step — Sprint 4 Day 32
 
-- **Front-loading playbook reads on each phase.** Phase 0's read of §14.10 caught the latent §13.5 free-event bypass bug BEFORE Phase 1b's E2E smoke would have failed on it. Days 27-30 all opened with deep playbook reads that prevented downstream surprises.
-- **Codifying decisions in `decisions.md` PER day.** When the Day 29 body-stream gotcha hit production, the existing decision pattern (each PR's architectural choice committed with rationale) made the post-mortem mechanical.
-- **Fail-closed vs fail-open asymmetry** (Day 29 vs Day 28). Different layers need different failure modes: source-of-truth gates fail closed (idempotency); downstream consequences fail open (delivery). The pattern is now codified.
-- **DB-gated tests against real Postgres.** The Day 29 capacity-lock 10-concurrent-buyers-race test only proves anything against real Postgres lock semantics — ioredis-mock can't model that. The test infrastructure handled this cleanly.
+Moshiur picks scope. Logical first picks per §26.1 Sprint 4 plan:
 
-### What didn't
+- **Day 32 Option A: Attendee list UI + CSV export** (§26.1 Day 1-2). Builds on Day 28's `attendees` table + Day 31's QR tokens. Tenant portal scope; no truth-gate dependency. Day 31 scanner + Day 32 attendee list = the full attendee-management surface for free events end-to-end.
+- **Day 32 Option B: Tenant sales dashboard** (§26.1 Day 5). Consumes Day 26-29 order pipeline + Day 27 paid orders. Renders the existing data; no new write paths; no truth-gate dependency.
+- **Day 32 Option C: Buyer form UI** (Sprint 3 carry). Unblocks the Day 30 Phase 1b E2E smoke's "browser path" + gives free events an actual user-facing booking path on staging.
+- **Day 32 Option D: Truth-gate progress** — only if Moshiur has cleared one of the three pending items (EPS sandbox creds, AIT opinion, SES out-of-sandbox).
 
-- **The unit-tests-vs-production-HTTP gap (twice in one day).** Day 29 Phase 1's middleware tested green against `app.request()` but failed twice in production: body-stream exhaustion (Hono shortcuts caching in `app.request()`; real HTTP doesn't) + Redis cold-start (mocked client doesn't exercise lazy-connect race). Both fixed, both captured in gotchas. Future practice: any HTTP-touching middleware change needs a post-deploy live curl smoke as part of the merge gate.
-- **The §13.5 free-event bypass was latent for ~6 months.** Spec'd since playbook v1.0; never implemented; no test caught it (no test used `pricePaisa: 0n`). Caught only at Day 30 Phase 0 by reading the createOrder flow in detail ahead of the E2E smoke. **Lesson: spec sections specifying behavior without a corresponding test = future surprise.** Sprint 4+ should audit other "spec'd behavior without dedicated test" sections.
-- **GitHub Actions org spending limit hit mid-day-30.** Same root cause as the Day 20 org-migration cascade. Required Moshiur intervention to raise the limit. Lesson: monitor org Actions billing more proactively as CI run density increases.
-- **The Day 30 brief asked for a Playwright browser smoke that couldn't exist** because the buyer-form UI was never built (it's Sprint 4 scope). Caught at Phase 0; reframed as a full-stack integration test. Brief-vs-reality mismatch is the kind of thing the Day-30 closeout naturally surfaces.
+Recommendation: Option A or B — concrete user surface that exercises the shipped pipeline; both are payment-independent.
 
-### Three things to do differently next sprint
+## Pending Moshiur actions — Day 31 closeout state
 
-1. **HTTP smoke ≠ unit test.** When shipping a middleware that runs on every request, the merge gate must include a post-deploy live curl that exercises the production HTTP path (not just `app.request()`). Add this as a Sprint 4 CI/CD checklist item OR as a manual gate.
-2. **Spec-to-test audit at sprint kick-off.** At Sprint 4 Day 1, grep the playbook for §-numbered spec sections without corresponding `it('§X.Y …')` tests. The §13.5 free-event case took ~6 months to surface; that's not acceptable for spec-sensitive behavior.
-3. **Cost-pessimistic CI quota planning.** Day 30's 4+ CI runs hit the org Actions cap mid-day. Sprint 4 is dashboard + scanner heavy (lots of E2E surface). Plan quota upfront; pre-confirm the limit covers the expected run density.
-
-## Next concrete step — Sprint 4 Day 31
-
-The brief for Day 31 is Moshiur's call. Logical first picks per §26.1 Sprint 4 plan:
-
-- **Day 31 Option A: Attendee list UI + CSV export** (§26.1 Day 1-2). Builds on Day 28's `attendees` table. Tenant portal scope; no truth-gate dependency. Good first day for parallel-with-truth-gate work.
-- **Day 31 Option B: Buyer form UI** (Sprint 3 carry). Unblocks the Day 30 Phase 1b E2E smoke's "browser path" — and gives free events an actual user-facing path on staging.
-- **Day 31 Option C: Web QR scanner** (§26.1 Day 3-4). Builds on Day 28's QR tokens. Camera-based; offline-tolerant; would let us test the full Day-28 ticket delivery + check-in loop end-to-end (free events only until truth gate).
-
-All three are buildable in parallel; pick based on user priority. Recommendation: Option A or C — concrete user surface that exercises Sprint 3's shipped pipeline.
-
-## Pending Moshiur actions — Sprint 3 closeout state
-
-**TRUTH-GATE BLOCKERS (gate Day 30+ priced work — restate every session until cleared):**
+**TRUTH-GATE BLOCKERS (restate every session until cleared — gates priced money):**
 
 1. **EPS sandbox credentials confirmed** OR explicit STAGING_PAYMENT_BLOCK lift authorisation (4 × small real charges; new `decisions.md` entry required per §11.0)
 2. **§29 #9 (AIT withholding) + #10 (VAT/Mushak) tax opinions**
 3. **SES out-of-sandbox approval**
 
-**Lower urgency (continued):**
+**Lower urgency (carried, unchanged from Day 30):**
 
 1. **Phase 2 Google OAuth click-through verification (Day 24 carry).**
 2. **Counsel engagement for Trust Center v1.0 drafts** — first paying tenant gated.
@@ -119,9 +86,9 @@ All three are buildable in parallel; pick based on user priority. Recommendation
 5. **NotoSansBengali font bundling for PDF tickets** — pure-Bangla strings render as squares until font lands.
 6. **`sold` decrement on cancel/fail/chargeback** — Day 29 Phase 2 scope-limited to increment-only; cleanup sweep is Sprint 4+ scope.
 
-## Hard guardrails (carry forward + 4 new from Day 30)
+## Hard guardrails (carry forward + 3 new from Day 31)
 
-(Carrying forward all Day 29 guardrails; adding 4 Day 30 ones at the end.)
+(Carrying forward all Day 30 guardrails; adding 3 Day 31 ones at the end.)
 
 - Single EC2 only. ~$23/mo total. $40/mo canary.
 - No SSH, no port 22. Shell via `aws ssm start-session --target i-02e4fddeb923c14f9 --profile eventpulse`.
@@ -181,10 +148,13 @@ All three are buildable in parallel; pick based on user priority. Recommendation
 - **FOR UPDATE capacity lock uses ORDER BY id for multi-tier deadlock avoidance.**
 - **Hono middleware that hashes request body MUST use `c.req.raw.clone().text()`**, NOT `c.req.text()`.
 - **Redis singleton needs explicit `await redis.connect()` at boot** for the idempotency middleware's first request after pm2 reload.
-- **NEW 2026-05-25 — §13.5 free-event auto-settle: events where every tier price_paisa = 0 go pending → paid immediately, NO EPS call.** Implemented in createOrder via `if (calc.buyerTotalPaisa === 0n)` branch inside the same withSuperAdmin tx. `paymentInitState: 'free'` discriminant value distinguishes from `'ready'` (paid + EPS init succeeded) + `'blocked'` (paid + STAGING_PAYMENT_BLOCK refused).
-- **NEW 2026-05-25 — Mixed paid+free tier order takes the PAID path.** §13.5 rule is "every tier price_paisa = 0", NOT "any tier". A cart with one free + one paid tier has totalPaisa > 0n → EPS init fires (or block-refuses).
-- **NEW 2026-05-25 — `apps/api/src/domain/ledger/invariants.ts` is the §14.10 source of truth for money conservation checks.** Pure functions over row arrays. Bit-exact bigint. Single paisa discrepancy = real money bug. Use `assertInvariant1PerOrder` to throw on violation (matches §14.10 "any violation halts new batch creation").
-- **NEW 2026-05-25 — Sprint-section spec without a dedicated test = future surprise.** The §13.5 free-event bypass was latent for ~6 months because no test used `pricePaisa: 0n`. Sprint 4 Day 1 should audit other "spec'd behavior without dedicated test" sections.
+- **§13.5 free-event auto-settle: events where every tier price_paisa = 0 go pending → paid immediately, NO EPS call.**
+- **Mixed paid+free tier order takes the PAID path.**
+- **`apps/api/src/domain/ledger/invariants.ts` is the §14.10 source of truth for money conservation checks.** Pure functions over row arrays. Bit-exact bigint.
+- **Sprint-section spec without a dedicated test = future surprise.**
+- **NEW 2026-05-25 (Day 31 Choice A) — Check-in admission is atomic compare-and-swap (UPDATE WHERE checked_in_at IS NULL RETURNING) inside `withTenant` tx.** Postgres row-lock serialises concurrent scans. Future refactors that split validate from transition would re-introduce the race; pin atomic-CAS.
+- **NEW 2026-05-25 (Day 31 Choice B) — Optimistic-admit offline door policy: scans admitted with "(tentative — offline)" banner, queued to IndexedDB, server's CAS is FINAL authority, duplicate_on_sync flag surfaces 2-device-offline conflicts.** §-spec was silent on door UX; Auto Mode call; the server-CAS-is-final-authority boundary is the security model. Removing the banner OR switching to queue-and-wait would either treat unsynced admits as definitive OR unwork bad-connectivity venues — both wrong.
+- **NEW 2026-05-25 (Day 31 Choice C) — Frontend offline-storage modules expose `factory: IDBFactory` parameter (default reads `globalThis.indexedDB`).** Tests inject `fake-indexeddb` without global mutation. Pattern applies to future browser-storage work (localStorage, Cache API, Service Worker).
 
 ## Useful runbook fragments
 
@@ -195,28 +165,27 @@ aws ssm start-session --target i-02e4fddeb923c14f9 --profile eventpulse
 # Trigger staging deploy
 gh workflow run deploy-staging.yml --ref main
 
-# Run Day 30 §14.10 ledger invariant tests (pure, 332 tests, ~10ms)
-pnpm --filter @eventpulse/api exec vitest run src/domain/ledger/invariants.test.ts
+# Run Day 31 check-in service tests (DB-gated)
+pnpm --filter @eventpulse/api exec vitest run src/routes/tenant/checkin.test.ts
 
-# Run Day 30 free-event bypass DB-gated tests
-pnpm --filter @eventpulse/api exec vitest run src/services/orders/free-event-bypass.test.ts
+# Run Day 31 offline queue + sync tests (pure, fake-indexeddb)
+pnpm --filter @eventpulse/web exec vitest run src/lib/offline-checkin-queue.test.ts
 
-# Run Day 30 E2E full-stack smoke
-pnpm --filter @eventpulse/api exec vitest run src/routes/public/orders-e2e-smoke.test.ts
+# Run Day 31 scanner UI tests (jsdom, axe)
+pnpm --filter @eventpulse/web exec vitest run src/components/tenant/checkin-scanner.test.tsx
 
-# Verify v0.3.0-sprint-3 tag
-git tag -v v0.3.0-sprint-3 2>&1 | head -5
-git show v0.3.0-sprint-3 --stat | head -30
-
-# Live regression smokes (Day 27 + Day 29) — should still hold after Sprint 4 work
+# Live regression smokes (Day 27 + Day 29 + Day 31) — should still hold after Day 32 work
 curl -s -X POST -H "content-type: application/json" \
-  -d '{"merchant_transaction_id":"TXN-spoofed-day31","status":"SUCCESS"}' \
+  -d '{"merchant_transaction_id":"TXN-spoofed-day32","status":"SUCCESS"}' \
   https://api.staging.eventpulse.com.bd/api/v1/webhooks/eps/callback
 # Expected: 200 + {"data":{"ok":true,"kind":"unknown_transaction",...}}
 
-curl -s -X POST -H "content-type: application/json" \
-  -H "idempotency-key: smoke-day31-12345-12345" \
-  -d '{"eventId":"00000000-0000-0000-0000-000000000000","tierSelections":[{"tierId":"00000000-0000-0000-0000-000000000000","quantity":1}],"buyer":{"name":"x","email":"x@example.com","phone":"+88017"}}' \
-  https://api.staging.eventpulse.com.bd/api/v1/public/orders
-# Expected: 404 NOT_FOUND (typed) on first call; cached replay with x-idempotency-replay: true on second
+curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "content-type: application/json" \
+  -d '{}' https://api.staging.eventpulse.com.bd/api/v1/public/orders
+# Expected: 400 (idempotency missing-key fail-closed)
+
+# Verify STAGING_PAYMENT_BLOCK still enforcing (run via SSM SendCommand)
+sudo grep -E "^(STAGING_PAYMENT_BLOCK|EPS_MODE)=" /home/eventpulse/.env.staging
+sudo -u eventpulse pm2 env 1 | grep -E "^(STAGING_PAYMENT_BLOCK|EPS_MODE):"
+# Expected both: STAGING_PAYMENT_BLOCK=1 and EPS_MODE=production
 ```
