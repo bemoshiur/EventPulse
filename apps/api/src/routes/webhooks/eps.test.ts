@@ -97,7 +97,15 @@ describe('webhook route — IP rate-limit', () => {
   // makes window boundaries deterministic without changing the
   // limiter's semantics.
   beforeEach(() => {
-    vi.useFakeTimers({ now: new Date('2026-05-25T12:00:00Z') })
+    // vi.useFakeTimers({now: ...}) in vitest 2.1.x sets the initial
+    // fake time but doesn't reliably mock Date.now() across all
+    // call paths (Day 30 CI flake on PR #179 surfaced this — the
+    // limiter's Math.floor(Date.now() / windowMs) saw advancing
+    // values across 101 hits, allowing all of them). Belt-and-
+    // braces: explicit vi.setSystemTime() guarantees Date.now()
+    // returns the frozen value for every call site.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-05-25T12:00:00Z'))
   })
   afterEach(() => {
     vi.useRealTimers()
@@ -136,7 +144,15 @@ describe('webhook route — txn-id rate-limit', () => {
   // Date.now() for the duration of the budget-exhaustion tests so
   // the limiter's fixed-window bucket cannot roll mid-test.
   beforeEach(() => {
-    vi.useFakeTimers({ now: new Date('2026-05-25T12:00:00Z') })
+    // vi.useFakeTimers({now: ...}) in vitest 2.1.x sets the initial
+    // fake time but doesn't reliably mock Date.now() across all
+    // call paths (Day 30 CI flake on PR #179 surfaced this — the
+    // limiter's Math.floor(Date.now() / windowMs) saw advancing
+    // values across 101 hits, allowing all of them). Belt-and-
+    // braces: explicit vi.setSystemTime() guarantees Date.now()
+    // returns the frozen value for every call site.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-05-25T12:00:00Z'))
   })
   afterEach(() => {
     vi.useRealTimers()
