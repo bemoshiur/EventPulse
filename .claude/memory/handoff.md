@@ -1,129 +1,127 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-05-25 (Sprint 3 Day 29 COMPLETE — Idempotency-Key middleware + FOR UPDATE capacity lock, **pipeline is now FEATURE-COMPLETE** behind STAGING_PAYMENT_BLOCK)
-**Driver:** Claude Code (Opus 4.7) — Day 29 closeout; **next session opens Sprint 3 Day 30 — end-to-end buyer-journey smoke + §14.10 ledger invariants + `v0.3.0-sprint-3` tag + Sprint 3 retro.**
+**Last update:** 2026-05-25 (Sprint 3 CLOSED at `v0.3.0-sprint-3`. Pipeline feature-complete behind STAGING_PAYMENT_BLOCK. **Decision N truth gate is THE blocker for priced money.**)
+**Driver:** Claude Code (Opus 4.7) — Sprint 3 closeout (Day 30); **next session opens Sprint 4 Day 31.**
 
-## ⚠️ CRITICAL handoff pivot — read this first
+## ⚠️ CRITICAL: where we are right now
 
-After Day 30 ships, **Sprint 3's buildable feature work is DONE**. The pipeline is feature-complete and the **Decision N truth gate becomes the gating milestone** — and it's blocked on the pending-Moshiur items that have been deferred for over a week:
+**Sprint 3 buildable work is DONE.** Tag `v0.3.0-sprint-3` cut. The pipeline is feature-complete behind block:
 
-1. **EPS sandbox credentials confirmed** OR authorized controlled STAGING_PAYMENT_BLOCK lift + new `decisions.md` entry per §11.0 guardrail.
-2. **§29 #9 (AIT withholding) tax opinion** — calculator math is pre-withholding per file header; lift gates the truth gate's reconciliation accuracy.
-3. **SES out-of-sandbox approval** — without it, real ticket emails won't deliver to non-verified addresses.
+- Order creation (Day 26) → Settlement (Day 27) → Delivery (Day 28) → Idempotency middleware (Day 29 Phase 1) → Capacity lock (Day 29 Phase 2) → §13.5 free-event bypass (Day 30 Phase 1a) → §14.10 ledger invariant verifier (Day 30 Phase 2).
 
-These items stop being "deferred" and start being **the thing blocking progress** after Day 30. The controlled-truth-gate protocol stays unchanged:
+**Decision N truth gate is now THE gating milestone.** It's blocked on pending-Moshiur items deferred for over a week:
+
+1. **EPS sandbox credentials confirmed** OR authorized controlled STAGING_PAYMENT_BLOCK lift + new `decisions.md` entry per §11.0 (4 × small real charges)
+2. **§29 #9 (AIT withholding) tax opinion** — calculator math is pre-withholding per file header
+3. **SES out-of-sandbox approval** — without it, real ticket emails won't deliver to non-verified addresses
+
+**Sprint 4 has buildable work that CAN proceed in parallel** while truth-gate blockers resolve (attendee list + QR scanner + dashboards + marketing). The project isn't fully blocked, but **anything touching real money** (refunds, payouts, first paying tenant) **is gated on the truth gate.**
+
+## Controlled truth-gate protocol (restated for next session)
 
 - 4 §14.2-mode transactions (PT/PT, AB/AB, AB/PT, PT/AB)
 - Smallest viable amounts (probably BDT 100 each = ~$1)
-- **Moshiur approves amounts first** (no agent-initiated real-money fires)
+- **Moshiur approves amounts FIRST** (no agent-initiated real-money fires)
 - STAGING_PAYMENT_BLOCK lifted ONLY for that run; re-enabled immediately after
-- New decisions.md entry MUST land alongside the lift recording the rationale + amounts + Moshiur sign-off
+- New `decisions.md` entry MUST land alongside the lift recording rationale + amounts + Moshiur sign-off
+- §14.10 Invariant 1 verified against the 4 priced rows (verifier is shipped + ready)
+- Post-mortem entry capturing actual vs calculated fees
 
 ## State right now (2026-05-25 EOD)
 
-**Sprint 3 Day 29 COMPLETE.** 5 PRs shipped (2 phases + 2 hotfixes + memory); pipeline feature-complete behind block.
+**Sprint 3 CLOSED.** 5 PRs shipped Day 30 (free-event bypass + E2E smoke + ledger invariants + closeout + memory).
 
-**Branches + PRs:**
+**Branches + PRs Day 30:**
 
-- `origin/main` HEAD = `1a93740` (PR #173 — Redis warmup hotfix)
-- Staging EC2 deployed code = `1a93740` (verified below)
-- **5 Day 29 PRs MERGED:**
-  - PR #170 (Phase 1) `feat(api): Idempotency-Key middleware on order creation` → merged `85259fb`
-  - PR #171 (Phase 2) `feat(orders): FOR UPDATE capacity lock + sold increment in createOrder` → merged `52e306a`
-  - PR #172 (Phase 1 hotfix #1) `fix(api): idempotency middleware uses c.req.raw.clone() to preserve body stream` → merged `21b6a39`
-  - PR #173 (Phase 1 hotfix #2) `fix(api): warm up Redis at boot to fix first-request-after-pm2-reload race` → merged `1a93740`
-  - PR #174 (memory) Day 29 closeout — this PR
-- **PR #72 still DEFERRED** — `@noble/hashes` 1→2 awaits post-Days-24-25-EPS-truth-gate.
+- `origin/main` HEAD = `<closeout-sha>` (Sprint 3 closeout commit; v0.3.0-sprint-3 tag pinned here)
+- Staging EC2 deployed code = matches main
+- **4 Day 30 PRs MERGED:**
+  - PR #175 (Phase 1a) `fix(orders): §13.5 free-event bypass — born-paid, no EPS call` → merged `aeb006b`
+  - PR #176 (Phase 1b) `test(e2e): free-event buyer-journey smoke — HTTP through full stack` → merged `2c6f36f`
+  - PR #177 (Phase 2) `feat(ledger): §14.10 invariant verifier — money split sums to total` → merged `2cba41d`
+  - PR #178 (Phase 3) — this PR (closeout + retro + tag + Sprint 4 issue)
+- **Sprint 4 kickoff issue:** #178 (truth-gate prominently surfaced as gating)
+- **Sprint 3 tracker issue #110:** CLOSED against shipped work
+- **PR #72 still DEFERRED** — `@noble/hashes` 1→2 awaits post-truth-gate
 
-**Day 29 deliverables (all merged):**
+**Day 30 deliverables (all merged):**
 
-- ✅ **Idempotency-Key middleware** at `apps/api/src/middleware/idempotency.ts` — full §6.4 contract: cached replay, in-flight 409, body-hash 422 on key-reuse with different body, missing-key 400, fail-CLOSED on Redis absence (503), 5xx not cached + marker released, 4xx cached.
-- ✅ **FOR UPDATE capacity lock** in `apps/api/src/services/orders/index.ts createOrder()` — closes the oversell race; ORDER BY id prevents multi-tier deadlock; new `InsufficientCapacityError` typed exception → 409 TIER_SOLD_OUT.
-- ✅ **2 hotfixes from the same root** — unit-tests-vs-production-HTTP gap: body-stream exhaustion (Hono's `c.req.text()` works in `app.request()` tests but consumes the stream in real HTTP) + Redis cold-start (lazy-connect singleton needs explicit warm-up so the first request after pm2 reload doesn't race the connect). Both fixed; staging smoke verified end-to-end.
+- ✅ **§13.5 free-event bypass** at `apps/api/src/services/orders/index.ts createOrder()`. STOP-ASK surfaced + fixed in same session per brief framing. Free events born-paid; no EPS call; delivery enqueued directly. 7 DB-gated tests pinned the contract.
+- ✅ **E2E full-stack smoke** at `apps/api/src/routes/public/orders-e2e-smoke.test.ts`. HTTP through complete pipeline (middleware → route → service → delivery enqueue). 3 DB-gated tests including REPLAY (no double-count) + §14.10 Invariant 1 across all orders. Browser-form happy path deferred to Sprint 4 (UI doesn't exist).
+- ✅ **§14.10 ledger invariant verifier** at `apps/api/src/domain/ledger/invariants.ts`. Pure functions over row arrays; bit-exact bigint; typed LedgerInvariantError. **332 tests including 320 PROPERTY tests** proving Invariant 1 holds by construction across (4 §14.2 modes × 5 subtotals × 4 platform_bps × 4 eps_bps) — the fee-calculator's outputs ALWAYS satisfy the invariant.
+- ✅ **Sprint 3 closeout** — `v0.3.0-sprint-3` tag pushed on the closeout commit; release notes (in tag message body) summarise Sprint 3 with the explicit note that pipeline is feature-complete but NOT truth-gate-verified and NOT production-ready.
 
-**Tests shipped:**
+**Day 30 staging smoke (all GREEN):**
 
-- 12 unit tests for Idempotency middleware (against ioredis-mock)
-- 7 DB-gated capacity-lock integration tests (incl. the canonical 10-concurrent-buyers-race-for-3-tickets pinned against real Postgres)
-- Final API suite: **751 pass (+12 net new on Day 29), 284 skipped (+7 DB-gated added; CI runs them)**
-
-**Day 29 staging smoke (all GREEN, post-both-hotfixes):**
-
-- main HEAD matches `1a93740`; zero drift
+- main HEAD post-Phase-2 deployed; EC2 HEAD matches; zero drift
 - `STAGING_PAYMENT_BLOCK=1` enforcing in pm2 env (id=1) + `/home/eventpulse/.env.staging`
 - 5 vhosts `/nginx-health`: all 200
 - `/health` DB-aware: 200, db:ok
-- Google OAuth `/start`: 302
-- Boot log shows `eps.token_cache.backed_by=redis` + `tickets.delivery_worker.started` (Day 26 + Day 28 wiring intact)
-- **Idempotency live smokes:** missing key → 400; valid key + bogus event → 404 (typed); replay → cached + `x-idempotency-replay: true`; different body same key → 422
-- **Day 27 fraud-prevention regression guards still hold** — spoofed webhook → unknown_transaction; redirect /success unknown-txn → error page
+- Google OAuth `/start`: 302 (regression guard holds)
+- Boot log: `eps.token_cache=redis` + `tickets.delivery_worker.started` + `redis.ready` after `eventpulse api listening`
+- Day 27 fraud-prevention regression guard still holds (spoofed webhook → unknown_transaction)
+- Day 29 idempotency live: missing key → 400; valid key + bogus event → typed 4xx; replay → cached + `x-idempotency-replay: true`
 
-## Next concrete step — Day 30: E2E smoke + §14.10 invariants + Sprint 3 tag
+**Tests at sprint close: 1083 pass (+332 ledger from Day 30 Phase 2), 294 skipped (CI runs DB-gated).**
 
-**Scope:**
+## Days 27-30 retro (the back-half of Sprint 3 in numbers)
 
-1. **End-to-end Playwright buyer-journey smoke** (against staging, gated by STAGING_PAYMENT_BLOCK → free-event variant). Per §26.1 Sprint 4 plan but trial-run now: landing page → ticket select → buyer form → submit → confirmation page. EPS init is block-refused for priced events; use a free event (0-paisa tier) to exercise the full pipeline without payment.
-2. **§14.10 ledger invariants verification** — Invariant 1: `Σ order.total_paisa = Σ (net_to_organiser + platform_fee + eps_fee + withholding_tax)` for every order in test set. Invariant 2: `Σ disbursement_batch.gross − refunds − withholding = Σ disbursement_batch.net` for every batch (disbursement batches are Sprint 7 scope; for Day 30 only Invariant 1 is testable).
-3. **`v0.3.0-sprint-3` annotated tag** on the main commit at session start; release notes from CHANGES.md / commit log covering all 10 days (Day 21 — Day 30).
-4. **Sprint 3 retro** via `/sprint` skill (the "transitioning between sprints" mode) — summarise §26 acceptance criteria against shipped work; identify shipped-vs-planned deltas; propose Sprint 4 scope; cut release.
-5. **Sprint 4 kick-off GitHub issue** opening with proposed scope.
+- **5 days, 17 PRs, 5 hotfixes** — production hotfix density tracks complexity: Day 29's idempotency middleware ate 2 hotfixes from the unit-tests-vs-production-HTTP gap (body-stream exhaustion + Redis cold-start). Both gotchas captured.
+- **Test runner growth: 690 → 1083** (+393 pass, all green).
+- **DB-gated tests: 256 → 294** (+38; CI runs them).
+- **4 architectural decisions per day codified in decisions.md** (Day 27 webhook auth + redirect non-authority; Day 28 QR + PDF + BullMQ; Day 29 idempotency + capacity lock; Day 30 free-event bypass + ledger).
+- **STAGING_PAYMENT_BLOCK held every hour** of every session. Zero real EPS calls fired.
 
-**Pre-flight reads:**
+### What worked
 
-- CLAUDE.md §14.10 (ledger invariants), §26.1 (Sprint 4 plan), §26.2 (Sprint 8+ — attendee accounts + self-service hosting)
-- handoff.md (this file)
-- progress.md "Sprint 3 scope" section — gap analysis against §26.1
-- `apps/api/src/domain/payments/fee-calculator.ts` — the §14.10 source-of-money-math
-- `apps/web/e2e/` — existing Playwright tests for pattern; new buyer-journey spec lands here
+- **Front-loading playbook reads on each phase.** Phase 0's read of §14.10 caught the latent §13.5 free-event bypass bug BEFORE Phase 1b's E2E smoke would have failed on it. Days 27-30 all opened with deep playbook reads that prevented downstream surprises.
+- **Codifying decisions in `decisions.md` PER day.** When the Day 29 body-stream gotcha hit production, the existing decision pattern (each PR's architectural choice committed with rationale) made the post-mortem mechanical.
+- **Fail-closed vs fail-open asymmetry** (Day 29 vs Day 28). Different layers need different failure modes: source-of-truth gates fail closed (idempotency); downstream consequences fail open (delivery). The pattern is now codified.
+- **DB-gated tests against real Postgres.** The Day 29 capacity-lock 10-concurrent-buyers-race test only proves anything against real Postgres lock semantics — ioredis-mock can't model that. The test infrastructure handled this cleanly.
 
-**Day 30 STOP-ASK conditions:**
+### What didn't
 
-- Any attempt to lift STAGING_PAYMENT_BLOCK without a new decisions.md entry + Moshiur sign-off → STOP.
-- Any real EPS network call about to fire → STOP.
-- E2E buyer-journey requires a paid event → STOP (use free event only).
-- Sprint 3 tag → confirm with Moshiur before pushing (tags are publicly visible artefacts).
+- **The unit-tests-vs-production-HTTP gap (twice in one day).** Day 29 Phase 1's middleware tested green against `app.request()` but failed twice in production: body-stream exhaustion (Hono shortcuts caching in `app.request()`; real HTTP doesn't) + Redis cold-start (mocked client doesn't exercise lazy-connect race). Both fixed, both captured in gotchas. Future practice: any HTTP-touching middleware change needs a post-deploy live curl smoke as part of the merge gate.
+- **The §13.5 free-event bypass was latent for ~6 months.** Spec'd since playbook v1.0; never implemented; no test caught it (no test used `pricePaisa: 0n`). Caught only at Day 30 Phase 0 by reading the createOrder flow in detail ahead of the E2E smoke. **Lesson: spec sections specifying behavior without a corresponding test = future surprise.** Sprint 4+ should audit other "spec'd behavior without dedicated test" sections.
+- **GitHub Actions org spending limit hit mid-day-30.** Same root cause as the Day 20 org-migration cascade. Required Moshiur intervention to raise the limit. Lesson: monitor org Actions billing more proactively as CI run density increases.
+- **The Day 30 brief asked for a Playwright browser smoke that couldn't exist** because the buyer-form UI was never built (it's Sprint 4 scope). Caught at Phase 0; reframed as a full-stack integration test. Brief-vs-reality mismatch is the kind of thing the Day-30 closeout naturally surfaces.
 
-## After Day 30 — Decision N truth gate is THE blocker
+### Three things to do differently next sprint
 
-Pipeline state after Day 30:
+1. **HTTP smoke ≠ unit test.** When shipping a middleware that runs on every request, the merge gate must include a post-deploy live curl that exercises the production HTTP path (not just `app.request()`). Add this as a Sprint 4 CI/CD checklist item OR as a manual gate.
+2. **Spec-to-test audit at sprint kick-off.** At Sprint 4 Day 1, grep the playbook for §-numbered spec sections without corresponding `it('§X.Y …')` tests. The §13.5 free-event case took ~6 months to surface; that's not acceptable for spec-sensitive behavior.
+3. **Cost-pessimistic CI quota planning.** Day 30's 4+ CI runs hit the org Actions cap mid-day. Sprint 4 is dashboard + scanner heavy (lots of E2E surface). Plan quota upfront; pre-confirm the limit covers the expected run density.
 
-- ✅ Init step ready (Day 26 Phase 1; currently block-refused for priced)
-- ✅ Verify step ready (Day 26 Phase 1)
-- ✅ State machine ready (Day 27 Phase 1)
-- ✅ Settlement ready (Day 27 Phase 2 + Phase 3 paths)
-- ✅ Post-paid delivery ready (Day 28)
-- ✅ Idempotency middleware ready (Day 29 Phase 1)
-- ✅ Capacity lock ready (Day 29 Phase 2)
-- ✅ E2E buyer journey verified for free-events (Day 30)
+## Next concrete step — Sprint 4 Day 31
 
-What's left BEFORE truth gate can run:
+The brief for Day 31 is Moshiur's call. Logical first picks per §26.1 Sprint 4 plan:
 
-1. **Moshiur supplies EPS sandbox creds** OR explicitly authorizes block lift for 4 controlled real charges.
-2. **AIT tax opinion** so the calculator can be adjusted (or confirmed pre-withholding-is-correct).
-3. **SES out-of-sandbox** so real ticket emails deliver to test accounts.
+- **Day 31 Option A: Attendee list UI + CSV export** (§26.1 Day 1-2). Builds on Day 28's `attendees` table. Tenant portal scope; no truth-gate dependency. Good first day for parallel-with-truth-gate work.
+- **Day 31 Option B: Buyer form UI** (Sprint 3 carry). Unblocks the Day 30 Phase 1b E2E smoke's "browser path" — and gives free events an actual user-facing path on staging.
+- **Day 31 Option C: Web QR scanner** (§26.1 Day 3-4). Builds on Day 28's QR tokens. Camera-based; offline-tolerant; would let us test the full Day-28 ticket delivery + check-in loop end-to-end (free events only until truth gate).
 
-When all three land, the truth gate executes per the §11.0 protocol (above).
+All three are buildable in parallel; pick based on user priority. Recommendation: Option A or C — concrete user surface that exercises Sprint 3's shipped pipeline.
 
-## Pending Moshiur actions — Day 29 carries
+## Pending Moshiur actions — Sprint 3 closeout state
 
-**Most urgent (gates Day 30+ truth-gate path):**
+**TRUTH-GATE BLOCKERS (gate Day 30+ priced work — restate every session until cleared):**
 
-1. **EPS sandbox credentials confirmed** OR explicit STAGING_PAYMENT_BLOCK lift authorisation (4 × small real charges; requires new `decisions.md` entry per §11.0 guardrail).
-2. **§29 #9 (AIT withholding) + #10 (VAT/Mushak) tax opinions.**
-3. **SES out-of-sandbox approval.**
+1. **EPS sandbox credentials confirmed** OR explicit STAGING_PAYMENT_BLOCK lift authorisation (4 × small real charges; new `decisions.md` entry required per §11.0)
+2. **§29 #9 (AIT withholding) + #10 (VAT/Mushak) tax opinions**
+3. **SES out-of-sandbox approval**
 
 **Lower urgency (continued):**
 
 1. **Phase 2 Google OAuth click-through verification (Day 24 carry).**
 2. **Counsel engagement for Trust Center v1.0 drafts** — first paying tenant gated.
-3. **EPS_WEBHOOK_SECRET / signature mechanism** — when EPS publishes one, single add-point in webhook handler.
-4. **bootstrap-staging.sh validation guard live-trigger** — PR #154 (Day 25) ran on the OLD bootstrap; new validation runs on the NEXT bootstrap.
-5. **NotoSansBengali font bundling for PDF tickets** — pure-Bangla strings (future form-builder data) render as squares until the font lands.
-6. **`sold` decrement on cancel/fail/chargeback transitions** — Day 29 Phase 2 deliberately scope-limited to the INCREMENT path; abandoned awaiting_payment orders permanently consume capacity. Sprint 4+ scope: cleanup-sweep cron OR settle.ts hook for transitions.
+3. **EPS_WEBHOOK_SECRET / signature mechanism** — when EPS publishes one.
+4. **bootstrap-staging.sh validation guard live-trigger** — runs on the NEXT bootstrap.
+5. **NotoSansBengali font bundling for PDF tickets** — pure-Bangla strings render as squares until font lands.
+6. **`sold` decrement on cancel/fail/chargeback** — Day 29 Phase 2 scope-limited to increment-only; cleanup sweep is Sprint 4+ scope.
 
-## Hard guardrails (carry forward + 4 new from Day 29)
+## Hard guardrails (carry forward + 4 new from Day 30)
 
-(Carrying forward all Day 28 guardrails; adding 4 Day 29 ones at the end.)
+(Carrying forward all Day 29 guardrails; adding 4 Day 30 ones at the end.)
 
 - Single EC2 only. ~$23/mo total. $40/mo canary.
 - No SSH, no port 22. Shell via `aws ssm start-session --target i-02e4fddeb923c14f9 --profile eventpulse`.
@@ -139,7 +137,7 @@ When all three land, the truth gate executes per the §11.0 protocol (above).
 - **`requireTenantType` middleware caching is request-scoped only**.
 - **Frontend test rig precedent** — every new interactive component test includes `expect(await axe(container)).toHaveNoViolations()`.
 - **jsonb `||` shallow merge with `{step:{}}` SILENTLY wipes the step's sub-object.**
-- **No client-side PII persistence** — react-hook-form / TanStack Query / sessionStorage rules per Day 17.
+- **No client-side PII persistence**.
 - **ESM-typed workspace packages with `.js` re-exports need `extensionAlias` in `next.config.mjs`.**
 - **BIN 13-digit fact is reviewer-documentation, NOT server-side enforcement.**
 - **Document-only wizard steps MUST disable the CTA until all required step docs are uploaded.**
@@ -162,27 +160,31 @@ When all three land, the truth gate executes per the §11.0 protocol (above).
 - **`/api/v1/*` paths belong on `api.staging` vhost ONLY.**
 - **EPS fee is NOT per-tenant configurable.** Order-time input only.
 - **OAuth callback redirect target = apex `/?signed_in=1` via `EVENTPULSE_WEB_BASE_URL`**.
-- **Five distinct greppable EPS error classes** — `StagingPaymentBlockedError` / `EpsConfigError` / `EpsNotImplementedError` / `EpsNetworkError` / `EpsResponseError`. All mutually `instanceof`-distinct.
+- **Five distinct greppable EPS error classes** — `StagingPaymentBlockedError` / `EpsConfigError` / `EpsNotImplementedError` / `EpsNetworkError` / `EpsResponseError`.
 - **Ticket tier CRUD ships without money math.** Tier stores `price_paisa` raw; the fee-calculator is the only consumer at order time.
 - **Ticket tier capacity locking shipped Day 29 Phase 2** (FOR UPDATE row lock with ORDER BY id for deadlock avoidance).
-- **Public event visibility + status gating is application-policy, not RLS.** `withSuperAdmin()` is the correct context for public-side reads/writes.
-- **Buyer-write order path uses withSuperAdmin (BYPASSRLS); route handler is the trust boundary.** Settle service (Day 27) + Delivery service (Day 28) follow the same pattern.
+- **Public event visibility + status gating is application-policy, not RLS.**
+- **Buyer-write order path uses withSuperAdmin (BYPASSRLS); route handler is the trust boundary.**
 - **Order row fee snapshot includes 4 extension columns beyond §9.5 verbatim** per §14.4 + Decision N.
 - **Redis token cache stampede semantic: accept-double-fetch-but-cache-last.**
 - **Drizzle `ANY()` array-binding via raw `sql\`\`` does NOT work; use `inArray()` helper.**
 - **EPS webhook auth model is verify-by-callback (§11.1 step 11), NOT signature verification.**
 - **Browser redirect URLs are NEVER authoritative for payment status (§1.3 R3).**
-- **Webhook + redirect handlers ALWAYS return 200 OK on business outcomes** (only generic 500 on uncaught errors).
+- **Webhook + redirect handlers ALWAYS return 200 OK on business outcomes**.
 - **QR token is 256-bit cryptographically-random opaque base64url.**
 - **PDF tickets travel as email attachments, NO S3 bucket.**
 - **Delivery is DECOUPLED from settlement.** `enqueueOrderDelivery()` NEVER throws.
-- **`order.delivery_sent` is the append-only delivery marker** (paired with `order.attendees_generated`).
+- **`order.delivery_sent` is the append-only delivery marker.**
 - **BullMQ requires a DEDICATED Redis connection with `maxRetriesPerRequest: null`.**
-- **NEW 2026-05-25 — `Idempotency-Key` middleware fails CLOSED on Redis absence (503 IDEMPOTENCY_INFRA_UNAVAILABLE).** Differs from Day 28's `enqueueOrderDelivery` fail-open because idempotency gates the source-of-truth path; passing through would defeat R6's at-most-once guarantee.
-- **NEW 2026-05-25 — Idempotency body hash = SHA-256 of RAW request bytes** (NOT canonicalised JSON). Two requests with the same serialised bytes are truly identical; semantically-equivalent-but-textually-different payloads are TREATED AS DIFFERENT. Strict policy prevents "client retried with a tiny field reorder and we returned the wrong cached response."
-- **NEW 2026-05-25 — FOR UPDATE capacity lock uses ORDER BY id for multi-tier deadlock avoidance.** Without it, two concurrent orders touching {A,B} and {B,A} can deadlock. ORDER BY id makes scan order canonical so both orders acquire locks in the same order.
-- **NEW 2026-05-25 — Hono middleware that hashes request body MUST use `c.req.raw.clone().text()`, NOT `c.req.text()`.** The latter consumes the underlying stream so downstream zValidator's `c.req.json()` fails in real HTTP traffic. Unit tests with `app.request()` shortcut Hono's internal caching and miss the gap.
-- **NEW 2026-05-25 — Redis singleton needs explicit `await redis.connect()` at boot** to avoid first-request-after-pm2-reload race. The `lazyConnect: true` + `enableOfflineQueue: false` combination (Day 26 design for EPS token cache fail-fast) requires warm-up at boot for the idempotency middleware to work on the first request. Warm-up errors are swallowed; consumers handle absence themselves.
+- **`Idempotency-Key` middleware fails CLOSED on Redis absence** (503). Source-of-truth gates fail closed; downstream consequences fail open.
+- **Idempotency body hash = SHA-256 of RAW request bytes** (NOT canonicalised JSON). Strict policy.
+- **FOR UPDATE capacity lock uses ORDER BY id for multi-tier deadlock avoidance.**
+- **Hono middleware that hashes request body MUST use `c.req.raw.clone().text()`**, NOT `c.req.text()`.
+- **Redis singleton needs explicit `await redis.connect()` at boot** for the idempotency middleware's first request after pm2 reload.
+- **NEW 2026-05-25 — §13.5 free-event auto-settle: events where every tier price_paisa = 0 go pending → paid immediately, NO EPS call.** Implemented in createOrder via `if (calc.buyerTotalPaisa === 0n)` branch inside the same withSuperAdmin tx. `paymentInitState: 'free'` discriminant value distinguishes from `'ready'` (paid + EPS init succeeded) + `'blocked'` (paid + STAGING_PAYMENT_BLOCK refused).
+- **NEW 2026-05-25 — Mixed paid+free tier order takes the PAID path.** §13.5 rule is "every tier price_paisa = 0", NOT "any tier". A cart with one free + one paid tier has totalPaisa > 0n → EPS init fires (or block-refuses).
+- **NEW 2026-05-25 — `apps/api/src/domain/ledger/invariants.ts` is the §14.10 source of truth for money conservation checks.** Pure functions over row arrays. Bit-exact bigint. Single paisa discrepancy = real money bug. Use `assertInvariant1PerOrder` to throw on violation (matches §14.10 "any violation halts new batch creation").
+- **NEW 2026-05-25 — Sprint-section spec without a dedicated test = future surprise.** The §13.5 free-event bypass was latent for ~6 months because no test used `pricePaisa: 0n`. Sprint 4 Day 1 should audit other "spec'd behavior without dedicated test" sections.
 
 ## Useful runbook fragments
 
@@ -193,20 +195,28 @@ aws ssm start-session --target i-02e4fddeb923c14f9 --profile eventpulse
 # Trigger staging deploy
 gh workflow run deploy-staging.yml --ref main
 
-# Run Day 29 idempotency unit tests
-pnpm --filter @eventpulse/api exec vitest run src/middleware/idempotency.test.ts
+# Run Day 30 §14.10 ledger invariant tests (pure, 332 tests, ~10ms)
+pnpm --filter @eventpulse/api exec vitest run src/domain/ledger/invariants.test.ts
 
-# Run Day 29 capacity lock DB-gated tests (needs DATABASE_URL)
-pnpm --filter @eventpulse/api exec vitest run src/services/orders/capacity-lock.test.ts
+# Run Day 30 free-event bypass DB-gated tests
+pnpm --filter @eventpulse/api exec vitest run src/services/orders/free-event-bypass.test.ts
 
-# Live Idempotency smoke
+# Run Day 30 E2E full-stack smoke
+pnpm --filter @eventpulse/api exec vitest run src/routes/public/orders-e2e-smoke.test.ts
+
+# Verify v0.3.0-sprint-3 tag
+git tag -v v0.3.0-sprint-3 2>&1 | head -5
+git show v0.3.0-sprint-3 --stat | head -30
+
+# Live regression smokes (Day 27 + Day 29) — should still hold after Sprint 4 work
 curl -s -X POST -H "content-type: application/json" \
-  -H "idempotency-key: smoke-12345-12345" \
+  -d '{"merchant_transaction_id":"TXN-spoofed-day31","status":"SUCCESS"}' \
+  https://api.staging.eventpulse.com.bd/api/v1/webhooks/eps/callback
+# Expected: 200 + {"data":{"ok":true,"kind":"unknown_transaction",...}}
+
+curl -s -X POST -H "content-type: application/json" \
+  -H "idempotency-key: smoke-day31-12345-12345" \
   -d '{"eventId":"00000000-0000-0000-0000-000000000000","tierSelections":[{"tierId":"00000000-0000-0000-0000-000000000000","quantity":1}],"buyer":{"name":"x","email":"x@example.com","phone":"+88017"}}' \
   https://api.staging.eventpulse.com.bd/api/v1/public/orders
 # Expected: 404 NOT_FOUND (typed) on first call; cached replay with x-idempotency-replay: true on second
-
-# Replay smoke (same key + same body → cached)
-curl -s -i [...same payload...] | grep -i x-idempotency-replay
-# Expected: x-idempotency-replay: true on the second call
 ```

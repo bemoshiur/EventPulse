@@ -4,6 +4,106 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-25 · Day 30 / Sprint 3 closeout — free-event bypass, ledger invariant verifier, sprint-close pivot
+
+**Context:** Sprint 3 Day 30 — closeout day. 4 PRs shipped (the bypass fix + E2E smoke + ledger verifier + closeout). Tag `v0.3.0-sprint-3` cut. Sprint 3 buildable work DONE.
+
+- PR #175 (Phase 1a) — §13.5 free-event bypass (`aeb006b`)
+- PR #176 (Phase 1b) — E2E full-stack smoke (`2c6f36f`)
+- PR #177 (Phase 2) — §14.10 ledger invariant verifier (`2cba41d`)
+- PR #178 (Phase 3) — Sprint 3 closeout + v0.3.0-sprint-3 tag (this PR)
+
+Three architectural decisions warrant codification at the decisions layer.
+
+### Choice A — §13.5 free-event bypass: born-paid, NO EPS call
+
+**Decision (per §13.5 spec, latent bug shipped today):** When `calc.buyerTotalPaisa === 0n`, `createOrder()` transitions the order to `status='paid'` + `paid_at=NOW()` inside the same withSuperAdmin tx that creates it, writes an `order.paid` event-sourcing row with `source='free_event_auto_settle'`, and SKIPS `initialiseOrder()` entirely (no EPS call ever fires for free orders). After the tx commits, `enqueueOrderDelivery()` fires the standard Day-28 delivery pipeline.
+
+**Why this is a decisions-layer entry:**
+
+The bypass was specified in playbook v1.0 (§13.5: "events where every ticket tier has price_paisa = 0 → No payment integration, order goes pending → paid immediately"). It was NEVER implemented. The createOrder service hardcoded `status: 'awaiting_payment'` + always called `initialiseOrder()`. No test exercised the free-event path (no test used `pricePaisa: 0n`). The bug was latent for ~6 months.
+
+Caught at Day 30 Phase 0 reading createOrder + cross-checking against §13.5 ahead of the E2E smoke. The brief's Phase 1 STOP-ASK ("if the free-event path doesn't cleanly bypass EPS") matched the bug exactly.
+
+**Consequences:**
+
+- `CreateOrderResult.status` widened: `'awaiting_payment' | 'paid'`.
+- `CreateOrderResult.paymentInitState` widened: `'ready' | 'blocked' | 'free'`. The new `'free'` discriminator distinguishes "free event bypassed EPS" from `'ready'` ("paid event, EPS init succeeded") and `'blocked'` ("paid event, STAGING_PAYMENT_BLOCK refused init").
+- Mixed paid+free tier order takes the PAID path — §13.5 rule is "EVERY tier price_paisa = 0", NOT "any tier". A cart with one free + one paid tier has `totalPaisa > 0n` → EPS init fires (or block-refuses). Pinned by test.
+- The paid path (`totalPaisa > 0n`) is byte-identical to before the fix. The bypass is purely additive.
+- The §14.10 Invariant 1 holds trivially for free orders (total = 0 = 0+0+0+0).
+- Sprint 4 buyer form UI works for free events without any further backend changes.
+
+**Cross-references:**
+
+- §13.5 verbatim (the spec that motivated the fix)
+- `decisions.md` "Day 28 architectural choices" Choice C (delivery decoupled from settlement — the same enqueue pattern used by the free-event branch)
+- `gotchas.md` (Sprint 4 Day 1 should audit other "spec'd behavior without dedicated test" sections — see retro in handoff.md)
+
+### Choice B — §14.10 ledger invariant verifier shipped as PURE functions over row arrays
+
+**Decision:** `apps/api/src/domain/ledger/invariants.ts` ships pure `checkInvariant1PerOrder` + `checkInvariant2PerBatch` + typed `LedgerInvariantError` + `assert*` convenience wrappers that throw. No I/O, deterministic, side-effect-free, property-testable. The §14.3-style "single source of truth" discipline applied to the verifier surface.
+
+**Why pure-over-rows (not DB-backed-direct):**
+
+1. **Property-testable.** The verifier can be exercised against ANY row array, including synthetic violations + fee-calculator outputs. 320 PROPERTY tests (4 §14.2 modes × 5 subtotals × 4 platform_bps × 4 eps_bps) prove the invariant holds BY CONSTRUCTION across the fee-calculator's input space. This wouldn't be possible if the verifier required a DB.
+2. **Composable.** The DB-backed verifier (the Sprint 7 reconciliation cron, the Day 30 Phase 1b's `it('§14.10 Invariant 1 across ALL e2e-smoke orders')` test) is a thin wrapper that loads rows + delegates to the pure function.
+3. **Per-row diagnostic.** §14.10 says "for every order"; the pure function returns per-row violations so the on-call can pinpoint the offending order, not just an aggregate mismatch.
+
+**BIT-EXACT bigint arithmetic.** Per §1.3 R2 "money never lies": no tolerance, no rounding. A single paisa discrepancy IS a real money bug; the verifier surfaces it.
+
+**Why this is a decisions-layer entry:**
+
+The verifier is the load-bearing artifact for the §14.10 invariants. Future surfaces:
+- Sprint 7's reconciliation cron will invoke `assertInvariant1PerOrder` + `assertInvariant2PerBatch` after every batch creation.
+- Future enterprise-tier "audit log of audit log" features will use the per-row violation reports.
+- The Decision N truth gate will invoke `checkInvariant1PerOrder` against the 4 real priced rows; ANY violation halts the gate + pages on-call.
+
+A future "tighten" PR that:
+- Adds a tolerance ("within 1 paisa is fine") — would silently allow money leakage. Pin the bit-exact requirement here.
+- Switches from per-row to aggregate-only — would lose the diagnostic. Pin per-row here.
+- Removes the `assert*` wrappers — would break the §14.10 "any violation halts new batch creation" semantic. Pin the throw-on-violation here.
+
+**Consequences:**
+
+- §14.10 Invariant 1 HOLDS BY CONSTRUCTION across 320 parameterized fee-calculator output cases.
+- §14.10 Invariant 1 HOLDS on every free order persisted via Day 30 Phase 1b (trivially: total = 0).
+- §14.10 Invariant 1 on PRICED orders is READY for the Decision N truth gate; the verifier just runs against the 4 priced rows.
+- §14.10 Invariant 2 has the pure function shipped + fixture-tested; DB verifier wires in Sprint 7 when `disbursement_batches` schema lands.
+
+### Choice C — Sprint close pivot: pipeline feature-complete, truth gate is THE blocker
+
+**Decision (sprint-level not code-level):** Sprint 3's buildable work is DONE. Pipeline is feature-complete behind STAGING_PAYMENT_BLOCK. The Decision N truth gate is now THE gating milestone for any work that touches real money.
+
+**Why this needs codification:**
+
+The truth gate has been "deferred" or "pending" for ~10 days. After Sprint 3 closeout, calling it "deferred" is misleading — it's BLOCKING. Sprint 4 can ship buildable work in parallel (attendee list, QR scanner, dashboards, marketing) but anything touching priced money (refund flows, payouts, first paying tenant) is hard-gated on the truth gate.
+
+The three Moshiur items the truth gate needs:
+
+1. EPS sandbox credentials confirmed OR authorized controlled block lift + `decisions.md` entry per §11.0
+2. §29 #9 (AIT withholding) tax opinion — calculator is pre-withholding per file header
+3. SES out-of-sandbox approval — without it, real ticket emails won't deliver
+
+**Consequences:**
+
+- Sprint 4 kickoff issue (#178) prominently surfaces the truth-gate blockers + the parallel-buildable work split.
+- Every session start through Sprint 4 should restate the truth-gate blockers in the session-start summary.
+- The first paying tenant (§26.1 Sprint 4 Day 10) is hard-gated. Sprint 4 might land all its CODE without unblocking the launch.
+
+**Pinned by:**
+
+- handoff.md "CRITICAL: where we are right now" section (rewritten this PR)
+- progress.md "In flight" section moved Sprint 3 → Done, Sprint 4 → In Flight as Planned, with the truth-gate-vs-parallel-buildable split called out
+- Sprint 4 kickoff issue #178
+
+**Cross-references:**
+
+- `decisions.md` "EPS production credentials intentionally used in staging — STAGING_PAYMENT_BLOCK guard" (2026-05-19) — the guard that makes truth gate the right ceremony
+- `decisions.md` "Decision N — Fee calculator EPS-base rule locked + mandatory Day 24-25 EPS sandbox truth gate" (2026-05-19) — the spec for what the truth gate does
+
+---
+
 ## 2026-05-25 · Day 29 architectural choices — Idempotency semantics, capacity-lock ORDER BY, Redis warm-up
 
 **Context:** Sprint 3 Day 29 shipped 5 PRs (2 phases + 2 hotfixes + memory) closing the last two hardening concerns on the order-creation surface before Sprint 3's pipeline is feature-complete.
