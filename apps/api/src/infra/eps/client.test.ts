@@ -1,22 +1,22 @@
 /**
- * EPS wrapper client — Day 24 Part 1 behaviour tests.
+ * EPS wrapper client — public-surface tests.
  *
- * Focus: behaviour the wrapper OWNS today.
+ * Scope: behaviour the wrapper OWNS at the public-surface level —
  *
- *   - cfg() reads env, fails loud on missing values
- *   - BASE_URLS routes correctly on mode
- *   - http() factory yields a configured axios instance (no network)
- *   - initialiseOrder enforces the STAGING_PAYMENT_BLOCK guard FIRST
- *     (Phase 1) then throws EpsNotImplementedError (Part 2 wires the
- *     real call)
- *   - verifyOrder throws EpsNotImplementedError (no guard — Verify
- *     doesn't charge)
- *   - getAccessToken cache hit returns the cached value; cache miss
- *     throws EpsNotImplementedError until Part 2
+ *   - `cfg()` reads env, fails loud on missing values
+ *   - `BASE_URLS` routes correctly on mode
+ *   - `http()` factory yields a configured axios instance (no network)
+ *   - `initialiseOrder` enforces the STAGING_PAYMENT_BLOCK guard
+ *     FIRST (no HTTP fires when block is on + priced order)
+ *   - `getAccessToken` cache-hit path returns the cached value
+ *     without firing HTTP
+ *   - All five greppable error classes are distinct (3 Part 1 +
+ *     2 Part 2)
  *
- * Tests deliberately do NOT make real EPS network calls. Day 24-25
- * Decision N truth gate exercises sandbox HTTP via the harness in
- * Phase 4; this file pins the Part 1 surface only.
+ * Per-endpoint HTTP behaviour (real wire-shape, 401 retry, status
+ * normalisation, error mapping) lives in `get-token.test.ts`,
+ * `initialise-order.test.ts`, `verify-order.test.ts` — all use
+ * `nock` to intercept HTTP at the Node http layer.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -27,16 +27,17 @@ import {
   BASE_URLS,
   cfg,
   EpsConfigError,
+  EpsNetworkError,
   EpsNotImplementedError,
+  EpsResponseError,
   getAccessToken,
   http,
   initialiseOrder,
   inMemoryTokenCache,
   StagingPaymentBlockedError,
-  verifyOrder,
 } from './client.js'
 
-// Snapshot+restore the EPS-relevant env so individual tests can mutate
+// Snapshot+restore EPS-relevant env so individual tests can mutate
 // freely without leaking. STAGING_PAYMENT_BLOCK is also snapshot.
 const ENV_KEYS = [
   'EPS_MERCHANT_ID',
@@ -45,6 +46,9 @@ const ENV_KEYS = [
   'EPS_PASSWORD',
   'EPS_HASH_KEY',
   'EPS_MODE',
+  'EPS_SUCCESS_URL',
+  'EPS_FAIL_URL',
+  'EPS_CANCEL_URL',
   'STAGING_PAYMENT_BLOCK',
 ] as const
 
@@ -54,14 +58,15 @@ beforeEach(() => {
   for (const k of ENV_KEYS) {
     ORIGINAL_ENV[k] = process.env[k]
   }
-  // Default to a complete config so individual tests can selectively
-  // delete one key to assert per-key error reporting.
   process.env['EPS_MERCHANT_ID'] = 'm'
   process.env['EPS_STORE_ID'] = 's'
   process.env['EPS_USERNAME'] = 'u'
   process.env['EPS_PASSWORD'] = 'p'
   process.env['EPS_HASH_KEY'] = 'k'
   process.env['EPS_MODE'] = 'production'
+  delete process.env['EPS_SUCCESS_URL']
+  delete process.env['EPS_FAIL_URL']
+  delete process.env['EPS_CANCEL_URL']
   delete process.env['STAGING_PAYMENT_BLOCK']
   _resetTokenCacheForTest()
 })
@@ -167,93 +172,49 @@ describe('http() factory', () => {
   })
 })
 
-describe('initialiseOrder', () => {
+describe('initialiseOrder block-guard (public-surface contract)', () => {
+  // Block-guard tests pinned here: any future regression that
+  // re-orders the implementation MUST keep these passing.
+  // The "no HTTP fires when block on" assertion lives in
+  // initialise-order.test.ts where nock can prove zero requests.
+
   it('throws StagingPaymentBlockedError when block on + priced order', async () => {
     process.env['STAGING_PAYMENT_BLOCK'] = '1'
     await expect(
-      initialiseOrder({ merchantTransactionId: 'TXN-1', totalPaisa: 100_000n }),
+      initialiseOrder({ merchantTransactionId: 'TXN-1234567890', totalPaisa: 100_000n }),
     ).rejects.toBeInstanceOf(StagingPaymentBlockedError)
   })
 
-  it('guard fires BEFORE NotImplementedError (safety beats scope)', async () => {
-    // If a future change accidentally inverted the order, the
-    // NotImplementedError would mask the guard's protective effect
-    // and a real call could slip through. Pin order with an explicit
-    // assertion on which error type fires.
+  it('guard fires BEFORE any other error type (priced order + missing env → still BlockedError)', async () => {
+    // If guard ordering inverted, this would throw EpsConfigError
+    // first (env-reads come after guard). Pin: guard wins.
     process.env['STAGING_PAYMENT_BLOCK'] = '1'
+    delete process.env['EPS_HASH_KEY']
     try {
-      await initialiseOrder({ merchantTransactionId: 'TXN-1', totalPaisa: 1n })
+      await initialiseOrder({ merchantTransactionId: 'TXN-1234567890', totalPaisa: 1n })
       throw new Error('expected throw')
     } catch (err) {
       expect(err).toBeInstanceOf(StagingPaymentBlockedError)
-      expect(err).not.toBeInstanceOf(EpsNotImplementedError)
+      expect(err).not.toBeInstanceOf(EpsConfigError)
     }
   })
 
-  it('throws EpsNotImplementedError when block on + free order (gate passed; scope gap)', async () => {
-    process.env['STAGING_PAYMENT_BLOCK'] = '1'
-    await expect(
-      initialiseOrder({ merchantTransactionId: 'TXN-FREE', totalPaisa: 0n }),
-    ).rejects.toBeInstanceOf(EpsNotImplementedError)
-  })
-
-  it('throws EpsNotImplementedError when block off + priced order', async () => {
+  it('throws RangeError when merchantTransactionId < 10 chars (validation after guard)', async () => {
     delete process.env['STAGING_PAYMENT_BLOCK']
     await expect(
-      initialiseOrder({ merchantTransactionId: 'TXN-1', totalPaisa: 100n }),
-    ).rejects.toBeInstanceOf(EpsNotImplementedError)
-  })
-
-  it('NotImplementedError names Day 26-28 as the wire-up point (greppable)', async () => {
-    delete process.env['STAGING_PAYMENT_BLOCK']
-    try {
-      await initialiseOrder({ merchantTransactionId: 'TXN-1', totalPaisa: 100n })
-      throw new Error('expected throw')
-    } catch (err) {
-      expect((err as Error).message).toMatch(/Day 26-28/)
-    }
+      initialiseOrder({ merchantTransactionId: 'short', totalPaisa: 1n }),
+    ).rejects.toBeInstanceOf(RangeError)
   })
 })
 
-describe('verifyOrder', () => {
-  it('throws EpsNotImplementedError (no guard — Verify never charges)', async () => {
-    // Verify is intentionally NOT gated by STAGING_PAYMENT_BLOCK: it's
-    // a read-only call against the gateway. The guard only protects
-    // the funds-moving entry points.
-    process.env['STAGING_PAYMENT_BLOCK'] = '1'
-    await expect(verifyOrder({ merchantTransactionId: 'TXN-VERIFY' })).rejects.toBeInstanceOf(
-      EpsNotImplementedError,
-    )
-  })
+describe('getAccessToken cache-hit path (public-surface contract)', () => {
+  // Cache-miss + real-HTTP behaviour lives in get-token.test.ts.
+  // Here we only pin that a populated cache short-circuits.
 
-  it('NotImplementedError names Day 26-28 as the wire-up point', async () => {
-    try {
-      await verifyOrder({ merchantTransactionId: 'TXN-V' })
-      throw new Error('expected throw')
-    } catch (err) {
-      expect((err as Error).message).toMatch(/Day 26-28/)
-    }
-  })
-})
-
-describe('getAccessToken', () => {
-  it('returns the cached token when present (cache hit path is fully wired)', async () => {
+  it('returns the cached token when present', async () => {
     await _seedAccessTokenForTest('cached-jwt-12345')
     const token = await getAccessToken()
     expect(token).toBe('cached-jwt-12345')
-  })
-
-  it('throws EpsNotImplementedError on cache miss (no fetch wired in Part 1)', async () => {
-    await expect(getAccessToken()).rejects.toBeInstanceOf(EpsNotImplementedError)
-  })
-
-  it('NotImplementedError mentions Part 2 / Day 26-28', async () => {
-    try {
-      await getAccessToken()
-      throw new Error('expected throw')
-    } catch (err) {
-      expect((err as Error).message).toMatch(/Day 26-28/)
-    }
   })
 
   it('accepts a custom cache for dependency injection', async () => {
@@ -265,34 +226,67 @@ describe('getAccessToken', () => {
   it('default cache singleton persists across calls within a process', async () => {
     await _seedAccessTokenForTest('first-call-cached')
     expect(await getAccessToken()).toBe('first-call-cached')
-    // No re-seed: second call still hits the same default cache
     expect(await getAccessToken()).toBe('first-call-cached')
   })
 })
 
 describe('error class hygiene (greppable distinct types)', () => {
-  it('StagingPaymentBlockedError, EpsConfigError, EpsNotImplementedError are distinct', () => {
-    process.env['STAGING_PAYMENT_BLOCK'] = '1'
+  // Five greppable error classes — three Part-1 (Day 24) + two Part-2
+  // (Day 26). Distinctness is load-bearing per
+  // `.claude/memory/decisions.md` "Three distinct greppable EPS error
+  // classes" (2026-05-25), extended in Day 26.
+
+  it('all five classes are mutually distinct', () => {
     const blocked = new StagingPaymentBlockedError(100n)
     const configErr = new EpsConfigError('missing FOO')
     const notImpl = new EpsNotImplementedError('not yet wired')
+    const network = new EpsNetworkError('connect EHOSTUNREACH', new Error('socket'), 'req-1')
+    const respErr = new EpsResponseError('HTTP 500', { httpStatus: 500 })
 
-    expect(blocked).toBeInstanceOf(StagingPaymentBlockedError)
-    expect(blocked).not.toBeInstanceOf(EpsConfigError)
-    expect(blocked).not.toBeInstanceOf(EpsNotImplementedError)
-
-    expect(configErr).toBeInstanceOf(EpsConfigError)
-    expect(configErr).not.toBeInstanceOf(StagingPaymentBlockedError)
-    expect(configErr).not.toBeInstanceOf(EpsNotImplementedError)
-
-    expect(notImpl).toBeInstanceOf(EpsNotImplementedError)
-    expect(notImpl).not.toBeInstanceOf(StagingPaymentBlockedError)
-    expect(notImpl).not.toBeInstanceOf(EpsConfigError)
+    const all = { blocked, configErr, notImpl, network, respErr }
+    const ctors = {
+      blocked: StagingPaymentBlockedError,
+      configErr: EpsConfigError,
+      notImpl: EpsNotImplementedError,
+      network: EpsNetworkError,
+      respErr: EpsResponseError,
+    }
+    for (const [name, instance] of Object.entries(all)) {
+      for (const [otherName, ctor] of Object.entries(ctors)) {
+        if (name === otherName) {
+          expect(instance).toBeInstanceOf(ctor)
+        } else {
+          expect(instance).not.toBeInstanceOf(ctor)
+        }
+      }
+    }
   })
 
-  it('greppable error names', () => {
+  it('all five classes have greppable .name fields', () => {
     expect(new StagingPaymentBlockedError(1n).name).toBe('StagingPaymentBlockedError')
     expect(new EpsConfigError('x').name).toBe('EpsConfigError')
     expect(new EpsNotImplementedError('x').name).toBe('EpsNotImplementedError')
+    expect(new EpsNetworkError('x', new Error('y')).name).toBe('EpsNetworkError')
+    expect(new EpsResponseError('x').name).toBe('EpsResponseError')
+  })
+
+  it('EpsResponseError carries httpStatus/epsCode/epsMessage/requestId fields', () => {
+    const e = new EpsResponseError('HTTP 400', {
+      httpStatus: 400,
+      epsCode: 'INVALID_HASH',
+      epsMessage: 'x-hash mismatch',
+      requestId: 'req-abc',
+    })
+    expect(e.httpStatus).toBe(400)
+    expect(e.epsCode).toBe('INVALID_HASH')
+    expect(e.epsMessage).toBe('x-hash mismatch')
+    expect(e.requestId).toBe('req-abc')
+  })
+
+  it('EpsNetworkError carries cause + requestId', () => {
+    const cause = new Error('ECONNREFUSED')
+    const e = new EpsNetworkError('network failure', cause, 'req-xyz')
+    expect(e.cause).toBe(cause)
+    expect(e.requestId).toBe('req-xyz')
   })
 })
