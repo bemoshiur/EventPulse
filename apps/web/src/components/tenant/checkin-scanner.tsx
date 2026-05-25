@@ -47,6 +47,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useCheckInStats, useScan, type CheckInOutcome } from '@/hooks/use-checkin'
+import { enqueueScan, listPending, newScanId } from '@/lib/offline-checkin-queue'
+import { syncCheckinQueue, type SyncReport } from '@/lib/sync-checkin-queue'
 
 // ─── helpers ────────────────────────────────────────────────────────
 
@@ -266,10 +268,24 @@ export function CheckInScanner({ eventId, gate }: CheckInScannerProps) {
     'idle' | 'starting' | 'on' | 'denied' | 'unsupported'
   >('idle')
   const [lastOutcome, setLastOutcome] = useState<CheckInOutcome | null>(null)
+  const [offlineTentative, setOfflineTentative] = useState(false)
+  const [pendingCount, setPendingCount] = useState(0)
+  const [lastSyncDuplicates, setLastSyncDuplicates] = useState(0)
   const scan = useScan()
   // Lock submission while the result is on-screen so a re-decode of the
   // same QR doesn't fire repeatedly while the user is still admitting.
   const lockUntilRef = useRef<number>(0)
+
+  // Refresh the pending-queue count display. Called after enqueue +
+  // after sync.
+  const refreshPendingCount = useCallback(async () => {
+    const rows = await listPending().catch(() => [])
+    setPendingCount(rows.length)
+  }, [])
+
+  useEffect(() => {
+    void refreshPendingCount()
+  }, [refreshPendingCount])
 
   const submitToken = useCallback(
     (token: string) => {
@@ -280,8 +296,40 @@ export function CheckInScanner({ eventId, gate }: CheckInScannerProps) {
         { eventId, qrCode: token, gate: gate ?? null },
         {
           onSettled: (outcome) => {
-            if (outcome) setLastOutcome(outcome)
-            // Clear the result after the display period
+            if (!outcome) return
+            // Day 31 Phase 3: optimistic-admit on network error.
+            // The door admits the guest immediately + we queue the
+            // scan to IndexedDB for sync on reconnect. The UI flags
+            // the result as TENTATIVE so staff knows the state is
+            // unsynced.
+            if (outcome.kind === 'network_error') {
+              setOfflineTentative(true)
+              void enqueueScan({
+                id: newScanId(),
+                eventId,
+                qrCode: token,
+                gate: gate ?? null,
+                scannedAt: new Date().toISOString(),
+              })
+                .then(() => refreshPendingCount())
+                .catch(() => {
+                  // IndexedDB unavailable (private browsing / disk
+                  // full). Door staff still sees the network_error
+                  // banner; the queue just doesn't persist.
+                })
+              // Surface as ADMITTED (offline-tentative) — see
+              // decisions.md "Day 31 — Optimistic-admit offline".
+              setLastOutcome({
+                kind: 'checked_in',
+                attendeeId: '',
+                attendeeName: '(unknown — offline)',
+                tierName: '',
+                checkedInAt: new Date().toISOString(),
+              })
+            } else {
+              setOfflineTentative(false)
+              setLastOutcome(outcome)
+            }
             setTimeout(() => {
               setLastOutcome((current) => (Date.now() >= lockUntilRef.current ? null : current))
             }, RESULT_DISPLAY_MS)
@@ -289,8 +337,38 @@ export function CheckInScanner({ eventId, gate }: CheckInScannerProps) {
         },
       )
     },
-    [eventId, gate, scan],
+    [eventId, gate, scan, refreshPendingCount],
   )
+
+  // Sync the offline queue on mount + whenever the browser regains
+  // connectivity. The server's compare-and-swap (Day 31 Phase 1) is
+  // the FINAL authority; duplicate-on-sync rows are surfaced via
+  // the lastSyncDuplicates banner.
+  useEffect(() => {
+    const apiBase = process.env['NEXT_PUBLIC_API_BASE_URL'] ?? ''
+    const flush = async () => {
+      const report: SyncReport = await syncCheckinQueue({
+        apiBase: apiBase.replace(/\/$/, ''),
+      }).catch(
+        () =>
+          ({
+            attempted: 0,
+            removed: 0,
+            retained: 0,
+            duplicateCount: 0,
+            rows: [],
+          }) as SyncReport,
+      )
+      if (report.duplicateCount > 0) {
+        setLastSyncDuplicates(report.duplicateCount)
+      }
+      await refreshPendingCount()
+    }
+    void flush() // try once on mount
+    const onOnline = () => void flush()
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
+  }, [refreshPendingCount])
 
   // Camera lifecycle. We dynamic-import `qr-scanner` so the SSR build
   // doesn't pull `navigator.mediaDevices` at compile time.
@@ -342,6 +420,52 @@ export function CheckInScanner({ eventId, gate }: CheckInScannerProps) {
   return (
     <div className="space-y-6">
       <StatsStrip eventId={eventId} />
+
+      {/* Offline-status banner (Phase 3). Visible whenever there are
+         pending offline scans OR the last sync hit a duplicate. */}
+      {pendingCount > 0 && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded-2xl bg-amber-500/90 p-4 text-white"
+          data-testid="offline-pending-banner"
+        >
+          <strong className="text-lg">
+            {pendingCount} pending offline scan{pendingCount === 1 ? '' : 's'}
+          </strong>
+          <p className="text-sm opacity-95">
+            Tentative admits are queued. They will sync to the server when connectivity returns. The
+            server resolves duplicates if the same ticket was scanned offline elsewhere.
+          </p>
+        </div>
+      )}
+      {lastSyncDuplicates > 0 && (
+        <div
+          role="alert"
+          aria-live="polite"
+          className="rounded-2xl bg-red-600/90 p-4 text-white"
+          data-testid="offline-duplicate-banner"
+        >
+          <strong className="text-lg">
+            {lastSyncDuplicates} duplicate {lastSyncDuplicates === 1 ? 'scan' : 'scans'} flagged on
+            sync
+          </strong>
+          <p className="text-sm opacity-95">
+            One or more offline-admitted tickets had already been used elsewhere. Notify ops to
+            review.
+          </p>
+        </div>
+      )}
+      {offlineTentative && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded-2xl bg-zinc-700 p-3 text-center text-sm text-white"
+          data-testid="offline-tentative-banner"
+        >
+          Last admit was OFFLINE (tentative). Will sync when connectivity returns.
+        </div>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Camera / fallback */}
