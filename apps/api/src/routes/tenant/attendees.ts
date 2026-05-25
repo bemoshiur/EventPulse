@@ -26,6 +26,7 @@ import { z } from 'zod'
 
 import { requireTenantAuth } from '../../auth/middleware.js'
 import { logger } from '../../lib/logger.js'
+import { exportEventAttendees } from '../../services/attendees/export-csv.js'
 import { listEventAttendees } from '../../services/attendees/list.js'
 
 export const attendeeRoutes = new Hono()
@@ -97,3 +98,71 @@ attendeeRoutes.get('/:eventId/attendees', zValidator('query', listQuerySchema), 
     return c.json(errorEnvelope('INTERNAL_ERROR', 'failed to list attendees', requestId), 500)
   }
 })
+
+// ─── GET /:eventId/attendees/export — CSV bulk PII extraction ──────
+
+const exportQuerySchema = z.object({
+  search: z.string().max(200).optional(),
+  tierId: z.string().uuid().optional(),
+  checkIn: z.enum(['all', 'checked_in', 'not_checked_in']).optional().default('all'),
+  orderStatus: z
+    .enum([
+      'all',
+      'pending',
+      'awaiting_payment',
+      'paid',
+      'completed',
+      'cancelled',
+      'failed',
+      'refunded',
+    ])
+    .optional()
+    .default('all'),
+})
+
+attendeeRoutes.get(
+  '/:eventId/attendees/export',
+  zValidator('query', exportQuerySchema),
+  async (c) => {
+    const eventId = c.req.param('eventId')
+    const query = c.req.valid('query')
+    const tenantId = c.get('tenantId') as string
+    const userId = c.get('auth')!.sub
+    const requestId = c.req.header('x-request-id') ?? null
+    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null
+    const userAgent = c.req.header('user-agent') ?? null
+
+    try {
+      const result = await exportEventAttendees({
+        tenantId,
+        eventId,
+        actorUserId: userId,
+        ...(query.search !== undefined ? { search: query.search } : {}),
+        ...(query.tierId !== undefined ? { tierId: query.tierId } : {}),
+        checkInFilter: query.checkIn,
+        orderStatusFilter: query.orderStatus,
+        ip,
+        userAgent,
+      })
+
+      // text/csv with UTF-8 charset declaration + Content-Disposition
+      // makes browsers download (not render). The BOM inside the
+      // body lets Excel detect UTF-8 correctly.
+      return new Response(result.csv, {
+        status: 200,
+        headers: {
+          'content-type': 'text/csv; charset=utf-8',
+          'content-disposition': `attachment; filename="${result.filename}"`,
+          'cache-control': 'no-store',
+          'x-row-count': String(result.rowCount),
+        },
+      })
+    } catch (err) {
+      logger.error(
+        { err: (err as Error).message, eventId },
+        'tenant.attendees.export.unhandled_error',
+      )
+      return c.json(errorEnvelope('INTERNAL_ERROR', 'failed to export attendees', requestId), 500)
+    }
+  },
+)

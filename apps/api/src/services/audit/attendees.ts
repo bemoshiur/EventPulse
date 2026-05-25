@@ -178,3 +178,58 @@ export async function writeAttendeeCheckInRejected(
     userAgent: input.userAgent,
   })
 }
+
+// ─── CSV export audit helper (Day 32 Phase 3) ──────────────────────
+
+export interface WriteAttendeesExportedInput {
+  tenantId: string
+  eventId: string
+  /** The tenant-staff user who initiated the export. */
+  actorUserId: string
+  /** Number of attendee rows in the exported CSV. */
+  rowCount: number
+  /** Filter snapshot applied at export time (for forensic reconstruction). */
+  filter: {
+    search?: string | undefined
+    tierId?: string | undefined
+    checkIn?: string | undefined
+    orderStatus?: string | undefined
+  }
+  ip: string | null
+  userAgent: string | null
+}
+
+/**
+ * Bulk PII extraction audit. Fires once per CSV export. The export
+ * is a discrete operational event — different from per-attendee
+ * reads (the list endpoint does NOT audit per-row per Decision G).
+ *
+ * Per §1.3 R5 we DO NOT log raw attendee names/emails in the audit
+ * row — those still live on the attendees rows themselves. We log:
+ * who exported, what filter, how many rows. That's enough for a
+ * regulator-facing trail without spreading PII unnecessarily.
+ *
+ * entity_type='event' (not 'attendee') because a single export
+ * action is scoped to one event, not one attendee. The list view
+ * is "the event's attendees"; the audit row reflects that.
+ */
+export async function writeAttendeesExported(
+  tx: Tx,
+  input: WriteAttendeesExportedInput,
+): Promise<void> {
+  await tx.insert(auditLogs).values({
+    tenantId: input.tenantId,
+    actorType: 'tenant_user',
+    actorId: input.actorUserId,
+    action: 'attendees.exported_csv',
+    entityType: 'event',
+    entityId: input.eventId,
+    diff: {
+      row_count: input.rowCount,
+      filter: input.filter,
+    },
+    metadata: { source: 'tenant_portal_csv_export' },
+    ip: input.ip,
+    userAgent: input.userAgent,
+  })
+}

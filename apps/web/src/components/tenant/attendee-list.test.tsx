@@ -211,6 +211,39 @@ describe('AttendeeList — error state', () => {
   })
 })
 
+// ─── CSV export anchor ──────────────────────────────────────────────
+
+describe('AttendeeList — CSV export anchor', () => {
+  it('renders an "Export CSV" link pointing at the export endpoint with current filter', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(makeEnvelope([])))
+    render(withProviders(<AttendeeList eventId="e1" tiers={TIERS} />))
+    const link = await screen.findByTestId('export-csv-link')
+    expect(link).toHaveAttribute('href')
+    const href = link.getAttribute('href')!
+    expect(href).toMatch(/\/api\/v1\/tenant\/events\/e1\/attendees\/export/)
+    // download attribute is set so the browser saves rather than navigates
+    expect(link).toHaveAttribute('download')
+  })
+
+  it('export link reflects the active tier filter', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(makeEnvelope([])))
+    render(withProviders(<AttendeeList eventId="e1" tiers={TIERS} />))
+    await waitFor(() => expect(screen.getByTestId('export-csv-link')).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText(/tier/i), { target: { value: 't-vip' } })
+    const link = screen.getByTestId('export-csv-link')
+    expect(link.getAttribute('href')).toMatch(/tierId=t-vip/)
+  })
+
+  it('export link reflects the active search input', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(makeEnvelope([])))
+    render(withProviders(<AttendeeList eventId="e1" tiers={TIERS} />))
+    await waitFor(() => expect(screen.getByTestId('export-csv-link')).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'rina' } })
+    const link = screen.getByTestId('export-csv-link')
+    expect(link.getAttribute('href')).toMatch(/search=rina/)
+  })
+})
+
 // ─── accessibility ──────────────────────────────────────────────────
 
 describe('AttendeeList — accessibility', () => {
