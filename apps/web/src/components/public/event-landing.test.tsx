@@ -116,10 +116,11 @@ describe('<EventLanding>', () => {
     expect(screen.getByTestId('tickets-empty')).toBeInTheDocument()
   })
 
-  it('renders tier card with BDT-formatted price', () => {
+  it('renders tier card with BDT-formatted price (thousands-grouped)', () => {
     render(<EventLanding event={baseEvent} brand={baseBrand} tiers={[baseTier]} />)
     expect(screen.getByTestId('tier-card-tier-1')).toBeInTheDocument()
-    expect(screen.getByText('৳ 1000.00')).toBeInTheDocument()
+    // Day-34 BuyerForm formats with thousand-separators; 100000 paisa → "৳ 1,000.00"
+    expect(screen.getByText('৳ 1,000.00')).toBeInTheDocument()
   })
 
   it('renders complimentary tier as "Free"', () => {
@@ -140,9 +141,12 @@ describe('<EventLanding>', () => {
     expect(screen.getByText('Only 7 left')).toBeInTheDocument()
   })
 
-  it('disables the Buy CTA (placeholder until Day 26-28)', () => {
+  it('renders the BuyerForm submit CTA (Day 34 replaces the Day-25 placeholder)', () => {
     render(<EventLanding event={baseEvent} brand={baseBrand} tiers={[baseTier]} />)
-    const btn = screen.getByRole('button', { name: /Buy \(coming soon\)/i })
+    // BuyerForm owns the submit button now; assert it is rendered + actionable.
+    const btn = screen.getByTestId('buyer-form-submit')
+    expect(btn).toBeInTheDocument()
+    // No tier qty selected by default → submit is disabled (UX guard, not auth).
     expect(btn).toBeDisabled()
   })
 
