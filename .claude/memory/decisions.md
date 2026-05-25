@@ -4,6 +4,90 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-25 · Day 27 architectural choices — EPS webhook auth model + browser-redirect non-authority
+
+**Context:** Sprint 3 Day 27 shipped 3 PRs in clean dependency order:
+
+- PR #162 (Phase 1) — Pure order state machine (`46a2575`)
+- PR #163 (Phase 2) — Authenticated webhook + verifyOrder reconciliation (`bcfb89c`)
+- PR #164 (Phase 3) — Browser redirect handlers — display-only, non-authoritative (`de0faed`)
+
+Two architectural decisions were taken inside Phase 2 + Phase 3 that warrant codification beyond inline comments. Both are pinned by tests + by inline file headers; this decisions-layer entry exists to make the security model surveyable + to prevent future drift.
+
+### Choice A — EPS webhook authentication model = verify-by-callback (NOT signature verification)
+
+**Decision (Moshiur-approved at Day 27 Phase 0 STOP-ASK):** The webhook handler at `POST /api/v1/webhooks/eps/callback` does NOT verify a signature on the inbound payload. Instead, it treats the payload as a notification-only trigger. The only field consumed from the payload is `merchant_transaction_id` (used purely as a DB lookup key). The handler then ALWAYS calls `verifyOrder()` against EPS — the AUTHORITATIVE status read — and computes the state transition from the verify response, never from the webhook payload's claimed status.
+
+**Why this is the right model:**
+
+1. **§11 does NOT specify an EPS-side webhook signature mechanism.** §11.1 step 11 (the canonical guidance) reads: *"Server also receives EPS server-to-server webhook in parallel; webhook handler also calls Verify and reconciles. Idempotency handled via merchantTransactionId."* §10.5 generically notes that webhook endpoints verify signatures, but the EPS-specific mechanism (HMAC header? shared secret? IP allowlist?) is not documented anywhere in CLAUDE.md, the rejected SDK source the investigation doc inspected, or any prior repo commit.
+2. **§11.1 step 11 explicitly designs verify-by-callback as the authority.** The webhook's role is to notify "this txn may have changed state" — the verify call IS the trust source. This is the canonical pattern when a payment provider's webhook signing is weak/absent.
+3. **Fraud-impossibility argument (pinned by tests):**
+   - Spoofed webhook claiming `paid` for an unknown txn → handler ignores payload status, calls `verifyOrder(that_id)` → EPS returns "txn not found" → no state change.
+   - Spoofed webhook claiming `paid` for a real but unpaid txn → handler ignores payload status, calls `verifyOrder(that_id)` → EPS returns the TRUE status → if not paid, no transition. **Spoofing cannot fabricate paid status.**
+   - Spoofed webhook with a real paid-txn-id → triggers verify → transitions to paid (correct outcome — the txn IS paid; spoofing doesn't fabricate, just triggers a re-reconcile of an already-true state).
+   - Webhook flood (DoS) → mitigated by per-IP rate-limit (100/min) + per-txn-id rate-limit (20/min). At MVP scale this is sufficient defense-in-depth.
+
+**Defense-in-depth shipped today (not as primary auth, but as belt-and-braces):**
+
+- Zod body validation at the boundary (malformed → 200 OK ignored)
+- In-memory rate-limiters (per-IP + per-txn-id)
+- Always-200-OK policy on business outcomes (avoids leaking + suppresses EPS retries)
+- Idempotent fast-path on already-settled orders (no verify call, no DB mutation)
+
+**Why this is a decisions-layer entry (not just code comment):**
+
+- The security model is non-obvious at first glance — a reviewer reading "no signature verification" might flag it as a vulnerability without understanding the verify-by-callback authority. Pinning the rationale + the fraud-impossibility argument here means a future reviewer can grep before raising the concern.
+- Future "tighten the webhook" PR that ADDS signature verification without removing the verify-by-callback model is fine + welcome (additive defense). Future PR that REPLACES verify-by-callback with signature-only verification would be a regression — the §11.1 step 11 design is load-bearing.
+- The documented gap: when EPS publishes a webhook signature mechanism, `EPS_WEBHOOK_SECRET`-gated check lands in `apps/api/src/routes/webhooks/eps.ts` BEFORE the rate-limit + body-parse + settle flow. It's a single add-point; no refactor needed.
+
+**Consequences:**
+
+- `settleOrderFromEps` (the service the webhook + redirects both call) is structured so the trigger source (`'webhook'` vs `'redirect_success'`/`'redirect_fail'`/`'redirect_cancel'`) is just an audit-trail label. The authority computation is identical across all sources.
+- Test `settle.test.ts > verify-by-callback authority — the fraud-prevention surface > "CRITICAL: webhook source claims paid, but EPS verify returns failed → order transitions to failed (NOT paid)"` is the regression guard. If a future refactor "trusts" the source's claim, this test fails.
+- Live smoke at Day 27 Phase 4 verification proved this end-to-end on staging: a POST webhook with `{"merchant_transaction_id":"TXN-spoofed-paid-12345","status":"SUCCESS"}` returned 200 + `kind:unknown_transaction`. The handler completely ignored the claimed status.
+
+### Choice B — Browser redirect URLs are NEVER authoritative for payment status (§1.3 R3 codification)
+
+**Decision:** The `/api/v1/public/orders/eps-return/{success,fail,cancel}` handlers DO NOT trust the inbound URL path as proof of payment status. A buyer landing on `/eps-return/success` does NOT mean the payment succeeded. The handler reconciles via `settleOrderFromEps` (same authority model as the webhook), then computes the OUTBOUND redirect URL from the RESOLVED order status — NOT from which inbound path EPS sent the buyer to.
+
+**Why this is a decisions-layer entry:**
+
+§1.3 R3 says "Payment status comes from EPS, not from the redirect." This codifies that rule at the URL-routing layer: the redirect handler structurally cannot mark an order paid via the URL alone, because the outbound redirect target is computed AFTER the verify call resolves. A malicious link to `/eps-return/success?merchantTransactionId=<real-unpaid-txn-id>` results in:
+
+1. Handler calls `settleOrderFromEps`
+2. settle service calls `verifyOrder(real-unpaid-txn-id)`
+3. EPS returns actual status (e.g. `pending` or `awaiting_payment` from EPS's side)
+4. settle service returns `verify_inconclusive` (no state transition)
+5. Browser redirected to `/orders/return/pending`, NOT `/orders/return/success`
+
+The buyer who clicked the malicious link sees a "pending" page, not a fake confirmation. State is unchanged. Audit log carries the `source: 'redirect_success'` label so post-mortem can see the spoof attempt.
+
+**Pinned by tests** in `orders-eps-return.test.ts` "CRITICAL: redirect URL is NEVER authoritative for payment status":
+
+- "buyer lands on /success but EPS says PENDING → browser redirected to /orders/return/pending (NOT /success)"
+- "buyer lands on /success but EPS verifies FAILED → /orders/return/fail"
+- "buyer lands on /fail but EPS verifies SUCCESS → /orders/return/success" (the truth wins regardless of inbound path)
+
+**Consequences:**
+
+- Both webhook (Phase 2) and redirects (Phase 3) consume the same `settleOrderFromEps` service. The authority computation is centralised. A future "shortcut" PR that adds a fast-path "if inbound URL is /success, mark paid" would have to bypass this service — surfacing in PR review as a deliberate decision that contradicts §1.3 R3 + this entry.
+- Outbound redirect URL is sourced from `EVENTPULSE_WEB_BASE_URL` env var (mirrors the Day 24 OAuth callback pattern: api-vhost callback must redirect to web-vhost via absolute URL).
+- No-PII: only `orderId` (a uuid) is echoed back in outbound query; `merchant_transaction_id` is NOT.
+- Frontend pages at `${WEB}/orders/return/*` are Day 28+ scope. For Day 27, the browser ends up at a URL the frontend will eventually render.
+
+**Cross-references:**
+
+- PR #162 (Phase 1 — state machine) → merged `46a2575`
+- PR #163 (Phase 2 — webhook + reconciliation) → merged `bcfb89c`
+- PR #164 (Phase 3 — redirects) → merged `de0faed`
+- CLAUDE.md §1.3 R3 (never trust redirect query params — codified here for URL routing), §10.5 (webhook routes), §11.1 step 9-11 (EPS redirect + verify-on-return + webhook), §11.4 (EPS gotchas — no webhook signing mentioned)
+- `decisions.md` "Day 26 architectural choices" Choice B (withSuperAdmin for buyer-trigger paths — extended here for webhook + redirect)
+- `decisions.md` "EPS library choice locked" (2026-05-19) — same rationale class as Lucia: SDK gaps don't get filled by trust assumptions, they get filled by verify-before-trust patterns
+- `decisions.md` "Three distinct greppable EPS error classes" (2026-05-25; extended Day 26 with 2 more for HTTP errors) — `EpsNetworkError` + `EpsResponseError` are caught explicitly in the webhook handler's always-200 path
+
+---
+
 ## 2026-05-25 · Day 26 architectural choices — order pipeline schema, Redis token cache stampede semantic, buyer-write RLS path
 
 **Context:** Sprint 3 Day 26 shipped 4 PRs in clean dependency order:
