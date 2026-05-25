@@ -54,7 +54,7 @@
  *     orthogonal to order persistence.
  */
 
-import { and, eq, isNull, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 
 import { withSuperAdmin } from '../../db/client.js'
 import {
@@ -248,7 +248,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         archivedAt: ticketTiers.archivedAt,
       })
       .from(ticketTiers)
-      .where(and(eq(ticketTiers.eventId, event.id), sql`${ticketTiers.id} = ANY(${tierIds})`))
+      .where(and(eq(ticketTiers.eventId, event.id), inArray(ticketTiers.id, tierIds)))
 
     const tierMap = new Map(tierRows.map((t) => [t.id, t]))
     for (const sel of input.tierSelections) {
