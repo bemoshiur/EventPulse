@@ -19,6 +19,7 @@
 
 import axios, { type AxiosInstance } from 'axios'
 
+import { type SandboxPricedCallToken } from './sandbox-priced-call-token.js'
 import { inMemoryTokenCache, type TokenCache } from './token-cache.js'
 
 // ─── config ──────────────────────────────────────────────────────────────
@@ -83,6 +84,15 @@ export interface EpsCallDeps {
    * env at all.
    */
   redirectUrls?: { successUrl: string; failUrl: string; cancelUrl: string }
+  /**
+   * Truth-gate ONLY. When a genuine {@link SandboxPricedCallToken} rides here
+   * AND `config.mode === 'sandbox'`, `initialiseOrderHttp` skips the
+   * `STAGING_PAYMENT_BLOCK` guard for that single call. Absent on every
+   * non-harness path (the default `defaultEpsCallDeps()` never sets it), so
+   * the global block is unchanged for services. See
+   * `./sandbox-priced-call-token.ts` for the capability + threat model.
+   */
+  pricedSandboxCallToken?: SandboxPricedCallToken
 }
 
 /**

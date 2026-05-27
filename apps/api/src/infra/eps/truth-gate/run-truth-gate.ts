@@ -186,11 +186,14 @@ export function extractEpsFeePaisa(raw: unknown): bigint {
  */
 export function makeLiveSandboxObservationProvider(
   fetchSecret: SecretFetcher = unwiredSecretFetcher,
+  opts: { allowPricedCalls?: boolean } = {},
 ): EpsObservationProvider {
   let depsPromise: ReturnType<typeof buildSandboxDeps> | null = null
   const buildSandboxDeps = async () => {
     const setup = await loadSandboxEpsConfig(fetchSecret)
-    return createSandboxEpsCallDeps(setup)
+    // Priced sandbox InitializeEPS needs the block bypass. createSandboxEpsCallDeps
+    // mints the sandbox-scoped capability token only when allowPricedCalls is set.
+    return createSandboxEpsCallDeps(setup, { allowPricedCalls: opts.allowPricedCalls ?? false })
   }
   return async (scenario) => {
     depsPromise ??= buildSandboxDeps()
@@ -218,9 +221,13 @@ async function main(): Promise<void> {
   console.log('See header for prerequisites + execution checklist.')
 
   // Phase 1.1: supply the REAL Secrets Manager fetcher at invocation only.
-  // makeLiveSandboxObservationProvider still defaults to unwiredSecretFetcher,
-  // so the only way the harness fires is this explicit wiring here.
-  const provider = makeLiveSandboxObservationProvider(makeSecretsManagerFetcher())
+  // Phase 1.2: opt into the priced-sandbox block bypass here, and ONLY here.
+  // makeLiveSandboxObservationProvider still defaults to unwiredSecretFetcher +
+  // allowPricedCalls=false, so the only way the harness fires a priced call is
+  // this explicit wiring.
+  const provider = makeLiveSandboxObservationProvider(makeSecretsManagerFetcher(), {
+    allowPricedCalls: true,
+  })
   const report = await runTruthGate(TRUTH_GATE_SCENARIOS, provider)
   // eslint-disable-next-line no-console
   console.log(formatReport(report))
