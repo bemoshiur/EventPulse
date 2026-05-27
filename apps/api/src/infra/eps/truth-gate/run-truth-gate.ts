@@ -1,83 +1,33 @@
 /**
  * Decision N truth-gate — execution entrypoint.
  *
- * Run via:
+ * Three modes (argv[2]):
  *
- *   pnpm --filter @eventpulse/api exec tsx \
- *     src/infra/eps/truth-gate/run-truth-gate.ts
+ *   - `init`   → Phase 1.4 option-A. GetToken + InitializeEPS for the 4 §14.2
+ *                scenarios against EPS SANDBOX; prints `TG_INIT` lines with each
+ *                merchantTransactionId + RedirectURL, then exits. The operator
+ *                pays each RedirectURL with the EPS sandbox test card.
+ *   - `verify` → takes `MODE:MTID` args; CheckMerchantTransactionStatus for
+ *                each, prints the full raw response + observed-vs-predicted EPS
+ *                fee + the §14.10 Invariant-1 check.
+ *   - (none)   → full automated run (init+verify back-to-back); only usable
+ *                with a sandbox test-card autopay.
  *
- * **PREREQUISITES (must all be true before execution)** — see also
- * `./harness.ts` header for the full rationale:
+ * Run on the staging box via SSM with the block explicitly on, e.g.:
  *
- *   1. **EPS sandbox credentials confirmed.** Currently staging carries
- *      PRODUCTION credentials per `.claude/memory/decisions.md` "EPS
- *      production credentials intentionally used in staging" (2026-05-
- *      19); the STAGING_PAYMENT_BLOCK guard refuses priced calls
- *      against them. Either:
+ *   STAGING_PAYMENT_BLOCK=1 pnpm --filter @eventpulse/api exec tsx \
+ *     src/infra/eps/truth-gate/run-truth-gate.ts init
  *
- *        (a) EPS issues a separate sandbox credential set, populated
- *            at `eventpulse/staging/eps-sandbox` Secrets Manager
- *            entry; the gate runs against `EPS_MODE=sandbox` — SAFEST.
- *        (b) Moshiur explicitly authorises lifting
- *            STAGING_PAYMENT_BLOCK against production credentials
- *            for the 4 truth-gate transactions only (each charging
- *            ~BDT 1,000 to a real card) — fast but expensive +
- *            requires new `decisions.md` entry per §11.0 guardrail.
+ * The priced InitializeEPS succeeds ONLY because the sandbox deps carry the
+ * SandboxPricedCallToken (Phase 1.2). Every other path with the block on is
+ * still refused. The harness reaches SANDBOX only (mode hard-coded 'sandbox',
+ * base URL sandboxpgapi.eps.com.bd); it never touches production.
  *
- *   2. **§29 #9 tax-withholding opinion received.** The calculator
- *      currently ships PRE-withholding (per `fee-calculator.ts`
- *      header). The gate measures EPS mechanics in isolation, but
- *      interpreting organiser_net against the calculator requires
- *      knowing whether a withholding line should be deducted from
- *      the calculator's prediction before comparison. **Moshiur to
- *      confirm.**
- *
- *   3. **EPS wrapper Part 2 (Day 26-28) implementation, OR a
- *      manually-driven observation provider.** The wrapper's real
- *      InitializeEPS + Verify calls are the technical prerequisite
- *      for an automated observation provider. If running before
- *      Day 26-28, supply observations manually (a buyer click-
- *      through against the EPS gateway + manual fee capture into the
- *      `manualObservationsByModeId` map at the bottom of this file).
- *
- * **If executed without prerequisites met:** the noop observation
- * provider throws with a clear prerequisites-not-met error listing
- * the missing items. No EPS network call is made.
- *
- * **What the sandbox-config PR ships in this file:** the live sandbox
- * observation provider is now WIRED — `main()` drives
- * `makeLiveSandboxObservationProvider`, which loads the sandbox config
- * (`../sandbox-config.ts`) and runs the REAL `initialiseOrderHttp` +
- * `verifyOrderHttp` against the sandbox host via an injected
- * `EpsCallDeps`. The noop→sandbox swap is therefore complete AND lives
- * ONLY here (no running service imports this file).
- *
- * It still cannot run a transaction: the provider's `SecretFetcher`
- * defaults to `unwiredSecretFetcher`, which throws — with the unblocking
- * sequence — BEFORE any network call. Phase-1 execution supplies a real
- * Secrets Manager fetcher (+ adds `@aws-sdk/client-secrets-manager` per
- * §1.4) and the `eventpulse/staging/eps-sandbox` secret, at which point
- * the same wiring reaches sandbox for real. Running this script today
- * prints the prereqs and exits via the unwired-fetcher throw — no EPS
- * call, no charge.
- *
- * **Day 24-25 execution checklist (when prerequisites met):**
- *
- *   - [ ] Verify EPS_MODE = 'sandbox' OR explicit production-with-
- *         block-lifted decision in `.claude/memory/decisions.md`
- *   - [ ] Tax-withholding opinion docs-linked or noted as "assume
- *         no withholding for the comparison"
- *   - [ ] Either Day-26-28 wrapper landed OR manual provider
- *         observations populated below
- *   - [ ] Run: `pnpm --filter @eventpulse/api exec tsx
- *         src/infra/eps/truth-gate/run-truth-gate.ts`
- *   - [ ] Append report to `.claude/memory/decisions.md` as a follow-
- *         up entry "Decision N truth-gate executed YYYY-MM-DD —
- *         result <ALL MATCH | N shifts>"
- *   - [ ] If shifts: amend `apps/api/src/domain/payments/fee-
- *         calculator.ts` + §14.2; re-run §24.4 fee-mode tests; re-
- *         run this gate; iterate until ALL MATCH.
- *   - [ ] If ALL MATCH: Day 26+ unblocked.
+ * Prerequisites for a live run: the `eventpulse/staging/eps-sandbox` secret
+ * populated (Phase-1.0 confirmed) + the real Secrets Manager fetcher (Phase
+ * 1.1) + the block bypass (Phase 1.2) — all in place. The fee comparison
+ * assumes no withholding line (calculator ships pre-withholding per
+ * `fee-calculator.ts`); the gate measures EPS mechanics in isolation.
  */
 
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager'
@@ -214,26 +164,112 @@ export function makeLiveSandboxObservationProvider(
   }
 }
 
+/**
+ * Build the sandbox call-deps for an interactive run: real Secrets Manager
+ * fetcher + the priced-call bypass token. Shared by the init + verify phases.
+ */
+async function buildInteractiveSandboxDeps(fetchSecret: SecretFetcher) {
+  const setup = await loadSandboxEpsConfig(fetchSecret)
+  return createSandboxEpsCallDeps(setup, { allowPricedCalls: true })
+}
+
+/* eslint-disable no-console */
+
+/**
+ * Phase 1.4 option-A INIT phase. For each of the 4 §14.2 scenarios:
+ * GetToken + InitializeEPS against sandbox, then print the merchantTransactionId
+ * + RedirectURL. The operator opens each URL, pays the EPS sandbox test card,
+ * then runs the `verify` phase with the printed mtids. Prints machine-parseable
+ * `TG_INIT` lines.
+ */
+async function runInitPhase(fetchSecret: SecretFetcher): Promise<void> {
+  const deps = await buildInteractiveSandboxDeps(fetchSecret)
+  console.log('Decision N truth-gate — INIT phase (sandbox; block bypassed via token)')
+  for (const s of TRUTH_GATE_SCENARIOS) {
+    const mtid = `TXN-TG-${s.modeId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const totalPaisa = s.calculatorPrediction.buyerTotalPaisa
+    const { redirectUrl } = await initialiseOrderHttp(
+      { merchantTransactionId: mtid, totalPaisa },
+      deps,
+    )
+    console.log(
+      `TG_INIT mode=${s.modeId} label=${s.modeLabel} buyerTotalPaisa=${totalPaisa.toString()} mtid=${mtid} url=${redirectUrl}`,
+    )
+  }
+  console.log('TG_INIT_DONE — pay each url, then run: verify mode:mtid mode:mtid ...')
+}
+
+/**
+ * Phase 1.4 option-A VERIFY phase. Args are `MODE:MTID` pairs (e.g. `A:TXN-...`).
+ * For each, CheckMerchantTransactionStatus against sandbox, print the FULL raw
+ * response (so the actual fee field can be pinned — [truth-gate-verify]),
+ * attempt to extract the observed EPS fee, and emit the predicted-vs-observed
+ * delta + the §14.10 Invariant-1 check on the calculator's decomposition.
+ */
+async function runVerifyPhase(fetchSecret: SecretFetcher, pairs: string[]): Promise<void> {
+  const deps = await buildInteractiveSandboxDeps(fetchSecret)
+  const byMode = new Map<string, string>()
+  for (const pair of pairs) {
+    const idx = pair.indexOf(':')
+    if (idx > 0) byMode.set(pair.slice(0, idx), pair.slice(idx + 1))
+  }
+  console.log('Decision N truth-gate — VERIFY phase')
+  for (const s of TRUTH_GATE_SCENARIOS) {
+    const mtid = byMode.get(s.modeId)
+    if (!mtid) {
+      console.log(`TG_VERIFY mode=${s.modeId} SKIPPED (no mtid supplied)`)
+      continue
+    }
+    const result = await verifyOrderHttp({ merchantTransactionId: mtid }, deps)
+    const p = s.calculatorPrediction
+    // §14.10 Invariant 1 on the calculator's decomposition (withholding = 0):
+    const inv =
+      p.subtotalPaisa +
+        (s.platformFeeHandling === 'pass_through' ? p.platformFeePaisa : 0n) +
+        (s.epsFeeHandling === 'pass_through' ? p.epsFeePaisa : 0n) ===
+      p.buyerTotalPaisa
+    let observed: string
+    try {
+      observed = extractEpsFeePaisa(result.raw).toString()
+    } catch (err) {
+      observed = `UNEXTRACTED (${err instanceof Error ? err.message : String(err)})`
+    }
+    console.log(`TG_VERIFY mode=${s.modeId} status=${result.status} mtid=${mtid}`)
+    console.log(`  predictedEpsPaisa=${p.epsFeePaisa.toString()} observedEpsFee=${observed}`)
+    console.log(
+      `  buyerTotalPaisa=${p.buyerTotalPaisa.toString()} §14.10_invariant1=${inv ? 'PASS' : 'FAIL'}`,
+    )
+    console.log(`  RAW=${JSON.stringify(result.raw)}`)
+  }
+  console.log('TG_VERIFY_DONE')
+}
+
 async function main(): Promise<void> {
-  // eslint-disable-next-line no-console
-  console.log('Decision N truth-gate — entrypoint (live sandbox provider wired)')
-  // eslint-disable-next-line no-console
-  console.log('See header for prerequisites + execution checklist.')
+  // Phase 1.1: REAL Secrets Manager fetcher supplied at invocation only.
+  // Phase 1.2: priced-sandbox block bypass opted into here, and ONLY here.
+  const fetchSecret = makeSecretsManagerFetcher()
+  const sub = process.argv[2]
 
-  // Phase 1.1: supply the REAL Secrets Manager fetcher at invocation only.
-  // Phase 1.2: opt into the priced-sandbox block bypass here, and ONLY here.
-  // makeLiveSandboxObservationProvider still defaults to unwiredSecretFetcher +
-  // allowPricedCalls=false, so the only way the harness fires a priced call is
-  // this explicit wiring.
-  const provider = makeLiveSandboxObservationProvider(makeSecretsManagerFetcher(), {
-    allowPricedCalls: true,
-  })
+  if (sub === 'init') {
+    await runInitPhase(fetchSecret)
+    return
+  }
+  if (sub === 'verify') {
+    await runVerifyPhase(fetchSecret, process.argv.slice(3))
+    return
+  }
+
+  // Default: full automated run (init+verify back-to-back per scenario). Only
+  // usable with a sandbox test-card autopay; the interactive option-A flow uses
+  // the `init` / `verify` subcommands above instead.
+  console.log('Decision N truth-gate — full automated run (use `init` / `verify` for option A)')
+  const provider = makeLiveSandboxObservationProvider(fetchSecret, { allowPricedCalls: true })
   const report = await runTruthGate(TRUTH_GATE_SCENARIOS, provider)
-  // eslint-disable-next-line no-console
   console.log(formatReport(report))
-
   process.exit(report.allMatch ? 0 : 1)
 }
+
+/* eslint-enable no-console */
 
 // Only invoke main when run as a script (tsx entrypoint), not when
 // imported by tests.
