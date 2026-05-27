@@ -6,7 +6,7 @@
  *   - POST `/api/v1/CheckMerchantTransactionStatus`
  *   - Headers:
  *     - `Authorization: Bearer <jwt>` (from GetToken via cache)
- *     - `x-hash: <HMAC-SHA512 hex of merchantTransactionId, keyed by hashKey>`
+ *     - `x-hash: <HMAC-SHA512 Base64 of merchantTransactionId, keyed by hashKey>`
  *   - Body: `{ merchantId, storeId, merchantTransactionId }`
  *   - Response: an alias-laden status field (see normalise-status.ts)
  *

@@ -29,7 +29,7 @@ import { deriveTokenTtl, fetchAccessTokenFromEps } from './get-token.js'
 import { signEpsField } from './hash.js'
 
 const PROD_BASE = 'https://pgapi.eps.com.bd'
-const SANDBOX_BASE = 'https://sandbox-pgapi.eps.com.bd'
+const SANDBOX_BASE = 'https://sandboxpgapi.eps.com.bd'
 
 const ENV_KEYS = [
   'EPS_MERCHANT_ID',

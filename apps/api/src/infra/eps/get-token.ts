@@ -3,11 +3,12 @@
  *
  * Per CLAUDE.md §11 + §11.4:
  *   - POST `/api/v1/GetToken` to the active mode's base URL
- *     (`pgapi.eps.com.bd` production / `sandbox-pgapi.eps.com.bd`
- *     sandbox)
+ *     (`pgapi.eps.com.bd` production / `sandboxpgapi.eps.com.bd`
+ *     sandbox — single word, no hyphen; see core.ts BASE_URLS)
  *   - Body: `{ userName, password }`
- *   - Header: `x-hash: <HMAC-SHA512 hex of userName, keyed by hashKey>`
- *     (per §11.4 hash mechanism table — GetToken hashes `userName`)
+ *   - Header: `x-hash: <HMAC-SHA512 Base64 of userName, keyed by hashKey>`
+ *     (per §11.4 hash mechanism table — GetToken hashes `userName`;
+ *     wire format is Base64 not hex per Day-36 truth-gate pre-flight)
  *   - Response (defensively schema'd): a JWT-bearing payload. Field
  *     names observed in the rejected community SDK + corroborated
  *     against §11.4's "JWT from GetToken expired" guidance: `Token`

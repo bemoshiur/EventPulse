@@ -5,7 +5,7 @@
  *   - POST `/api/v1/InitializeEPS` to the active mode's base URL
  *   - Headers:
  *     - `Authorization: Bearer <jwt>` (from GetToken via the cache)
- *     - `x-hash: <HMAC-SHA512 hex of merchantTransactionId, keyed by hashKey>`
+ *     - `x-hash: <HMAC-SHA512 Base64 of merchantTransactionId, keyed by hashKey>`
  *   - Body (defensively typed; §11.4 + SDK shape):
  *     - `merchantId`, `storeId`              — platform identity
  *     - `merchantTransactionId`              — our reference id; must be globally
