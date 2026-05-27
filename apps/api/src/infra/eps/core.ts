@@ -44,6 +44,62 @@ export interface EpsConfig {
 }
 
 /**
+ * Per-call dependency bundle for the real-HTTP wrapper endpoints
+ * (`fetchAccessTokenFromEps`, `initialiseOrderHttp`, `verifyOrderHttp`).
+ *
+ * **Why this exists — the injection seam for the Decision-N truth-gate.**
+ * The running api/worker processes never construct one of these: they
+ * call the public surface (`initialiseOrder`/`verifyOrder`/`getAccessToken`
+ * in `client.ts`) with no deps, so the wrapper resolves
+ * {@link defaultEpsCallDeps} internally — which reads `EPS_MODE` (=
+ * `production` on staging per `.claude/memory/decisions.md` "EPS
+ * production credentials intentionally used in staging") and the
+ * production base URL, and shares the module-level token-cache singleton.
+ *
+ * The ONLY code that supplies an explicit `EpsCallDeps` is the truth-gate
+ * harness path (`./truth-gate/run-truth-gate.ts`), which injects a
+ * SANDBOX bundle built by `./sandbox-config.ts` — its own axios client
+ * pinned to the sandbox base URL + its own ephemeral token cache + a
+ * config whose `mode` is hard-coded `'sandbox'` and loaded from Secrets
+ * Manager, never from `process.env`. This is the structural enforcement
+ * of bidirectional isolation: production callers cannot reach sandbox
+ * (they never inject deps), and the harness cannot reach production (its
+ * injected client's baseURL is the sandbox host and its config.mode is
+ * sandbox). No shared mutable config state crosses the boundary.
+ *
+ * `config` + `client` are immutable here (passed by value); the only
+ * mutable member is `cache`, and the sandbox path uses a fresh instance
+ * so a sandbox token can never poison the running process's cache.
+ */
+export interface EpsCallDeps {
+  config: EpsConfig
+  client: AxiosInstance
+  cache: TokenCache
+  /**
+   * InitializeEPS-only buyer-return URLs. When absent (the default/env
+   * path), `initialiseOrderHttp` falls back to `readInitRedirectUrls()`
+   * which reads `EPS_SUCCESS_URL`/`EPS_FAIL_URL`/`EPS_CANCEL_URL` from
+   * env. The sandbox path supplies these explicitly so it touches no
+   * env at all.
+   */
+  redirectUrls?: { successUrl: string; failUrl: string; cancelUrl: string }
+}
+
+/**
+ * The default (env-bound, production-mode-on-staging) dependency bundle.
+ *
+ * **MUST be called from inside a wrapper function body, AFTER any safety
+ * guard — never as a default parameter value.** Default-parameter
+ * expressions evaluate at call entry, which would run `cfg()`/`http()`
+ * (env reads) BEFORE `assertEpsCallAllowed` in `initialiseOrderHttp`,
+ * violating the §11.0 "guard fires first, before any env read"
+ * invariant pinned by `initialise-order.test.ts`.
+ */
+export function defaultEpsCallDeps(): EpsCallDeps {
+  return { config: cfg(), client: http(), cache: defaultTokenCache() }
+}
+
+/**
  * Read EPS configuration from env. Throws if any required value is
  * missing — fail-loud at boot is strictly preferable to silently
  * failing the first real call.

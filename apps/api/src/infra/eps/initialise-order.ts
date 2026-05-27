@@ -43,17 +43,14 @@ import { z } from 'zod'
 import { logger } from '../../lib/logger.js'
 import {
   _accessTokenCacheKey,
-  cfg,
-  defaultTokenCache,
+  defaultEpsCallDeps,
   EpsConfigError,
-  http,
-  type EpsConfig,
+  type EpsCallDeps,
 } from './core.js'
 import { EpsNetworkError, EpsResponseError } from './eps-http-errors.js'
 import { fetchAccessTokenFromEps } from './get-token.js'
 import { signEpsField } from './hash.js'
 import { assertEpsCallAllowed } from './staging-payment-block.js'
-import { type TokenCache } from './token-cache.js'
 
 /**
  * Caller-supplied: the minimum the wrapper needs to construct an
@@ -172,11 +169,11 @@ export function readInitRedirectUrls(): {
  */
 export async function initialiseOrderHttp(
   input: InitialiseOrderInput,
-  cache: TokenCache = defaultTokenCache(),
+  deps?: EpsCallDeps,
 ): Promise<InitialiseOrderResult> {
   // 1. SAFETY GUARD FIRST. No env reads, no HTTP construction, no
-  //    network. Throws StagingPaymentBlockedError if block on +
-  //    totalPaisa > 0.
+  //    network, no deps resolution. Throws StagingPaymentBlockedError
+  //    if block on + totalPaisa > 0.
   assertEpsCallAllowed(input.totalPaisa)
 
   // 2. Validate input format before any external work.
@@ -186,32 +183,37 @@ export async function initialiseOrderHttp(
     )
   }
 
-  // 3. Now load config + redirect URLs (may throw EpsConfigError).
-  const config = cfg()
-  const redirects = readInitRedirectUrls()
+  // 3. Resolve deps AFTER the guard. When omitted (every running-service
+  //    path), defaultEpsCallDeps() reads env here — NOT at call entry —
+  //    preserving the §11.0 "guard fires before any env read" invariant.
+  //    The truth-gate harness injects sandbox deps instead.
+  const d = deps ?? defaultEpsCallDeps()
 
-  // 4. Get access token (cache or fetch). May throw various error types.
-  const token = await getOrFetchToken(cache)
-  return performInitWithRetry(input, token, config, redirects, cache, /* retried */ false)
+  // 4. Redirect URLs: sandbox deps carry their own; the env path reads
+  //    them from EPS_*_URL (may throw EpsConfigError).
+  const redirects = d.redirectUrls ?? readInitRedirectUrls()
+
+  // 5. Get access token (cache or fetch). May throw various error types.
+  const token = await getOrFetchToken(d)
+  return performInitWithRetry(input, token, d, redirects, /* retried */ false)
 }
 
-async function getOrFetchToken(cache: TokenCache): Promise<string> {
-  const cached = await cache.get(_accessTokenCacheKey)
+async function getOrFetchToken(deps: EpsCallDeps): Promise<string> {
+  const cached = await deps.cache.get(_accessTokenCacheKey)
   if (cached) return cached
-  const { token, ttlSeconds } = await fetchAccessTokenFromEps()
-  await cache.set(_accessTokenCacheKey, token, ttlSeconds)
+  const { token, ttlSeconds } = await fetchAccessTokenFromEps(deps)
+  await deps.cache.set(_accessTokenCacheKey, token, ttlSeconds)
   return token
 }
 
 async function performInitWithRetry(
   input: InitialiseOrderInput,
   token: string,
-  config: EpsConfig,
+  deps: EpsCallDeps,
   redirects: { successUrl: string; failUrl: string; cancelUrl: string },
-  cache: TokenCache,
   retried: boolean,
 ): Promise<InitialiseOrderResult> {
-  const client = http()
+  const { config, client } = deps
   const requestId = `eps-init-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const xHash = signEpsField(input.merchantTransactionId, config.hashKey)
 
@@ -245,10 +247,10 @@ async function performInitWithRetry(
           { eps: { endpoint: 'InitializeEPS', requestId, mode: config.mode } },
           'eps.init.refresh_token_and_retry',
         )
-        await cache.set(_accessTokenCacheKey, '', 0) // invalidate
-        const { token: fresh, ttlSeconds } = await fetchAccessTokenFromEps()
-        await cache.set(_accessTokenCacheKey, fresh, ttlSeconds)
-        return performInitWithRetry(input, fresh, config, redirects, cache, true)
+        await deps.cache.set(_accessTokenCacheKey, '', 0) // invalidate
+        const { token: fresh, ttlSeconds } = await fetchAccessTokenFromEps(deps)
+        await deps.cache.set(_accessTokenCacheKey, fresh, ttlSeconds)
+        return performInitWithRetry(input, fresh, deps, redirects, true)
       }
       logger.warn(
         {
