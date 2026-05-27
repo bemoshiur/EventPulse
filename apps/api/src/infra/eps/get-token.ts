@@ -33,7 +33,7 @@ import { type AxiosError } from 'axios'
 import { z } from 'zod'
 
 import { logger } from '../../lib/logger.js'
-import { cfg, http } from './core.js'
+import { cfg, type EpsCallDeps, http } from './core.js'
 import { EpsNetworkError, EpsResponseError } from './eps-http-errors.js'
 import { signEpsField } from './hash.js'
 
@@ -118,13 +118,21 @@ export function deriveTokenTtl(body: GetTokenResponse): number {
  * This function is exported separately from `getAccessToken` (which
  * lives in `client.ts` and handles cache plumbing) so the
  * cache-miss code path can be tested in isolation.
+ *
+ * `deps` is optional: when omitted (every running-service call path),
+ * config + client are resolved from env via `cfg()` + `http()`. The
+ * truth-gate harness injects a sandbox `{ config, client }` so the same
+ * GetToken logic runs against the sandbox host. Resolved INSIDE the body
+ * (not as a default param) so the env read only happens when no deps are
+ * supplied.
  */
-export async function fetchAccessTokenFromEps(): Promise<{
+export async function fetchAccessTokenFromEps(
+  deps?: Pick<EpsCallDeps, 'config' | 'client'>,
+): Promise<{
   token: string
   ttlSeconds: number
 }> {
-  const config = cfg()
-  const client = http()
+  const { config, client } = deps ?? { config: cfg(), client: http() }
   const requestId = `eps-get-token-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const xHash = signEpsField(config.username, config.hashKey)
 

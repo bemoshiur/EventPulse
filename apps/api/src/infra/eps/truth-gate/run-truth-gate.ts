@@ -44,11 +44,22 @@
  * provider throws with a clear prerequisites-not-met error listing
  * the missing items. No EPS network call is made.
  *
- * **What Day 24 (this PR) ships in this file:** the entrypoint
- * structure + wiring + clearly-named extension points
- * (`liveObservationProvider`, `manualObservationProvider`) for
- * Day 24-25 execution time. The entrypoint refuses to run today
- * because the noop provider is the only one wired.
+ * **What the sandbox-config PR ships in this file:** the live sandbox
+ * observation provider is now WIRED — `main()` drives
+ * `makeLiveSandboxObservationProvider`, which loads the sandbox config
+ * (`../sandbox-config.ts`) and runs the REAL `initialiseOrderHttp` +
+ * `verifyOrderHttp` against the sandbox host via an injected
+ * `EpsCallDeps`. The noop→sandbox swap is therefore complete AND lives
+ * ONLY here (no running service imports this file).
+ *
+ * It still cannot run a transaction: the provider's `SecretFetcher`
+ * defaults to `unwiredSecretFetcher`, which throws — with the unblocking
+ * sequence — BEFORE any network call. Phase-1 execution supplies a real
+ * Secrets Manager fetcher (+ adds `@aws-sdk/client-secrets-manager` per
+ * §1.4) and the `eventpulse/staging/eps-sandbox` secret, at which point
+ * the same wiring reaches sandbox for real. Running this script today
+ * prints the prereqs and exits via the unwired-fetcher throw — no EPS
+ * call, no charge.
  *
  * **Day 24-25 execution checklist (when prerequisites met):**
  *
@@ -69,53 +80,110 @@
  *   - [ ] If ALL MATCH: Day 26+ unblocked.
  */
 
-import { formatReport, noopObservationProvider, runTruthGate } from './harness.js'
+import {
+  createSandboxEpsCallDeps,
+  loadSandboxEpsConfig,
+  unwiredSecretFetcher,
+  type SecretFetcher,
+} from '../sandbox-config.js'
+import { initialiseOrderHttp } from '../initialise-order.js'
+import { verifyOrderHttp } from '../verify-order.js'
+import { formatReport, runTruthGate, type EpsObservationProvider } from './harness.js'
 import { TRUTH_GATE_SCENARIOS } from './scenarios.js'
 
 /**
- * Day 24-25 execution will replace `noopObservationProvider` here
- * with either:
+ * Pull the EPS-charged fee (paisa) out of a Verify response.
  *
- *   - A `liveObservationProvider` that drives the Phase 3 wrapper to
- *     create + verify a real EPS sandbox transaction per scenario.
- *   - A `manualObservationProvider(observations)` that reads pre-
- *     captured paisa fees from a manually-populated map (useful when
- *     the wrapper Part 2 isn't yet wired and a human buyer ran the
- *     gateway click-through).
- *
- * Sketch (NOT WIRED at Day 24):
- *
- * ```ts
- * import { initialiseOrder, verifyOrder } from '../client.js'
- *
- * const liveObservationProvider: EpsObservationProvider = async (scenario) => {
- *   const merchantTransactionId = `TXN-TRUTH-${scenario.modeId}-${Date.now()}`
- *   await initialiseOrder({
- *     merchantTransactionId,
- *     totalPaisa: scenario.calculatorPrediction.buyerTotalPaisa,
- *     // ... full Order shape Day 26-28
- *   })
- *   // <buyer drives gateway click-through, or test card autopay>
- *   const result = await verifyOrder({ merchantTransactionId })
- *   // result.raw carries EPS's fee; extract per the V5 response shape
- *   return { observedEpsFeePaisa: extractEpsFee(result.raw), rawResponse: result.raw }
- * }
- *
- * const manualObservationProvider = (map: Record<ModeId, bigint>): EpsObservationProvider =>
- *   async (scenario) => ({ observedEpsFeePaisa: map[scenario.modeId], rawResponse: { manual: true } })
- * ```
- *
- * Until Day 24-25 execution, the noop provider keeps the entrypoint
- * safe — running this script today produces a clear prerequisites-
- * not-met error.
+ * [truth-gate-verify] The exact field EPS uses for the gateway fee in the
+ * CheckMerchantTransactionStatus response is NOT pinned by §11 — it will be
+ * confirmed against the first live sandbox response at Phase-1 execution.
+ * This reads the most likely candidates (top-level + nested `data.*`) and
+ * throws a clear, actionable error when none is present, rather than
+ * silently returning 0 (which would fake a "match" and defeat the gate).
  */
+export function extractEpsFeePaisa(raw: unknown): bigint {
+  const candidates = ['epsFee', 'EpsFee', 'EPSFee', 'gatewayFee', 'GatewayFee', 'fee', 'Fee']
+  const roots: unknown[] = [raw]
+  if (raw != null && typeof raw === 'object' && 'data' in raw) {
+    roots.push((raw as Record<string, unknown>)['data'])
+  }
+  for (const root of roots) {
+    if (root == null || typeof root !== 'object') continue
+    const obj = root as Record<string, unknown>
+    for (const key of candidates) {
+      const v = obj[key]
+      if (typeof v === 'bigint') return v
+      if (typeof v === 'number' && Number.isInteger(v)) return BigInt(v)
+      if (typeof v === 'string' && /^\d+$/.test(v)) return BigInt(v)
+    }
+  }
+  throw new Error(
+    '[truth-gate-verify] extractEpsFeePaisa: no recognised EPS-fee field in Verify response. ' +
+      'Pin the actual field name against the first live sandbox response, then extend `candidates`. ' +
+      `Raw keys seen: ${raw && typeof raw === 'object' ? Object.keys(raw as object).join(',') : typeof raw}`,
+  )
+}
+
+/**
+ * The live sandbox observation provider — the noop→sandbox swap. Drives the
+ * REAL wrapper (`initialiseOrderHttp` + `verifyOrderHttp`) against an
+ * injected sandbox `EpsCallDeps` built from `sandbox-config.ts`. This is the
+ * ONLY construct in the codebase that pairs the wrapper with sandbox deps,
+ * and it lives only in this script entrypoint.
+ *
+ * Isolation: the deps' axios client is pinned to the sandbox host and the
+ * config.mode is `'sandbox'` — this provider structurally cannot reach
+ * production EPS. It never reads `process.env.EPS_*` and never touches the
+ * `defaultTokenCache()` singleton.
+ *
+ * Safety: `fetchSecret` defaults to {@link unwiredSecretFetcher}, so calling
+ * the returned provider throws (no network) until Phase-1 wires a real
+ * fetcher. The sandbox deps are loaded lazily on first scenario + reused.
+ *
+ * NOTE (Phase-1, not now): on staging `STAGING_PAYMENT_BLOCK=1` is read from
+ * env by `assertEpsCallAllowed`, which is mode-AGNOSTIC — it would refuse the
+ * priced InitializeEPS here even in sandbox mode. Resolving that interaction
+ * (sandbox-mode priced calls vs. the env block) is a Phase-1 execution
+ * decision; this PREP wiring deliberately does not touch the block.
+ */
+export function makeLiveSandboxObservationProvider(
+  fetchSecret: SecretFetcher = unwiredSecretFetcher,
+): EpsObservationProvider {
+  let depsPromise: ReturnType<typeof buildSandboxDeps> | null = null
+  const buildSandboxDeps = async () => {
+    const setup = await loadSandboxEpsConfig(fetchSecret)
+    return createSandboxEpsCallDeps(setup)
+  }
+  return async (scenario) => {
+    depsPromise ??= buildSandboxDeps()
+    const deps = await depsPromise
+    const merchantTransactionId = `TXN-TRUTH-${scenario.modeId}-${Date.now()}`
+    // Init the order in sandbox (returns a RedirectURL). At execution time a
+    // sandbox test-card autopay / buyer click-through completes payment
+    // between init and verify; the gate is never run unattended.
+    await initialiseOrderHttp(
+      {
+        merchantTransactionId,
+        totalPaisa: scenario.calculatorPrediction.buyerTotalPaisa,
+      },
+      deps,
+    )
+    const result = await verifyOrderHttp({ merchantTransactionId }, deps)
+    return { observedEpsFeePaisa: extractEpsFeePaisa(result.raw), rawResponse: result.raw }
+  }
+}
+
 async function main(): Promise<void> {
   // eslint-disable-next-line no-console
-  console.log('Decision N truth-gate — Day 24 PREP-only entrypoint')
+  console.log('Decision N truth-gate — entrypoint (live sandbox provider wired)')
   // eslint-disable-next-line no-console
   console.log('See header for prerequisites + execution checklist.')
 
-  const report = await runTruthGate(TRUTH_GATE_SCENARIOS, noopObservationProvider)
+  // The swap is done: main() uses the live sandbox provider. With the
+  // default unwired fetcher this throws before any network — Phase-1
+  // passes a real SecretFetcher here.
+  const provider = makeLiveSandboxObservationProvider()
+  const report = await runTruthGate(TRUTH_GATE_SCENARIOS, provider)
   // eslint-disable-next-line no-console
   console.log(formatReport(report))
 

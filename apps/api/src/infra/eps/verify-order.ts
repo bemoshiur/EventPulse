@@ -29,12 +29,11 @@ import { type AxiosError } from 'axios'
 import { z } from 'zod'
 
 import { logger } from '../../lib/logger.js'
-import { _accessTokenCacheKey, cfg, defaultTokenCache, http, type EpsConfig } from './core.js'
+import { _accessTokenCacheKey, defaultEpsCallDeps, type EpsCallDeps } from './core.js'
 import { EpsNetworkError, EpsResponseError } from './eps-http-errors.js'
 import { fetchAccessTokenFromEps } from './get-token.js'
 import { signEpsField } from './hash.js'
 import { normaliseStatus, type EpsStatus } from './normalise-status.js'
-import { type TokenCache } from './token-cache.js'
 
 export interface VerifyOrderInput {
   merchantTransactionId: string
@@ -72,7 +71,7 @@ function pickStringField(data: unknown, field: string): string | null {
  */
 export async function verifyOrderHttp(
   input: VerifyOrderInput,
-  cache: TokenCache = defaultTokenCache(),
+  deps?: EpsCallDeps,
 ): Promise<VerifyOrderResult> {
   if (input.merchantTransactionId.length < MERCHANT_TXN_ID_MIN_LENGTH) {
     throw new RangeError(
@@ -80,27 +79,28 @@ export async function verifyOrderHttp(
     )
   }
 
-  const config = cfg()
-  const token = await getOrFetchToken(cache)
-  return performVerifyWithRetry(input, token, config, cache, /* retried */ false)
+  // No payment-block guard (read-only call). deps resolved here: omitted
+  // → env/production (running services); injected → sandbox (harness).
+  const d = deps ?? defaultEpsCallDeps()
+  const token = await getOrFetchToken(d)
+  return performVerifyWithRetry(input, token, d, /* retried */ false)
 }
 
-async function getOrFetchToken(cache: TokenCache): Promise<string> {
-  const cached = await cache.get(_accessTokenCacheKey)
+async function getOrFetchToken(deps: EpsCallDeps): Promise<string> {
+  const cached = await deps.cache.get(_accessTokenCacheKey)
   if (cached) return cached
-  const { token, ttlSeconds } = await fetchAccessTokenFromEps()
-  await cache.set(_accessTokenCacheKey, token, ttlSeconds)
+  const { token, ttlSeconds } = await fetchAccessTokenFromEps(deps)
+  await deps.cache.set(_accessTokenCacheKey, token, ttlSeconds)
   return token
 }
 
 async function performVerifyWithRetry(
   input: VerifyOrderInput,
   token: string,
-  config: EpsConfig,
-  cache: TokenCache,
+  deps: EpsCallDeps,
   retried: boolean,
 ): Promise<VerifyOrderResult> {
-  const client = http()
+  const { config, client } = deps
   const requestId = `eps-verify-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const xHash = signEpsField(input.merchantTransactionId, config.hashKey)
 
@@ -128,10 +128,10 @@ async function performVerifyWithRetry(
           { eps: { endpoint: 'CheckMerchantTransactionStatus', requestId, mode: config.mode } },
           'eps.verify.refresh_token_and_retry',
         )
-        await cache.set(_accessTokenCacheKey, '', 0)
-        const { token: fresh, ttlSeconds } = await fetchAccessTokenFromEps()
-        await cache.set(_accessTokenCacheKey, fresh, ttlSeconds)
-        return performVerifyWithRetry(input, fresh, config, cache, true)
+        await deps.cache.set(_accessTokenCacheKey, '', 0)
+        const { token: fresh, ttlSeconds } = await fetchAccessTokenFromEps(deps)
+        await deps.cache.set(_accessTokenCacheKey, fresh, ttlSeconds)
+        return performVerifyWithRetry(input, fresh, deps, true)
       }
       logger.warn(
         {
