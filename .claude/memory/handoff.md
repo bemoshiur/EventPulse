@@ -1,38 +1,53 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-05-26 (Sprint 4 Day 35 SHIPPED + **AIT blocker RESOLVED via CA consultation — launch gate 4 → 3**).
-**Driver:** Claude Code (Opus 4.7) — Sprint 4 Day 35; **next session opens Day 36.**
+**Last update:** 2026-05-27 (Trust Center v1.0 core counsel docs delivered — **launch gate 3 → 2**).
+**Driver:** Claude Code (Opus 4.7) — Sprint 4 Day 36; **next session continues Day 36 truth-gate prep.**
 
-## ⚠️ Major gate-state change (2026-05-26 post-EOD)
+## ⚠️ Major gate-state change (2026-05-27)
 
-**AIT (Advance Income Tax) treatment under ITA 2023 — RESOLVED via CA consultation.** Decision codified in `decisions.md` (2026-05-26 entry, top of file). Net effect:
+**Trust Center v1.0 — core counsel documents in hand (Law Legacy Bangladesh, Mahmudus Salehin).** Decision codified in `decisions.md` 2026-05-27 entry (top of file). Net effect:
 
-- **Leg 1 (disbursement to organiser): NO AIT withholding.** Calculator's pre-withholding `netToOrganiserPaisa` confirmed CORRECT. `withholdingTaxPaisa = 0` is the steady-state, not a placeholder. **§29 #9 closed.**
-- **Leg 2 (platform commission): 10% AIT under §93 — organiser self-deposit (Option 1).** Specified-person organisers withhold + deposit themselves + provide A-Challan within 10-15 days post month-end. Individual (unregistered) organisers exempt at transaction level. **Calculator UNCHANGED.** Compliance is A-Challan tracking (Sprint-7-era; data model anticipates).
-- **Coupling created:** the Leg-1 no-withholding treatment is contingent on the TOS + Organiser Agreement establishing the agency model explicitly. The Trust-Center-v1.0 blocker (item 3 below) now carries this tax-correctness weight on top of consent. Counsel brief documented in the decisions entry (agency-model clauses + commission-AIT recovery clauses).
-- **Launch gate: 4 → 3.**
+- **3 contracts delivered today:** ToS, Organiser Agreement, Privacy Policy. Drafts of Buyer Terms / Refund / AUP / Cookie / DPA delivered; bodies of 4-8 still to be confirmed in counsel follow-up.
+- **Agency model anchored to Section 182, Contracts Act 1872** across ToS + Organiser Agreement → **satisfies the AIT decision's contract dependency.** Disbursement-leg no-withholding treatment is now contract-backed AND tax-authority-confirmed. Calculator stays unchanged.
+- **AIT clauses embedded per CA brief:** specified-person self-deposit, 15-day A-Challan deadline, recovery-from-disbursements, NBR indemnification, individual-organiser exemption.
+- **Liability cap structured** (Organiser Agreement v1.3 clause 6.2): 12-month-fees cap WITH carve-outs (gross negligence / wilful misconduct / fraud / breach of fiduciary duty / death-injury / non-limitable Bangladesh statutory).
+- **Incorporation recommendation ON RECORD:** counsel advises Public Pulse Agency (currently sole proprietorship; Moshiur personally liable) incorporate a Pvt Ltd before significant third-party-fund volumes. Contracts include novation clause to let agreements transfer at incorporation time. **NOT a code item; owner decision.**
+- **Trust Center placeholder constraint partially lifts immediately** (tenant + organiser consent surfaces — sign-up + ToS + Privacy + Organiser Agreement). **Fully lifts on Buyer Terms body confirmation** (the checkout-consent UI in the buyer form stays on the Day-34 link-footer pattern until the Buyer Terms text is final).
+- **Launch gate: 3 → 2.**
 
-## ⚠️ FIRST THING DAY 36 — review the SES draft
+## ⚠️ FIRST THING DAY 36 (resumed) — truth-gate prep sequence
 
-`docs/ops/ses-out-of-sandbox-request.md` (PR #196 merged today) is a complete AWS Support case body — use-case description, bounce/complaint handling, consent model, volume forecast, domain-auth state, pre-submission checklist. Your action:
+GitHub Actions billing fixed. In-flight branches:
 
-1. Read the draft.
-2. Verify the SES domain identity for `eventpulse.com.bd` is actually verified in `ap-southeast-1` (the case will be rejected if not).
-3. Edit numbers + claims to match your actual operational intent.
-4. Submit via AWS Support Center → Service Limit Increase → SES Sending Limits → Production Access.
-5. Paste the outcome into `decisions.md` once AWS responds.
+1. **PR #206** (`fix/eps-hash-base64-sandbox-url` at `39a5697`) — EPS wire-format bug-fix: hash hex → Base64, sandbox URL `sandbox-pgapi` → `sandboxpgapi`. Re-run CI → merge → watch deploy. Also pre-fixes the production hash encoding.
+2. **CI optimization branch** (`ci/skip-docs-only-prs` at `64ec054`, not yet pushed/opened) — docs-only skip + drop redundant push trigger. Push → open PR → merge → watch deploy.
+3. **Wire `sandbox-config.ts`** — load sandbox secret at harness-invocation time; sandbox EpsConfig constructed independently; `.env.staging` + pm2 services untouched; STAGING_PAYMENT_BLOCK stays enforcing. Bidirectional isolation: harness can't hit prod, prod can't hit sandbox.
+4. **Re-verify** STAGING_PAYMENT_BLOCK=1 + swap active → STOP. Truth-gate execution (4 §14.2 sandbox transactions) is a separate gated prompt.
 
-**If submitted + approved, the launch gate drops from 3 to 2.** AIT moved the gate from 4 to 3 today already; SES is the next-cheapest move.
+## ⚠️ The launch gate state — NOW 2 blockers (was 3, was 4)
 
-## ⚠️ The launch gate state — NOW 3 blockers (was 4)
+1. **EPS sandbox credentials** ← ✓ **PROVISIONED 2026-05-26** at `eventpulse/staging/eps-sandbox` (VersionId `37db11ab…`). Truth-gate execution now actually runnable once PR #206 ships + sandbox-config wires up. **This item is fully unblocked; the remaining work is execution, not procurement.**
+2. **SES out-of-sandbox approval** — ⚠️ **DRAFT READY** at `docs/ops/ses-out-of-sandbox-request.md` (PR #196). Awaiting Moshiur review + submission.
+3. ~~**Trust Center v1.0 documents from counsel**~~ — ✅ **CORE DOCS DELIVERED 2026-05-27**. ToS + Organiser Agreement + Privacy in hand; Buyer Terms / Refund / AUP / Cookie / DPA drafts delivered, bodies to be confirmed. See decisions.md 2026-05-27 entry.
 
-1. **EPS sandbox credentials confirmed** OR authorized controlled `STAGING_PAYMENT_BLOCK` lift + new `decisions.md` entry per §11.0 (4 × small real charges). **No draft yet.** Day-36+ candidate: I can draft a request-to-EPS memo with integration specs (the in-house wrapper at `apps/api/src/infra/eps/`, the merchantTransactionId format per §11.4, the truth-gate definition) so EPS issues credentials matching our integration.
-2. **SES out-of-sandbox approval** — ⚠️ **DRAFT READY** at `docs/ops/ses-out-of-sandbox-request.md`. Awaiting Moshiur review + submission.
-3. **Trust Center v1.0 documents from counsel** — placeholder DRAFT today; buyer form ships without a binding consent checkbox under v0.1 docs (decisions.md 2026-05-26 Day-34 entry). **Now also carrying the AIT contract-clauses requirement** — the agency-model clauses + commission-AIT recovery clauses from the AIT decision are part of the counsel brief. Day-36+ candidate: I can draft a per-page outline + the specific tax-correctness contract clauses (agency model + commission-AIT recovery) for counsel to flesh out — the clauses are now well-specified by the AIT decision.
+~~4. §29 #9 AIT withholding tax opinion~~ — ✅ **RESOLVED 2026-05-26** via CA consultation.
 
-~~4. §29 #9 AIT withholding tax opinion~~ — ✅ **RESOLVED 2026-05-26** via CA consultation. See decisions.md top-of-file entry. Calculator unchanged; compliance tracking Sprint-7-era.
+**Remaining counsel follow-ups (sub-tracked under item 3 above, not blocking launch):**
 
-**Standing pattern (decisions.md 2026-05-26 Day-35 entry):** the build track owns surfacing what's draftable. If a session ends without proposing a draft for at least one gate item that I CAN draft, I have silently treated the gate as Moshiur's homework and should be called out. With AIT resolved, the natural Day-36+ draft is the Trust-Center-v1.0 counsel brief (now with concrete agency + commission-AIT clauses to specify).
+- (a) Confirm full bodies of docs 4-8 — **Buyer Terms is the load-bearing one** for unblocking the buyer-form checkout-consent UI. Other surfaces (tenant sign-up, organiser onboarding) can move forward today.
+- (b) Owner incorporation decision (Moshiur). Pre-significant-volume; on-record per counsel.
+
+**Standing pattern (decisions.md 2026-05-26 Day-35 entry):** the build track owns surfacing what's draftable. With AIT resolved + Trust Center substantially resolved, the natural Day-36+ draft is now the **EPS production-credentials request memo** (item 1 of the original 4-item gate; now an "execution-not-procurement" item but a clean memo would help if Moshiur wants to negotiate a separate dedicated set instead of using the existing prod creds for the post-sandbox real-money smoke).
+
+## ⚠️ Build-track items unblocked by today's counsel delivery
+
+These are NOW plannable (were blocked on v1.0 docs); none are shipped yet:
+
+- **Load counsel's v1.0 markdown bodies into `legal_documents` + `legal_document_versions` tables** for ToS + Privacy + Organiser Agreement; mark `requires_signature=true` for the 3 contracts.
+- **Tenant sign-up consent capture** — ToS + Privacy at sign-up; writes `consent_records` row per §9.11 schema. Already-designed substrate; only wire-up missing.
+- **Organiser onboarding consent capture** — Organiser Agreement at KYC submission OR at first paid-tier creation (decisions.md §13.4 KYC-gating moment).
+- **Re-consent on material-change architecture** per §20.4 — gating: only fires after a `legal_document_versions` row is published with `material_change=true`. Already-designed flow; only wire-up missing.
+- **Buyer-form checkout-consent UI** — STILL GATED on Buyer Terms body confirmation. Until then, the link-footer pattern from PR #193 stays correct.
 
 ## ⚠️ Carry-items from Day 34
 

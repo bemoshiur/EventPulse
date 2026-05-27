@@ -4,6 +4,118 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-27 · Trust Center v1.0 / counsel engagement — CORE DOCUMENTS IN HAND (Law Legacy Bangladesh, Mahmudus Salehin)
+
+**Resolves (substantially):** the "Trust Center v1.0 documents from counsel" launch-gate blocker carried since Day 19 (`decisions.md` 2026-05-17 "Trust Center v0.1 placeholders — skeleton-only") and amplified Day 34 ("Public buyer form: no blocking consent checkbox under v0.1-placeholder Trust Center" 2026-05-26) + Day 35 ("Build-track owns gate-track drafts" 2026-05-26 Phase 0.5) + Day 36 AIT entry (2026-05-26: agency model in contracts is a hard tax-correctness dependency for the disbursement-leg no-withholding treatment).
+
+### Context
+
+Counsel: **Law Legacy Bangladesh**, drafted by **Mahmudus Salehin**. Core legal-document suite delivered **27 May 2026**. Draft + signed-or-soon-to-be-signed Versions land as Trust Center v1.0; specific document set delivered today:
+
+- **Terms of Service** (consumer-facing platform terms)
+- **Organiser Agreement** (the load-bearing contract — establishes the agency model)
+- **Privacy Policy**
+- Plus drafts of: **Buyer Terms** (= checkout consent surface), **Refund Policy**, **Acceptable Use Policy**, **Cookie Policy**, **Data Processing Addendum** — bodies of these 4-8 to be confirmed in counsel follow-up
+
+The Day-19 v0.1 placeholders + the Day-34 footer-link-only buyer-form pattern are now superseded for the first 3 documents and substantially-superseded for the rest pending body confirmation.
+
+### Decision
+
+**Counsel blocker moves from "blocking" to "core docs in hand, minor follow-ups open."** Launch gate drops from 3 → 2 remaining blockers; the dependent build-track items can now be planned (not yet shipped — body confirmation gates the buyer-form consent UI specifically).
+
+### Key outcomes captured by the contracts
+
+#### 1. Agency model legally anchored — satisfies the AIT contract-dependency
+
+**Anchor:** Section 182, Contracts Act 1872 (Bangladesh) — establishes Event Pulse as **disclosed agent / payment facilitator**, not principal/reseller. Anchored in BOTH the ToS AND the Organiser Agreement (matters where one document might be partially superseded by the other).
+
+**Direct effect on the AIT decision (2026-05-26):** the AIT entry's "Leg 1 disbursement — NO withholding" treatment was contingent on the contracts establishing agency. **That condition is now MET.** The CA-confirmed treatment — net-to-organiser disbursement carries zero withholding, calculator stays as-is — is now contract-backed, not aspirational. The §29 #9 AIT resolution is now operationally executable.
+
+**Implication for `fee-calculator.ts`:** unchanged. Pre-withholding `netToOrganiserPaisa` remains the correct steady-state. The §14.10 ledger invariant verifier already enforces conservation per order; `withholdingTaxPaisa = 0` on the disbursement leg continues to hold under contract authority + tax authority simultaneously.
+
+#### 2. AIT clauses embedded per the CA brief
+
+The Organiser Agreement contains the four clauses the CA brief specified (decisions.md 2026-05-26 AIT entry, "Contract requirements" section):
+
+- **Specified-person self-deposit** of 10% commission AIT under §93 + §140, ITA 2023
+- **15-day A-Challan deadline** post month-end (matches CA-confirmed timeframe)
+- **Recovery-from-disbursements mechanism** when A-Challan not provided
+- **NBR indemnification** clause
+- **Individual-organiser exemption** at transaction level (matches CA position; individuals exempt at the wire, flows through their year-end personal tax)
+
+Code impact unchanged — calculator continues to take full commission in both organiser-type branches; A-Challan tracking remains Sprint-7-era alongside `disbursement_batches`.
+
+#### 3. Liability cap structured with carve-outs (Organiser Agreement executable v1.3, clause 6.2)
+
+**Cap:** 12-month-fees liability cap (industry-standard ceiling for SaaS).
+
+**Carve-outs (NOT capped — full exposure stands):**
+- Gross negligence
+- Wilful misconduct
+- Fraud
+- Breach of fiduciary duty (the agency-model corollary — once you're an agent, fiduciary duty attaches)
+- Death + injury
+- Non-limitable liability under Bangladesh law (statutory carve-out clause)
+
+The carve-out set is the load-bearing protection — a cap without these would attempt to limit liability for the categories Bangladesh law won't allow limitation for in the first place; structure here is correct.
+
+#### 4. Incorporation recommendation — ON RECORD (pending owner decision)
+
+Counsel advises **Public Pulse Agency** (currently sole proprietorship; proprietor **S M Moshiur Rahman** personally bears unlimited liability for platform obligations) incorporate a **Private Limited Company in Bangladesh** before handling significant third-party-fund volumes.
+
+**Why this matters:** under the current sole-proprietorship structure, every contractual obligation in the Organiser Agreement + every fiduciary duty in the agency model + every operational liability the platform carries (data breach, payment-handling error, A-Challan recovery dispute) attaches personally to Moshiur as the legal owner of Public Pulse Agency. Moving to a Pvt Ltd creates the corporate veil that separates personal assets from platform liability.
+
+**Counsel's mitigating design:** the contracts include a **novation / amendment clause** that lets all existing organiser + buyer agreements transfer to the future incorporated entity when it lands — so we don't have to renegotiate the entire contract base at incorporation time.
+
+**Status:** **NOT a code item.** Owner decision. Tracked here so future memory reads know the unincorporated state is a known risk, not an oversight. Becomes load-bearing as the platform approaches the "significant third-party-fund volumes" trigger — likely the same threshold that warrants the Pvt-Ltd-PSO-licence Year-2 path in §15.3.
+
+### Remaining counsel follow-ups (these are what keep the blocker "minor follow-ups open" not "fully closed")
+
+1. **Confirm full bodies of documents 4-8.** The Buyer Terms specifically is the **checkout consent substrate** — the body must be finalised before we can wire real `consent_records` capture into the buyer-form's checkout path. Currently the buyer form (PR #193, Day 34) ships with the link-footer-only pattern explicitly because there was no v1.0 body to consent against. Buyer Terms body lands → that pattern can be replaced.
+2. **Owner incorporation decision** (Moshiur). Not blocking MVP launch but on-record per counsel.
+
+### Implication for the `consent_records` work — substrate can now be planned
+
+The Day-34 buyer-form decision pinned: "real binding consent capture lands as a separate PR when v1.0 docs arrive from counsel." That condition is now substantially met for ToS + Privacy + Organiser Agreement.
+
+**What can now be planned:**
+
+- `consent_records` write path on order creation (per §9.11 schema — already in place; only the wire-up is pending)
+- The buyer-form footer-link pattern → consent-checkbox pattern, gated on Buyer Terms body confirmation
+- The post-login consent capture for tenants (ToS + Privacy + Organiser Agreement) at sign-up + at material-change re-prompt (per §20.4 re-consent flow architecture, already designed)
+- The legal-document body load: drop counsel's v1.0 markdown bodies into `legal_documents` + `legal_document_versions` tables, marked `requires_signature=true` for the 3 contracts
+
+**What stays blocked on the Buyer Terms body specifically:** the buyer-form checkout consent UI. Until the Buyer Terms text is final, putting a checkbox that says "I agree to the Buyer Terms" still risks the Day-34 "performative consent against unfinished text" anti-pattern. The other consent surfaces (tenant sign-up, organiser onboarding) can move forward on the docs already delivered.
+
+### Why this is a decisions-layer entry
+
+A future PR that:
+
+- Treats the Trust Center placeholder constraint as still in force across ALL surfaces → only the Buyer-Terms-gated checkout-consent path is still blocked. ToS + Privacy + Organiser Agreement are real now; tenant + organiser consent flows can move.
+- Removes the link-footer pattern from the buyer form before Buyer Terms body is confirmed → re-opens the Day-34 anti-pattern. Pin the dependency here.
+- Treats the corporate-veil question as solved by the contracts → contracts protect the entity from third-party claims; they DO NOT create the entity. Sole-proprietorship liability stands until incorporation completes. Pin Moshiur's pending decision.
+- Modifies the disbursement leg to add withholding "for safety" → the AIT decision's no-withholding treatment is now contract-backed AND tax-authority-confirmed. Don't add code that fights either.
+
+### Consequences
+
+- **Launch gate: 3 → 2 blockers.** Remaining: (1) EPS sandbox credentials → already provisioned 2026-05-26 (`eventpulse/staging/eps-sandbox`); the wire-format-fix PR #206 unblocks the truth-gate execution; (2) SES out-of-sandbox → DRAFT ready, awaiting Moshiur submission.
+- The Trust Center placeholder constraint partially lifts immediately (tenant + organiser surfaces); fully lifts on Buyer Terms body confirmation.
+- AIT decision is now fully operationally executable (agency model in contracts = MET); the §14.10 ledger invariants continue to hold with no calculator change.
+- A new tracked carry-item: **Pvt Ltd incorporation** — Moshiur decision, not blocking MVP, but on-record per counsel for when volume warrants.
+- Phase 2 `consent_records` wire-up + Phase-7 A-Challan tracking are now the two concrete tax-and-consent follow-ups; both have well-defined data-model substrates already in place (§9.11 consent_records, future `tenant_ait_challans`).
+
+### Cross-references
+
+- [`decisions.md` 2026-05-26 "AIT (Advance Income Tax) treatment under ITA 2023 — RESOLVED"](decisions.md) — the AIT entry whose contract-dependency this entry satisfies.
+- [`decisions.md` 2026-05-26 "Sprint 4 Day 34 Phase 1 — Public buyer form: no blocking consent checkbox under v0.1-placeholder Trust Center"](decisions.md) — the buyer-form pattern this entry partially lifts (full lift gated on Buyer Terms body).
+- [`decisions.md` 2026-05-17 "Trust Center v0.1 placeholders — skeleton-only"](decisions.md) — the original placeholder constraint now substantially superseded.
+- [`decisions.md` 2026-05-26 "Sprint 4 Day 35 Phase 0.5 — SES out-of-sandbox case body drafted"](decisions.md) — the build-track-owns-gate-track-drafts pattern. Counsel docs are an instance of the same shape: getting concrete drafts into the gate.
+- CLAUDE.md §15.2 (NBR / withholding) + §15.3 (PSP/PSO licence path) — incorporation recommendation ties to the Year-2 PSO trajectory.
+- CLAUDE.md §20 Trust Center + §21 Legal positioning + §21.3 host-liability clause — the doctrinal anchors counsel's contracts now operationalise.
+- CLAUDE.md §9.11 `consent_records` schema — the substrate now ready to wire.
+
+---
+
 ## 2026-05-26 · AIT (Advance Income Tax) treatment under ITA 2023 — RESOLVED (CA consultation + follow-up)
 
 **Resolves:** CLAUDE.md §29 #9 "AIT withholding classification" — open since v1.0 (16 May 2026).
