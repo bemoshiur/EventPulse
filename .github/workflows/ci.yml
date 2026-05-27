@@ -1,9 +1,17 @@
 name: CI
 
+# Trigger model — PR validation only.
+#
+# Previously this workflow also fired on `push: [main, prod]`, which
+# re-ran the full validation suite (~8.5 min of billable runner-time)
+# AFTER a PR had already passed its `pull_request` run. Branch
+# protection + the concurrency block below already cover the cases
+# the post-merge run was theoretically protecting against; the
+# duplicate run was pure waste (~170 min/month at recent merge cadence).
+# `deploy-staging.yml`'s `push: main` trigger is the legitimate
+# consumer of push-to-main and is unaffected.
 on:
   pull_request:
-    branches: [main, prod]
-  push:
     branches: [main, prod]
 
 concurrency:
@@ -19,6 +27,15 @@ env:
 # green code. The detect-scope job below figures out which suites the current
 # tree can support; suites that don't apply yet are skipped cleanly so CI
 # stays green through early-sprint scaffolding and tightens as features land.
+#
+# Docs-only PR skip (Day-36 CI optimization):
+# detect-scope computes `is_docs_only` — true iff EVERY changed file in the
+# PR matches `.claude/memory/**`, `docs/**`, or `**/*.md`. Heavy jobs (lint,
+# unit, api-build, integration, e2e) gate on `is_docs_only != 'true'`.
+# The "every file must match" semantic is load-bearing: a PR touching
+# `docs/foo.md` AND `apps/api/src/bar.ts` runs the FULL suite — the skip
+# fires only when there is no runtime behaviour to validate, by construction.
+# `commitlint.yml` runs in a separate workflow and is unaffected.
 #
 # IMPORTANT — pnpm version note:
 # `pnpm/action-setup@v4` errors when both `version:` is passed AND
@@ -36,8 +53,15 @@ jobs:
     outputs:
       has_migrations: ${{ steps.check.outputs.has_migrations }}
       has_e2e: ${{ steps.check.outputs.has_e2e }}
+      is_docs_only: ${{ steps.docs.outputs.is_docs_only }}
     steps:
+      # `fetch-depth: 0` so the diff against the PR base ref works.
+      # The default shallow fetch (depth 1) wouldn't have the base
+      # commit needed to compute "what files this PR changes".
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - id: check
         name: Look for schema migrations + Playwright specs
         run: |
@@ -59,8 +83,46 @@ jobs:
             echo "::notice::No Playwright specs yet — e2e smoke skipped"
           fi
 
+      - id: docs
+        name: Detect docs/memory-only PR
+        # Computes `is_docs_only` from the PR's changed file list.
+        # Patterns matched (any of):
+        #   - .claude/memory/**            — session memory PRs
+        #   - docs/**                       — runbooks, decisions briefs, ops drafts
+        #   - **/*.md                       — README / CHANGES / playbook edits anywhere
+        #
+        # SAFETY (load-bearing): the check is "EVERY changed file must match".
+        # A PR touching `docs/foo.md` AND `apps/api/src/bar.ts` is NOT docs-only —
+        # the heavy jobs will run. The grep predicate is inverted: it counts
+        # files NOT matching the patterns; iff zero non-matches, the PR is
+        # docs-only. This makes the skip fail-closed on any pattern miss.
+        run: |
+          set -euo pipefail
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          echo "Changed files in this PR:"
+          echo "$CHANGED"
+          echo ""
+          NON_DOCS=$(echo "$CHANGED" | grep -vE '^(\.claude/memory/|docs/)|\.md$' || true)
+          if [ -z "$CHANGED" ]; then
+            # Defensive: an empty diff (rebase artefact, force-push to same SHA)
+            # should NOT skip CI — we have no evidence the change is docs-only.
+            echo "is_docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Empty diff — running full CI (defensive)"
+          elif [ -z "$NON_DOCS" ]; then
+            echo "is_docs_only=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Docs/memory-only PR — heavy jobs will be skipped (lint, unit, api-build, integration, e2e)"
+          else
+            echo "is_docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Non-docs file(s) changed — running full CI:"
+            echo "$NON_DOCS" | sed 's/^/  /'
+          fi
+
   lint-and-typecheck:
     name: Lint + typecheck + format
+    needs: detect-scope
+    if: needs.detect-scope.outputs.is_docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -89,6 +151,8 @@ jobs:
 
   unit-tests:
     name: Unit tests
+    needs: detect-scope
+    if: needs.detect-scope.outputs.is_docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -121,6 +185,8 @@ jobs:
     # the real production build for @eventpulse/api so the next prod-only
     # foot-gun lands on a PR check, not a staging deploy retry.
     name: API production build
+    needs: detect-scope
+    if: needs.detect-scope.outputs.is_docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -154,7 +220,7 @@ jobs:
   integration-tests:
     name: Integration + RLS tests
     needs: detect-scope
-    if: needs.detect-scope.outputs.has_migrations == 'true'
+    if: needs.detect-scope.outputs.is_docs_only != 'true' && needs.detect-scope.outputs.has_migrations == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -207,7 +273,7 @@ jobs:
   e2e-smoke:
     name: E2E smoke (Playwright)
     needs: detect-scope
-    if: needs.detect-scope.outputs.has_e2e == 'true'
+    if: needs.detect-scope.outputs.is_docs_only != 'true' && needs.detect-scope.outputs.has_e2e == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Postgres service container added at Day 21 Fix 6 — the DB-aware
