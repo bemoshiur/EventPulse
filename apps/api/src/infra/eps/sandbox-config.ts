@@ -115,10 +115,27 @@ export const unwiredSecretFetcher: SecretFetcher = async (secretId: string) => {
 }
 
 /**
- * Shape of the sandbox secret's JSON. The buyer-return URLs are carried IN
- * the secret so the sandbox path reads zero env. snake_case keys match the
- * production `eventpulse/staging/eps` secret convention (§11.3) plus the
- * three return URLs.
+ * Default buyer-return URLs for the sandbox path. The EPS credentials secret
+ * holds ONLY the 5 credential fields (correct scope — credentials, not config);
+ * the return URLs are configuration and live here. They only need to be
+ * syntactically-valid HTTPS: the truth gate captures the fee via Verify, not
+ * via the redirect, so these landing pages need not resolve.
+ *
+ * If a secret DOES carry `success_url`/`fail_url`/`cancel_url`, those win; the
+ * defaults are the fallback. This keeps the secret minimal without coupling the
+ * sandbox path to env.
+ */
+export const DEFAULT_SANDBOX_RETURN_URLS = {
+  successUrl: 'https://staging.eventpulse.com.bd/truth-gate/sandbox-return/success',
+  failUrl: 'https://staging.eventpulse.com.bd/truth-gate/sandbox-return/fail',
+  cancelUrl: 'https://staging.eventpulse.com.bd/truth-gate/sandbox-return/cancel',
+} as const
+
+/**
+ * Shape of the sandbox secret's JSON. The 5 credential fields are required;
+ * the buyer-return URLs are OPTIONAL (config-with-defaults, see
+ * {@link DEFAULT_SANDBOX_RETURN_URLS}). snake_case keys match the production
+ * `eventpulse/staging/eps` secret convention (§11.3).
  */
 const SandboxSecretSchema = z.object({
   merchant_id: z.string().min(1),
@@ -128,9 +145,9 @@ const SandboxSecretSchema = z.object({
   hash_key: z.string().min(1),
   // mode is INTENTIONALLY NOT read from the secret — we hard-code 'sandbox'
   // below so no secret-content typo can ever route the harness at production.
-  success_url: z.string().url(),
-  fail_url: z.string().url(),
-  cancel_url: z.string().url(),
+  success_url: z.string().url().optional(),
+  fail_url: z.string().url().optional(),
+  cancel_url: z.string().url().optional(),
 })
 
 /**
@@ -182,10 +199,12 @@ export async function loadSandboxEpsConfig(
 
   return Object.freeze({
     config,
+    // Config-with-defaults: secret-provided URLs win; otherwise the sandbox
+    // defaults. Keeps the credentials secret to the 5 credential fields.
     redirectUrls: Object.freeze({
-      successUrl: s.success_url,
-      failUrl: s.fail_url,
-      cancelUrl: s.cancel_url,
+      successUrl: s.success_url ?? DEFAULT_SANDBOX_RETURN_URLS.successUrl,
+      failUrl: s.fail_url ?? DEFAULT_SANDBOX_RETURN_URLS.failUrl,
+      cancelUrl: s.cancel_url ?? DEFAULT_SANDBOX_RETURN_URLS.cancelUrl,
     }),
   })
 }

@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { BASE_URLS, defaultEpsCallDeps, defaultTokenCache } from './core.js'
 import {
   createSandboxEpsCallDeps,
+  DEFAULT_SANDBOX_RETURN_URLS,
   loadSandboxEpsConfig,
   SANDBOX_EPS_SECRET_ID,
   unwiredSecretFetcher,
@@ -104,6 +105,26 @@ describe('loadSandboxEpsConfig — constructs from the secret', () => {
     })
     const setup = await loadSandboxEpsConfig(stubFetcher(sneaky))
     expect(setup.config.mode).toBe('sandbox')
+  })
+
+  it('falls back to default sandbox return URLs when the secret omits them (credentials-only secret)', async () => {
+    const credsOnly = JSON.stringify({
+      merchant_id: 'sandbox-merchant',
+      store_id: 'sandbox-store',
+      username: 'sandbox-user',
+      password: 'sandbox-pass',
+      hash_key: 'sandbox-hash-key',
+      // no *_url fields
+    })
+    const setup = await loadSandboxEpsConfig(stubFetcher(credsOnly))
+    expect(setup.config.mode).toBe('sandbox')
+    expect(setup.redirectUrls).toEqual(DEFAULT_SANDBOX_RETURN_URLS)
+  })
+
+  it('secret-provided return URLs win over the defaults', async () => {
+    const setup = await loadSandboxEpsConfig(stubFetcher())
+    expect(setup.redirectUrls.successUrl).toBe('https://sandbox.example.test/return/success')
+    expect(setup.redirectUrls).not.toEqual(DEFAULT_SANDBOX_RETURN_URLS)
   })
 
   it('throws on non-JSON secret', async () => {
