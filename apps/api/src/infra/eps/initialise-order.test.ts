@@ -46,9 +46,28 @@ import {
   initialiseOrderHttp,
   readInitRedirectUrls,
 } from './initialise-order.js'
+import {
+  createSandboxEpsCallDeps,
+  loadSandboxEpsConfig,
+  type SecretFetcher,
+} from './sandbox-config.js'
+import { SandboxPricedCallToken } from './sandbox-priced-call-token.js'
 import { StagingPaymentBlockedError } from './staging-payment-block.js'
 
 const PROD_BASE = 'https://pgapi.eps.com.bd'
+const SANDBOX_BASE = 'https://sandboxpgapi.eps.com.bd'
+
+const SANDBOX_SECRET = JSON.stringify({
+  merchant_id: 'sb-merchant',
+  store_id: 'sb-store',
+  username: 'sb-user',
+  password: 'sb-pass',
+  hash_key: 'sb-hash-key',
+  success_url: 'https://sandbox.example.test/return/success',
+  fail_url: 'https://sandbox.example.test/return/fail',
+  cancel_url: 'https://sandbox.example.test/return/cancel',
+})
+const sandboxSecretFetcher: SecretFetcher = async () => SANDBOX_SECRET
 
 const ENV_KEYS = [
   'EPS_MERCHANT_ID',
@@ -166,6 +185,89 @@ describe('initialiseOrderHttp — STAGING_PAYMENT_BLOCK guard (load-bearing safe
     })
     expect(result.redirectUrl).toBe('https://pgapi.eps.com.bd/free')
     scope.done()
+  })
+})
+
+describe('initialiseOrderHttp — truth-gate sandbox block bypass (harness-scoped)', () => {
+  async function sandboxDeps(allowPricedCalls: boolean) {
+    const setup = await loadSandboxEpsConfig(sandboxSecretFetcher)
+    return createSandboxEpsCallDeps(setup, { allowPricedCalls })
+  }
+
+  // (a) the harness CAN make the priced sandbox call even with block ON
+  it('(a) harness deps (sandbox + token) → priced InitializeEPS SUCCEEDS with STAGING_PAYMENT_BLOCK=1', async () => {
+    process.env['STAGING_PAYMENT_BLOCK'] = '1'
+    const deps = await sandboxDeps(true)
+
+    // Sandbox deps carry their own empty cache → GetToken fires to sandbox first.
+    const getToken = nock(SANDBOX_BASE).post('/api/v1/GetToken').reply(200, { Token: 'sb-jwt' })
+    const init = nock(SANDBOX_BASE)
+      .post('/api/v1/InitializeEPS')
+      .reply(200, { RedirectURL: 'https://sandboxpgapi.eps.com.bd/checkout/abc' })
+
+    const result = await initialiseOrderHttp(
+      { merchantTransactionId: 'TXN-TG-A-12345', totalPaisa: 100_000n },
+      deps,
+    )
+    expect(result.redirectUrl).toBe('https://sandboxpgapi.eps.com.bd/checkout/abc')
+    getToken.done()
+    init.done()
+  })
+
+  // (b) a normal priced order path (no deps) STILL hits the block
+  it('(b) normal priced path (no deps) with block on → STILL throws StagingPaymentBlockedError', async () => {
+    process.env['STAGING_PAYMENT_BLOCK'] = '1'
+    await expect(
+      initialiseOrderHttp({ merchantTransactionId: 'TXN-NORMAL-1', totalPaisa: 100_000n }),
+    ).rejects.toBeInstanceOf(StagingPaymentBlockedError)
+    expect(nock.activeMocks()).toEqual([])
+  })
+
+  // (c) sandbox-mode WITHOUT the token is NOT a loophole
+  it('(c) sandbox deps WITHOUT token + block on → STILL blocked (sandbox mode alone is not a bypass)', async () => {
+    process.env['STAGING_PAYMENT_BLOCK'] = '1'
+    const deps = await sandboxDeps(false) // no token minted
+    expect(deps.pricedSandboxCallToken).toBeUndefined()
+    await expect(
+      initialiseOrderHttp({ merchantTransactionId: 'TXN-TG-C-12345', totalPaisa: 100_000n }, deps),
+    ).rejects.toBeInstanceOf(StagingPaymentBlockedError)
+    // No HTTP — the guard fired before any sandbox call.
+    expect(nock.activeMocks()).toEqual([])
+  })
+
+  // (d) production-mode deps + a real token → STILL blocked (call-site mode re-check)
+  it('(d) production-mode deps carrying a token + block on → STILL blocked (mode re-checked at call site)', async () => {
+    process.env['STAGING_PAYMENT_BLOCK'] = '1'
+    const sb = await sandboxDeps(true)
+    const token = sb.pricedSandboxCallToken
+    expect(token).toBeInstanceOf(SandboxPricedCallToken)
+    // Forge a production-mode deps that still carries the genuine token.
+    const prodDeps = {
+      ...sb,
+      config: { ...sb.config, mode: 'production' as const },
+      pricedSandboxCallToken: token,
+    }
+    await expect(
+      initialiseOrderHttp(
+        { merchantTransactionId: 'TXN-TG-D-12345', totalPaisa: 100_000n },
+        prodDeps,
+      ),
+    ).rejects.toBeInstanceOf(StagingPaymentBlockedError)
+    expect(nock.activeMocks()).toEqual([])
+  })
+
+  // bonus: a shape-only fake object is not accepted as a token (branded typeguard)
+  it('shape-only fake token + sandbox deps + block on → STILL blocked (instanceof brand)', async () => {
+    process.env['STAGING_PAYMENT_BLOCK'] = '1'
+    const sb = await sandboxDeps(false)
+    const fakeDeps = { ...sb, pricedSandboxCallToken: {} as unknown as SandboxPricedCallToken }
+    await expect(
+      initialiseOrderHttp(
+        { merchantTransactionId: 'TXN-TG-FAKE-1', totalPaisa: 100_000n },
+        fakeDeps,
+      ),
+    ).rejects.toBeInstanceOf(StagingPaymentBlockedError)
+    expect(nock.activeMocks()).toEqual([])
   })
 })
 

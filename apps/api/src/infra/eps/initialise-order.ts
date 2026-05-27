@@ -50,6 +50,7 @@ import {
 import { EpsNetworkError, EpsResponseError } from './eps-http-errors.js'
 import { fetchAccessTokenFromEps } from './get-token.js'
 import { signEpsField } from './hash.js'
+import { isSandboxPricedCallToken } from './sandbox-priced-call-token.js'
 import { assertEpsCallAllowed } from './staging-payment-block.js'
 
 /**
@@ -172,9 +173,35 @@ export async function initialiseOrderHttp(
   deps?: EpsCallDeps,
 ): Promise<InitialiseOrderResult> {
   // 1. SAFETY GUARD FIRST. No env reads, no HTTP construction, no
-  //    network, no deps resolution. Throws StagingPaymentBlockedError
-  //    if block on + totalPaisa > 0.
-  assertEpsCallAllowed(input.totalPaisa)
+  //    network, no deps resolution beyond the three-lock bypass check.
+  //    Throws StagingPaymentBlockedError if block on + totalPaisa > 0.
+  //
+  //    The guard runs for EVERY path except the truth-gate harness's
+  //    explicit sandbox-priced bypass, which requires ALL THREE locks:
+  //      (1) a SandboxPricedCallToken rides on the injected deps,
+  //      (2) deps.config.mode === 'sandbox' (re-checked here, not just at
+  //          mint), and
+  //      (3) the token is a genuine branded instance (not a shape-only fake).
+  //    The default/service path passes no deps → token is undefined → the
+  //    guard runs first, exactly as before (no env read precedes it).
+  const allowPricedSandbox =
+    deps?.pricedSandboxCallToken != null &&
+    deps.config.mode === 'sandbox' &&
+    isSandboxPricedCallToken(deps.pricedSandboxCallToken)
+  if (allowPricedSandbox) {
+    logger.warn(
+      {
+        eps: {
+          endpoint: 'InitializeEPS',
+          mode: 'sandbox',
+          totalPaisa: input.totalPaisa.toString(),
+        },
+      },
+      'eps.init.truth_gate_sandbox_bypass',
+    )
+  } else {
+    assertEpsCallAllowed(input.totalPaisa)
+  }
 
   // 2. Validate input format before any external work.
   if (input.merchantTransactionId.length < MERCHANT_TXN_ID_MIN_LENGTH) {

@@ -67,6 +67,7 @@ import axios, { type AxiosInstance } from 'axios'
 import { z } from 'zod'
 
 import { BASE_URLS, type EpsCallDeps, type EpsConfig } from './core.js'
+import { SandboxPricedCallToken } from './sandbox-priced-call-token.js'
 import { inMemoryTokenCache } from './token-cache.js'
 
 /**
@@ -202,8 +203,18 @@ export async function loadSandboxEpsConfig(
  * Pure given the setup; constructs no env reads. `setup.config.mode` is
  * asserted `'sandbox'` defensively — a belt-and-braces guard so this
  * function can never be tricked into building a production-pointed client.
+ *
+ * `opts.allowPricedCalls` (default `false`) is the EXPLICIT opt-in for the
+ * STAGING_PAYMENT_BLOCK bypass: when `true`, a {@link SandboxPricedCallToken}
+ * is minted (sandbox-scoped at mint) and rides on the returned deps so
+ * `initialiseOrderHttp` will run a priced sandbox InitializeEPS. Default off →
+ * even sandbox deps are still subject to the block. The only caller that sets
+ * it is `run-truth-gate.ts`'s harness invocation.
  */
-export function createSandboxEpsCallDeps(setup: SandboxEpsSetup): EpsCallDeps {
+export function createSandboxEpsCallDeps(
+  setup: SandboxEpsSetup,
+  opts: { allowPricedCalls?: boolean } = {},
+): EpsCallDeps {
   if (setup.config.mode !== 'sandbox') {
     // Unreachable via loadSandboxEpsConfig (which hard-codes sandbox); guards
     // against a hand-constructed setup being routed at production.
@@ -221,5 +232,8 @@ export function createSandboxEpsCallDeps(setup: SandboxEpsSetup): EpsCallDeps {
     client,
     cache: inMemoryTokenCache(),
     redirectUrls: setup.redirectUrls,
+    ...(opts.allowPricedCalls
+      ? { pricedSandboxCallToken: SandboxPricedCallToken.mint(setup.config) }
+      : {}),
   }
 }
