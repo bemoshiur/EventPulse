@@ -80,6 +80,8 @@
  *   - [ ] If ALL MATCH: Day 26+ unblocked.
  */
 
+import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager'
+
 import {
   createSandboxEpsCallDeps,
   loadSandboxEpsConfig,
@@ -90,6 +92,42 @@ import { initialiseOrderHttp } from '../initialise-order.js'
 import { verifyOrderHttp } from '../verify-order.js'
 import { formatReport, runTruthGate, type EpsObservationProvider } from './harness.js'
 import { TRUTH_GATE_SCENARIOS } from './scenarios.js'
+
+const AWS_REGION = 'ap-southeast-1'
+
+/**
+ * Minimal shape of the Secrets Manager client this module needs — just
+ * `send(GetSecretValueCommand)`. Declared so `makeSecretsManagerFetcher` can
+ * accept a stub client in tests without mocking the AWS SDK module.
+ */
+export interface SecretsManagerLike {
+  send(command: GetSecretValueCommand): Promise<{ SecretString?: string }>
+}
+
+/**
+ * The REAL Secrets Manager-backed {@link SecretFetcher} (Phase 1.1). Reads
+ * the raw `SecretString` for a given secret id. Credentials come from the
+ * EC2 instance role (the harness runs on the staging box via SSM); region is
+ * pinned to the platform region.
+ *
+ * This lives in the harness entrypoint (the ONLY file allowed to import
+ * `sandbox-config`) so no running-service path can obtain it. It is wired
+ * into the live provider ONLY inside {@link main} — never as a default.
+ *
+ * The client is injectable purely so tests can pass a stub `send`; production
+ * uses the default `SecretsManagerClient`.
+ */
+export function makeSecretsManagerFetcher(
+  client: SecretsManagerLike = new SecretsManagerClient({ region: AWS_REGION }),
+): SecretFetcher {
+  return async (secretId: string) => {
+    const out = await client.send(new GetSecretValueCommand({ SecretId: secretId }))
+    if (!out.SecretString) {
+      throw new Error(`secretsManagerFetcher: secret '${secretId}' has no SecretString`)
+    }
+    return out.SecretString
+  }
+}
 
 /**
  * Pull the EPS-charged fee (paisa) out of a Verify response.
@@ -179,10 +217,10 @@ async function main(): Promise<void> {
   // eslint-disable-next-line no-console
   console.log('See header for prerequisites + execution checklist.')
 
-  // The swap is done: main() uses the live sandbox provider. With the
-  // default unwired fetcher this throws before any network — Phase-1
-  // passes a real SecretFetcher here.
-  const provider = makeLiveSandboxObservationProvider()
+  // Phase 1.1: supply the REAL Secrets Manager fetcher at invocation only.
+  // makeLiveSandboxObservationProvider still defaults to unwiredSecretFetcher,
+  // so the only way the harness fires is this explicit wiring here.
+  const provider = makeLiveSandboxObservationProvider(makeSecretsManagerFetcher())
   const report = await runTruthGate(TRUTH_GATE_SCENARIOS, provider)
   // eslint-disable-next-line no-console
   console.log(formatReport(report))
