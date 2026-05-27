@@ -27,7 +27,11 @@ export type EpsMode = 'production' | 'sandbox'
 
 export const BASE_URLS: Record<EpsMode, string> = {
   production: 'https://pgapi.eps.com.bd',
-  sandbox: 'https://sandbox-pgapi.eps.com.bd',
+  // V4 sandbox guide + Postman collection: `sandboxpgapi.eps.com.bd`
+  // (single word, no hyphen). An earlier incorrect `sandbox-pgapi.eps.com.bd`
+  // value was caught at Day-36 truth-gate pre-flight; the hyphenated
+  // hostname doesn't resolve.
+  sandbox: 'https://sandboxpgapi.eps.com.bd',
 }
 
 export interface EpsConfig {

@@ -145,7 +145,7 @@ describe('BASE_URLS', () => {
   })
 
   it('sandbox points at the sandbox gateway', () => {
-    expect(BASE_URLS.sandbox).toBe('https://sandbox-pgapi.eps.com.bd')
+    expect(BASE_URLS.sandbox).toBe('https://sandboxpgapi.eps.com.bd')
   })
 
   it('only two modes exist (defence against accidental third)', () => {
@@ -163,7 +163,7 @@ describe('http() factory', () => {
 
   it('switches base URL when EPS_MODE=sandbox', () => {
     process.env['EPS_MODE'] = 'sandbox'
-    expect(http().defaults.baseURL).toBe('https://sandbox-pgapi.eps.com.bd')
+    expect(http().defaults.baseURL).toBe('https://sandboxpgapi.eps.com.bd')
   })
 
   it('throws EpsConfigError when env missing (fail loud at construction)', () => {
