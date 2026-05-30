@@ -199,10 +199,11 @@ describe('initialiseOrderHttp — truth-gate sandbox block bypass (harness-scope
     process.env['STAGING_PAYMENT_BLOCK'] = '1'
     const deps = await sandboxDeps(true)
 
-    // Sandbox deps carry their own empty cache → GetToken fires to sandbox first.
-    const getToken = nock(SANDBOX_BASE).post('/api/v1/GetToken').reply(200, { Token: 'sb-jwt' })
+    // Sandbox deps use V4 paths (per V4_SANDBOX_PATHS in sandbox-config.ts) —
+    // /v1/Auth/GetToken + /v1/EPSEngine/InitializeEPS, NOT the V5 prod prefix.
+    const getToken = nock(SANDBOX_BASE).post('/v1/Auth/GetToken').reply(200, { Token: 'sb-jwt' })
     const init = nock(SANDBOX_BASE)
-      .post('/api/v1/InitializeEPS')
+      .post('/v1/EPSEngine/InitializeEPS')
       .reply(200, { RedirectURL: 'https://sandboxpgapi.eps.com.bd/checkout/abc' })
 
     const result = await initialiseOrderHttp(

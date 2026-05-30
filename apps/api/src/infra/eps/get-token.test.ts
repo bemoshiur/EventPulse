@@ -81,7 +81,14 @@ describe('fetchAccessTokenFromEps — happy path', () => {
     scope.done()
   })
 
-  it('routes to sandbox base URL when EPS_MODE=sandbox', async () => {
+  it('routes to sandbox BASE URL when EPS_MODE=sandbox (env path still uses V5 paths)', async () => {
+    // This test pins BASE URL routing via env mode. Path routing is NOT
+    // mode-driven on the env path: `cfg()` always returns V5_PRODUCTION_PATHS
+    // regardless of EPS_MODE — that invariant is pinned separately in
+    // sandbox-config.test.ts ("default (env) deps path config.paths is
+    // V5_PRODUCTION_PATHS regardless of EPS_MODE"). V4 sandbox paths are
+    // produced ONLY by sandbox-config.ts's loader (the truth-gate harness),
+    // never by the env-driven path the running services use.
     process.env['EPS_MODE'] = 'sandbox'
 
     const scope = nock(SANDBOX_BASE).post('/api/v1/GetToken').reply(200, { Token: 'sandbox-jwt' })

@@ -132,6 +132,30 @@ export const DEFAULT_SANDBOX_RETURN_URLS = {
 } as const
 
 /**
+ * V4 sandbox endpoint paths — empirically confirmed against the official EPS
+ * V4 Sandbox Merchant API Integration Guide + Postman collection
+ * (2026-05-27, Phase 1.4 truth-gate execution). The V4 sandbox uses
+ * `/v1/Auth/` for token issuance and `/v1/EPSEngine/` for order operations
+ * — distinct from the V5 production prefix `/api/v1/<Endpoint>`.
+ *
+ * Frozen + sandbox-only: this constant is produced ONLY by
+ * {@link loadSandboxEpsConfig}; the env path in `core.ts` always returns
+ * {@link V5_PRODUCTION_PATHS}. The two objects never share a reference.
+ *
+ * Note for the closeout (Phase 1.6): the V5 production paths in
+ * {@link V5_PRODUCTION_PATHS} are documented per CLAUDE.md §11.4 but have
+ * NOT yet been empirically exercised against EPS production — V4 sandbox
+ * divergence here implies V5 production warrants the same confirmation
+ * before the production real-money smoke (ideally BEFORE the smoke fires,
+ * to avoid a 404-vs-real-money race).
+ */
+export const V4_SANDBOX_PATHS = Object.freeze({
+  getToken: '/v1/Auth/GetToken',
+  initialise: '/v1/EPSEngine/InitializeEPS',
+  verify: '/v1/EPSEngine/CheckMerchantTransactionStatus',
+})
+
+/**
  * Shape of the sandbox secret's JSON. The 5 credential fields are required;
  * the buyer-return URLs are OPTIONAL (config-with-defaults, see
  * {@link DEFAULT_SANDBOX_RETURN_URLS}). snake_case keys match the production
@@ -195,6 +219,10 @@ export async function loadSandboxEpsConfig(
     hashKey: s.hash_key,
     // Hard-coded — the single structural guarantee that this path is sandbox.
     mode: 'sandbox',
+    // Hard-coded V4 sandbox paths (NEVER read from secret, NEVER overrideable
+    // from outside this module). The wrapper functions read config.paths.* so
+    // the URL prefix is a config-level concern, not a per-call conditional.
+    paths: V4_SANDBOX_PATHS,
   })
 
   return Object.freeze({

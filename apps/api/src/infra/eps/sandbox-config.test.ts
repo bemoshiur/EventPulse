@@ -17,13 +17,14 @@ import { fileURLToPath } from 'node:url'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { BASE_URLS, defaultEpsCallDeps, defaultTokenCache } from './core.js'
+import { BASE_URLS, defaultEpsCallDeps, defaultTokenCache, V5_PRODUCTION_PATHS } from './core.js'
 import {
   createSandboxEpsCallDeps,
   DEFAULT_SANDBOX_RETURN_URLS,
   loadSandboxEpsConfig,
   SANDBOX_EPS_SECRET_ID,
   unwiredSecretFetcher,
+  V4_SANDBOX_PATHS,
   type SecretFetcher,
 } from './sandbox-config.js'
 
@@ -191,6 +192,77 @@ describe('default (env) deps path is unaffected by the sandbox seam', () => {
     expect(deps.config.mode).toBe('production')
     expect(deps.client.defaults.baseURL).toBe(BASE_URLS.production)
     expect(deps.cache).toBe(defaultTokenCache()) // the running-process singleton
+  })
+})
+
+describe('per-endpoint path map — V4 sandbox vs V5 production isolation', () => {
+  it('V4_SANDBOX_PATHS holds the empirically-confirmed V4 sandbox paths', () => {
+    expect(V4_SANDBOX_PATHS).toEqual({
+      getToken: '/v1/Auth/GetToken',
+      initialise: '/v1/EPSEngine/InitializeEPS',
+      verify: '/v1/EPSEngine/CheckMerchantTransactionStatus',
+    })
+  })
+
+  it('V5_PRODUCTION_PATHS holds the §11.4 V5 production paths', () => {
+    expect(V5_PRODUCTION_PATHS).toEqual({
+      getToken: '/api/v1/GetToken',
+      initialise: '/api/v1/InitializeEPS',
+      verify: '/api/v1/CheckMerchantTransactionStatus',
+    })
+  })
+
+  it('V4 and V5 share NO path values — no key collides between the two maps', () => {
+    // Cross-contamination guard: if any production path string equals any
+    // sandbox path string, a swap-bug somewhere could route traffic at the
+    // wrong env without obvious symptoms. Pin that they are disjoint.
+    const v4Values = new Set(Object.values(V4_SANDBOX_PATHS))
+    for (const v5 of Object.values(V5_PRODUCTION_PATHS)) {
+      expect(v4Values.has(v5)).toBe(false)
+    }
+  })
+
+  it('both path maps are FROZEN (cannot be mutated at runtime)', () => {
+    expect(Object.isFrozen(V4_SANDBOX_PATHS)).toBe(true)
+    expect(Object.isFrozen(V5_PRODUCTION_PATHS)).toBe(true)
+  })
+
+  it('loaded sandbox config carries V4_SANDBOX_PATHS (NEVER V5 paths)', async () => {
+    const setup = await loadSandboxEpsConfig(stubFetcher())
+    expect(setup.config.paths).toBe(V4_SANDBOX_PATHS)
+    expect(setup.config.paths).not.toBe(V5_PRODUCTION_PATHS)
+    expect(setup.config.paths.getToken).toBe('/v1/Auth/GetToken')
+    expect(setup.config.paths.initialise).toBe('/v1/EPSEngine/InitializeEPS')
+    expect(setup.config.paths.verify).toBe('/v1/EPSEngine/CheckMerchantTransactionStatus')
+  })
+
+  it('secret CANNOT inject V5 paths into the sandbox config (paths are code-only)', async () => {
+    // Even if a maliciously-crafted secret carries `paths`/`get_token_path`,
+    // the schema ignores it and the loader hardcodes V4_SANDBOX_PATHS.
+    const sneaky = JSON.stringify({
+      ...JSON.parse(VALID_SANDBOX_SECRET),
+      paths: V5_PRODUCTION_PATHS,
+      get_token_path: '/api/v1/GetToken',
+      initialise_path: '/api/v1/InitializeEPS',
+      verify_path: '/api/v1/CheckMerchantTransactionStatus',
+    })
+    const setup = await loadSandboxEpsConfig(stubFetcher(sneaky))
+    expect(setup.config.paths).toBe(V4_SANDBOX_PATHS)
+  })
+
+  it('default (env) deps path config.paths is V5_PRODUCTION_PATHS regardless of EPS_MODE', () => {
+    // Even with EPS_MODE=sandbox in env (which the running services never set
+    // on staging but which the get-token test exercises), cfg() returns V5
+    // paths — the env path NEVER produces V4 paths.
+    process.env['EPS_MERCHANT_ID'] = 'm'
+    process.env['EPS_STORE_ID'] = 's'
+    process.env['EPS_USERNAME'] = 'u'
+    process.env['EPS_PASSWORD'] = 'p'
+    process.env['EPS_HASH_KEY'] = 'k'
+    process.env['EPS_MODE'] = 'sandbox' // does NOT switch paths
+    const deps = defaultEpsCallDeps()
+    expect(deps.config.paths).toBe(V5_PRODUCTION_PATHS)
+    expect(deps.config.paths).not.toBe(V4_SANDBOX_PATHS)
   })
 })
 

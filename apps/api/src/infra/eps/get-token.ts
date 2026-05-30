@@ -140,7 +140,7 @@ export async function fetchAccessTokenFromEps(
   let response
   try {
     response = await client.post(
-      '/api/v1/GetToken',
+      config.paths.getToken,
       // [truth-gate-verify] request body fields: `userName` + `password`
       // are the SDK-source names; §11 confirms the credentials shape
       // implicitly. PascalCase fallback aliases sent simultaneously

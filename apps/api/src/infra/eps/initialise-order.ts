@@ -258,7 +258,7 @@ async function performInitWithRetry(
   const startMs = Date.now()
   let response
   try {
-    response = await client.post('/api/v1/InitializeEPS', body, {
+    response = await client.post(config.paths.initialise, body, {
       headers: {
         Authorization: `Bearer ${token}`,
         'x-hash': xHash,

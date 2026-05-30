@@ -113,7 +113,7 @@ async function performVerifyWithRetry(
   const startMs = Date.now()
   let response
   try {
-    response = await client.post('/api/v1/CheckMerchantTransactionStatus', body, {
+    response = await client.post(config.paths.verify, body, {
       headers: {
         Authorization: `Bearer ${token}`,
         'x-hash': xHash,

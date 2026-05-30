@@ -35,6 +35,38 @@ export const BASE_URLS: Record<EpsMode, string> = {
   sandbox: 'https://sandboxpgapi.eps.com.bd',
 }
 
+/**
+ * Per-endpoint URL paths the wrapper POSTs to. EPS V5 (production) and V4
+ * (sandbox) diverge on the path prefix — production uses `/api/v1/<Endpoint>`,
+ * sandbox uses `/v1/Auth/...` for token-issuance and `/v1/EPSEngine/...` for
+ * order operations. Carrying the paths on `EpsConfig` (config-with-defaults
+ * pattern, mirroring the buyer-return URLs in `sandbox-config.ts`) means the
+ * wire-shape difference is a config-level concern, not a hardcoded
+ * conditional inside the wrapper functions.
+ *
+ * Production paths come from {@link V5_PRODUCTION_PATHS} via {@link cfg};
+ * sandbox paths come from `V4_SANDBOX_PATHS` (defined in `sandbox-config.ts`)
+ * via `loadSandboxEpsConfig`. The two paths objects are distinct frozen
+ * constants — no code path can return one when the other is expected
+ * (cross-contamination tests pin this).
+ */
+export interface EpsEndpointPaths {
+  readonly getToken: string
+  readonly initialise: string
+  readonly verify: string
+}
+
+/**
+ * V5 paths used by the running services against EPS production. §11.4
+ * canonical. Used by {@link cfg} (env path); never by the sandbox path. Frozen
+ * so a future bug can't mutate the wire-shape at runtime.
+ */
+export const V5_PRODUCTION_PATHS: EpsEndpointPaths = Object.freeze({
+  getToken: '/api/v1/GetToken',
+  initialise: '/api/v1/InitializeEPS',
+  verify: '/api/v1/CheckMerchantTransactionStatus',
+})
+
 export interface EpsConfig {
   merchantId: string
   storeId: string
@@ -42,6 +74,7 @@ export interface EpsConfig {
   password: string
   hashKey: string
   mode: EpsMode
+  paths: EpsEndpointPaths
 }
 
 /**
@@ -147,6 +180,11 @@ export function cfg(): EpsConfig {
     password: password!,
     hashKey: hashKey!,
     mode: modeRaw,
+    // Env path always carries the V5 production paths. Sandbox V4 paths are
+    // produced only by `sandbox-config.ts`'s loader — they never originate
+    // here, so a running service can never accidentally point at a sandbox
+    // path no matter how `EPS_MODE` is set in env.
+    paths: V5_PRODUCTION_PATHS,
   }
 }
 
