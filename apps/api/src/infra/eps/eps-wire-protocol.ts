@@ -92,9 +92,24 @@ export type InitParseResult =
     }
   | { kind: 'schema-fail'; issues: z.ZodIssue[]; raw: unknown }
 
-/** Discriminated outcome of parsing a Verify response. */
+/**
+ * Discriminated outcome of parsing a Verify response.
+ *
+ * `totalAmountBdt` is what EPS captured from the buyer (BDT decimal string).
+ * `storeAmountBdt` is what EPS will settle to the merchant (BDT decimal
+ * string) — the V4 Verify envelope publishes this as the load-bearing field
+ * for the truth-gate derivation: `eps_fee = TotalAmount − StoreAmount` is
+ * mode-agnostic (no Mode-B/D blind spots). V5 production omits StoreAmount,
+ * so V5 returns `null` for it.
+ */
 export type VerifyParseResult =
-  | { kind: 'success'; status: EpsStatus; totalAmountBdt: string | null; raw: unknown }
+  | {
+      kind: 'success'
+      status: EpsStatus
+      totalAmountBdt: string | null
+      storeAmountBdt: string | null
+      raw: unknown
+    }
   | { kind: 'schema-fail'; issues: z.ZodIssue[]; raw: unknown }
 
 /**
@@ -192,6 +207,7 @@ export const V5_PRODUCTION_PROTOCOL: EpsWireProtocol = Object.freeze({
       kind: 'success',
       status: normaliseStatus(parsed.data),
       totalAmountBdt: null,
+      storeAmountBdt: null,
       raw: data,
     }
   },
@@ -240,22 +256,36 @@ const V4InitResponseSchema = z
 
 /**
  * V4 CheckMerchantTransactionStatus response — the buyer-facing transaction
- * snapshot. `TotalAmount` carries the BDT-decimal amount EPS charged the
- * buyer (e.g. "1027.56"); the truth-gate uses this to derive observed EPS
- * fee per `parseBdtDecimalToPaisa`.
+ * snapshot.
+ *
+ *   - `TotalAmount` — BDT-decimal amount EPS charged the buyer (e.g.
+ *     "1027.56"). Always present on a Success status.
+ *   - `StoreAmount` — BDT-decimal amount EPS will settle to the merchant
+ *     after deducting its own gateway fee (e.g. "1010.09" on a 1027.56 bKash
+ *     capture → 17.47 BDT EPS fee, i.e. 1.747% MFS rate). The truth-gate
+ *     uses (TotalAmount − StoreAmount) to derive the observed eps_fee
+ *     mode-agnostically.
+ *   - `ErrorCode` + `ErrorMessage` — both observed as `null` on success
+ *     against the EPS V4 sandbox (the Postman/guide sample showed empty
+ *     strings; sandbox reality is null). Accept both.
+ *
+ * `.passthrough()` keeps Customer-/Shipment-/Value-/Product-/PaymentId
+ * fields that EPS echoes back without forcing the schema to enumerate them.
  */
 const V4VerifyResponseSchema = z
   .object({
     MerchantTransactionId: z.string(),
     Status: z.string(),
     TotalAmount: z.string(),
+    StoreAmount: z.string(),
     TransactionDate: z.string().optional(),
     TransactionType: z.string().optional(),
     FinancialEntity: z.string().nullable().optional(),
-    // V4 Verify ErrorCode observed as empty string on success; tolerate both
-    // shapes for resilience.
+    // V4 Verify ErrorCode/ErrorMessage are null on success against the
+    // sandbox (the Postman/guide samples showed empty strings; reality is
+    // null). Accept string, number, or null for both.
     ErrorCode: z.union([z.string(), z.number(), z.null()]).optional(),
-    ErrorMessage: z.string().optional(),
+    ErrorMessage: z.union([z.string(), z.null()]).optional(),
   })
   .passthrough()
 
@@ -328,6 +358,7 @@ export const V4_SANDBOX_PROTOCOL: EpsWireProtocol = Object.freeze({
       kind: 'success',
       status: normaliseStatus(parsed.data),
       totalAmountBdt: parsed.data.TotalAmount,
+      storeAmountBdt: parsed.data.StoreAmount,
       raw: data,
     }
   },

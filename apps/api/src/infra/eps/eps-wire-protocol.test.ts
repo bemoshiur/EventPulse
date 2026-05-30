@@ -96,10 +96,13 @@ describe('V5_PRODUCTION_PROTOCOL — response parsing', () => {
     expect(V5_PRODUCTION_PROTOCOL.parseInitResponse(null).kind).toBe('schema-fail')
   })
 
-  it('parseVerifyResponse accepts any object (permissive passthrough)', () => {
+  it('parseVerifyResponse accepts any object (permissive passthrough); both amount fields null for V5', () => {
     const r = V5_PRODUCTION_PROTOCOL.parseVerifyResponse({ Status: 'SUCCESS' })
     expect(r.kind).toBe('success')
-    if (r.kind === 'success') expect(r.totalAmountBdt).toBeNull()
+    if (r.kind === 'success') {
+      expect(r.totalAmountBdt).toBeNull()
+      expect(r.storeAmountBdt).toBeNull()
+    }
   })
 })
 
@@ -221,25 +224,91 @@ describe('V4_SANDBOX_PROTOCOL — Init response parsing (success vs eps-error en
 })
 
 describe('V4_SANDBOX_PROTOCOL — Verify response parsing', () => {
-  it('extracts TotalAmount BDT-decimal string on success', () => {
+  it('extracts TotalAmount + StoreAmount BDT-decimal strings on success', () => {
     const r = V4_SANDBOX_PROTOCOL.parseVerifyResponse({
       MerchantTransactionId: 'TXN-AAA',
       Status: 'Success',
       TotalAmount: '1027.56',
+      StoreAmount: '1010.09',
       TransactionDate: '2026-05-30',
       TransactionType: 'Purchase',
-      FinancialEntity: 'CARD',
-      ErrorCode: '',
-      ErrorMessage: '',
+      FinancialEntity: 'BKash',
+      ErrorCode: null,
+      ErrorMessage: null,
     })
     expect(r.kind).toBe('success')
     if (r.kind === 'success') {
       expect(r.totalAmountBdt).toBe('1027.56')
+      expect(r.storeAmountBdt).toBe('1010.09')
     }
   })
+
+  it('accepts null ErrorMessage + null ErrorCode (the EMPIRICAL V4 sandbox shape on success)', () => {
+    // Postman/guide samples show empty strings; live sandbox returns null.
+    // The schema MUST accept both — a strict z.string() rejection here is
+    // exactly the regression PR #218 + #217 surfaced in the live diagnostic.
+    const r = V4_SANDBOX_PROTOCOL.parseVerifyResponse({
+      MerchantTransactionId: 'TXN-AAA',
+      Status: 'Success',
+      TotalAmount: '1027.56',
+      StoreAmount: '1010.09',
+      ErrorCode: null,
+      ErrorMessage: null,
+    })
+    expect(r.kind).toBe('success')
+  })
+
+  it('accepts empty-string ErrorMessage + empty-string ErrorCode (the V4 Postman/guide sample shape)', () => {
+    const r = V4_SANDBOX_PROTOCOL.parseVerifyResponse({
+      MerchantTransactionId: 'TXN-AAA',
+      Status: 'Success',
+      TotalAmount: '1027.56',
+      StoreAmount: '1010.09',
+      ErrorCode: '',
+      ErrorMessage: '',
+    })
+    expect(r.kind).toBe('success')
+  })
+
+  it('rejects a Verify response missing StoreAmount (required for mode-agnostic derivation)', () => {
+    const r = V4_SANDBOX_PROTOCOL.parseVerifyResponse({
+      MerchantTransactionId: 'TXN-AAA',
+      Status: 'Success',
+      TotalAmount: '1027.56',
+      // StoreAmount intentionally absent
+      ErrorCode: null,
+      ErrorMessage: null,
+    })
+    expect(r.kind).toBe('schema-fail')
+  })
+
   it('rejects a Verify response missing required V4 fields (MerchantTransactionId/Status/TotalAmount)', () => {
     const r = V4_SANDBOX_PROTOCOL.parseVerifyResponse({ Status: 'Success' })
     expect(r.kind).toBe('schema-fail')
+  })
+
+  it('passes through additional V4 envelope fields (Customer*/Shipment*/Value*-D/Product*/PaymentId)', () => {
+    // The live sandbox echoes back ~30 fields; schema uses passthrough so
+    // these fields neither cause schema-fail nor lose data to the comparator.
+    const r = V4_SANDBOX_PROTOCOL.parseVerifyResponse({
+      MerchantTransactionId: 'TXN-AAA',
+      Status: 'Success',
+      TotalAmount: '1027.56',
+      StoreAmount: '1010.09',
+      EPSTransactionId: '1262012130530A',
+      FinancialEntity: 'BKash',
+      CustomerName: 'Truth Gate Buyer',
+      CustomerEmail: 'truthgate@eventpulse.com.bd',
+      PaymentId: '',
+      ShipmentName: null,
+      ValueA: null,
+      ErrorCode: null,
+      ErrorMessage: null,
+    })
+    expect(r.kind).toBe('success')
+    if (r.kind === 'success') {
+      expect((r.raw as Record<string, unknown>)['EPSTransactionId']).toBe('1262012130530A')
+    }
   })
 })
 

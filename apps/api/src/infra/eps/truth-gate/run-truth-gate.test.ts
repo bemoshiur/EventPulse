@@ -108,46 +108,61 @@ describe('architectural guard — no running-service path can reach the harness/
   })
 })
 
-describe('extractEpsFeePaisa — derives observation from V4 Verify TotalAmount', () => {
-  const scenarioWithSubtotal = (subtotalPaisa: bigint) =>
-    ({ calculatorPrediction: { subtotalPaisa } }) as Parameters<typeof extractEpsFeePaisa>[0]
+describe('extractEpsFeePaisa — mode-agnostic derivation from V4 Verify (TotalAmount − StoreAmount)', () => {
+  // The earlier (TotalAmount − subtotal) rule had Mode-A combined-fee
+  // conflation and Mode-B/D blind spots. The new rule reads EPS's
+  // authoritative split (StoreAmount = what gets settled to the merchant)
+  // and yields pure eps_fee independently of the §14.2 absorb/pass-through
+  // composition. Cases below cover the empirical Mode A bKash sandbox
+  // observation plus illustrative card-rate amounts.
 
-  it('Mode A buyer total "1027.56" - subtotal 100000 = 2756 (platform+eps combined per Mode A docstring)', () => {
-    expect(extractEpsFeePaisa(scenarioWithSubtotal(100000n), { TotalAmount: '1027.56' })).toBe(
-      2756n,
-    )
+  it('Mode A bKash empirical: TotalAmount=1027.56 StoreAmount=1010.09 → 1747 paisa (= 17.47 BDT = 1.747% MFS rate)', () => {
+    expect(extractEpsFeePaisa({ TotalAmount: '1027.56', StoreAmount: '1010.09' })).toBe(1747n)
   })
-  it('Mode C calculator prediction "1025.00" - subtotal 100000 = 2500 (pure eps_fee for Mode C)', () => {
-    expect(extractEpsFeePaisa(scenarioWithSubtotal(100000n), { TotalAmount: '1025.00' })).toBe(
-      2500n,
-    )
+
+  it('Mode B both-absorbed: TotalAmount=1000.00 StoreAmount=982.53 → 1747 paisa (no Mode-B blind spot — StoreAmount publishes the cut)', () => {
+    expect(extractEpsFeePaisa({ TotalAmount: '1000.00', StoreAmount: '982.53' })).toBe(1747n)
   })
-  it('Mode C §14.2 narrative "1025.06" - subtotal 100000 = 2506 (the divergent case)', () => {
-    expect(extractEpsFeePaisa(scenarioWithSubtotal(100000n), { TotalAmount: '1025.06' })).toBe(
-      2506n,
-    )
+
+  it('Mode C narrative AB,PT: TotalAmount=1025.06 StoreAmount=1000.00 → 2506 paisa (the §14.2 25.06 case)', () => {
+    expect(extractEpsFeePaisa({ TotalAmount: '1025.06', StoreAmount: '1000.00' })).toBe(2506n)
   })
-  it('Mode B buyer total "1000.00" - subtotal 100000 = 0 (blind spot — both fees absorbed)', () => {
-    expect(extractEpsFeePaisa(scenarioWithSubtotal(100000n), { TotalAmount: '1000.00' })).toBe(0n)
+
+  it('Mode C calculator AB,PT: TotalAmount=1025.00 StoreAmount=1000.00 → 2500 paisa (the calculator-prediction case)', () => {
+    expect(extractEpsFeePaisa({ TotalAmount: '1025.00', StoreAmount: '1000.00' })).toBe(2500n)
   })
-  it('Mode D buyer total "1002.50" - subtotal 100000 = 250 (platform_fee only; eps blind spot)', () => {
-    expect(extractEpsFeePaisa(scenarioWithSubtotal(100000n), { TotalAmount: '1002.50' })).toBe(250n)
+
+  it('Mode D PT,AB: TotalAmount=1002.50 StoreAmount=975.06 → 2744 paisa (no Mode-D blind spot — StoreAmount publishes the cut)', () => {
+    expect(extractEpsFeePaisa({ TotalAmount: '1002.50', StoreAmount: '975.06' })).toBe(2744n)
   })
+
   it('throws when Verify raw is not an object', () => {
-    expect(() => extractEpsFeePaisa(scenarioWithSubtotal(100000n), null)).toThrow(/not an object/)
-    expect(() => extractEpsFeePaisa(scenarioWithSubtotal(100000n), 'string')).toThrow(
-      /not an object/,
+    expect(() => extractEpsFeePaisa(null)).toThrow(/not an object/)
+    expect(() => extractEpsFeePaisa('string')).toThrow(/not an object/)
+  })
+
+  it('throws when TotalAmount is missing (drift diagnostic surfaces keys seen)', () => {
+    expect(() => extractEpsFeePaisa({ Status: 'Success', StoreAmount: '1010.09' })).toThrow(
+      /missing string TotalAmount/,
     )
   })
-  it('throws when TotalAmount is missing (lists keys seen so the V5/V4 drift surfaces in the message)', () => {
-    expect(() =>
-      extractEpsFeePaisa(scenarioWithSubtotal(100000n), { Status: 'Success', Other: 'x' }),
-    ).toThrow(/missing string TotalAmount/)
+
+  it('throws when StoreAmount is missing (V4/V5 drift defence)', () => {
+    expect(() => extractEpsFeePaisa({ TotalAmount: '1027.56', Status: 'Success' })).toThrow(
+      /missing string StoreAmount/,
+    )
   })
+
   it('throws when TotalAmount is a number (V4 spec says string; defend against drift)', () => {
-    expect(() =>
-      extractEpsFeePaisa(scenarioWithSubtotal(100000n), { TotalAmount: 1027.56 }),
-    ).toThrow(/missing string TotalAmount/)
+    expect(() => extractEpsFeePaisa({ TotalAmount: 1027.56, StoreAmount: '1010.09' })).toThrow(
+      /missing string TotalAmount/,
+    )
+  })
+
+  it('throws when StoreAmount is a number (V4 spec says string; defend against drift)', () => {
+    expect(() => extractEpsFeePaisa({ TotalAmount: '1027.56', StoreAmount: 1010.09 })).toThrow(
+      /missing string StoreAmount/,
+    )
   })
 })
 
@@ -173,19 +188,20 @@ describe('makeLiveSandboxObservationProvider — sandbox-only isolation', () => 
     expect(nock.pendingMocks()).toEqual([])
   })
 
-  it('drives GetToken + V4-shaped Init + V4 GET Verify against the SANDBOX host', async () => {
+  it('drives GetToken + V4-shaped Init + V4 GET Verify against the SANDBOX host (StoreAmount derivation)', async () => {
     // V4 sandbox wire shape:
     //  - GetToken: POST /v1/Auth/GetToken
     //  - Init:     POST /v1/EPSEngine/InitializeEPS, success requires
     //              BOTH TransactionId AND RedirectURL non-null
     //  - Verify:   GET  /v1/EPSEngine/CheckMerchantTransactionStatus
-    //              ?merchantTransactionId=<mtid>; returns TotalAmount as BDT
-    //              decimal string. extractEpsFeePaisa(scenario, raw) derives
-    //              observed = parseBdtDecimalToPaisa(TotalAmount) - subtotal.
-    // Scenario A: subtotal 100000, buyerTotal 102756 → TotalAmount "1027.56"
-    //             → derived = 102756 - 100000 = 2756n (= platform_fee + eps_fee
-    //             per Mode A buyer-pays-both-pass-through composition; see
-    //             extractEpsFeePaisa docstring for per-mode interpretation).
+    //              ?merchantTransactionId=<mtid>; returns TotalAmount AND
+    //              StoreAmount as BDT decimal strings. extractEpsFeePaisa(raw)
+    //              derives pure eps_fee = (TotalAmount − StoreAmount),
+    //              mode-agnostic.
+    // Scenario A: TotalAmount "1027.56" / StoreAmount "1010.09" — the empirical
+    //             bKash sandbox observation. Derived = 1027.56 − 1010.09 =
+    //             17.47 BDT = 1747 paisa (= the MFS rate of ~1.747% on face,
+    //             NOT the calculator-modelled 2.5% card rate).
     const getToken = nock(SANDBOX_BASE)
       .post('/v1/Auth/GetToken')
       .reply(200, { Token: 'sandbox-jwt' })
@@ -203,16 +219,18 @@ describe('makeLiveSandboxObservationProvider — sandbox-only isolation', () => 
         MerchantTransactionId: 'TXN-TRUTH-A-XXX',
         Status: 'Success',
         TotalAmount: '1027.56',
-        ErrorCode: '',
-        ErrorMessage: '',
+        StoreAmount: '1010.09',
+        FinancialEntity: 'BKash',
+        ErrorCode: null,
+        ErrorMessage: null,
       })
 
     const provider = makeLiveSandboxObservationProvider(stubFetcher)
     const scenarioA = TRUTH_GATE_SCENARIOS[0]! // (PT,PT), buyerTotal=102756 paisa
     const obs = await provider(scenarioA)
 
-    // Mode A buyer-total derivation: parseBdt("1027.56") - subtotal(100000) = 2756.
-    expect(obs.observedEpsFeePaisa).toBe(2756n)
+    // Pure eps_fee derivation: parseBdt("1027.56") − parseBdt("1010.09") = 1747.
+    expect(obs.observedEpsFeePaisa).toBe(1747n)
     getToken.done()
     init.done()
     verify.done()
