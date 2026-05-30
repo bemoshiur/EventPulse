@@ -67,6 +67,7 @@ import axios, { type AxiosInstance } from 'axios'
 import { z } from 'zod'
 
 import { BASE_URLS, type EpsCallDeps, type EpsConfig } from './core.js'
+import { V4_SANDBOX_PROTOCOL } from './eps-wire-protocol.js'
 import { SandboxPricedCallToken } from './sandbox-priced-call-token.js'
 import { inMemoryTokenCache } from './token-cache.js'
 
@@ -223,6 +224,11 @@ export async function loadSandboxEpsConfig(
     // from outside this module). The wrapper functions read config.paths.* so
     // the URL prefix is a config-level concern, not a per-call conditional.
     paths: V4_SANDBOX_PATHS,
+    // Same isolation: V4 sandbox wire protocol attached here, never produced
+    // by the env path. Together with `paths` this means the harness reaches
+    // sandbox with V4 request shape + V4 schemas, while running services
+    // reach production with V5 — no shared mutable wire-shape state.
+    wireProtocol: V4_SANDBOX_PROTOCOL,
   })
 
   return Object.freeze({

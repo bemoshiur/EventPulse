@@ -25,8 +25,7 @@
  * second 401 → `EpsResponseError` w/ httpStatus=401.
  */
 
-import { type AxiosError } from 'axios'
-import { z } from 'zod'
+import { type AxiosError, type AxiosResponse } from 'axios'
 
 import { logger } from '../../lib/logger.js'
 import { _accessTokenCacheKey, defaultEpsCallDeps, type EpsCallDeps } from './core.js'
@@ -34,7 +33,7 @@ import { EpsNetworkError, EpsResponseError } from './eps-http-errors.js'
 import { describeResponseShape } from './eps-wire-diagnostic.js'
 import { fetchAccessTokenFromEps } from './get-token.js'
 import { signEpsField } from './hash.js'
-import { normaliseStatus, type EpsStatus } from './normalise-status.js'
+import { type EpsStatus } from './normalise-status.js'
 
 export interface VerifyOrderInput {
   merchantTransactionId: string
@@ -52,14 +51,6 @@ export interface VerifyOrderResult {
  * always know it whereas EPSTransactionId is EPS-side-only).
  */
 const MERCHANT_TXN_ID_MIN_LENGTH = 10
-
-/**
- * Verify response is permissive — the normalise-status shim handles
- * field-location + alias variation; we just need to validate the
- * response is an object. `passthrough()` keeps all fields available
- * for downstream audit.
- */
-const VerifyResponseSchema = z.object({}).passthrough()
 
 function pickStringField(data: unknown, field: string): string | null {
   if (data == null || typeof data !== 'object') return null
@@ -105,20 +96,28 @@ async function performVerifyWithRetry(
   const requestId = `eps-verify-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const xHash = signEpsField(input.merchantTransactionId, config.hashKey)
 
-  const body = {
+  // Dispatch through the per-config wire protocol. V5 production = POST with
+  // body; V4 sandbox = GET with merchantTransactionId as a query param. Same
+  // retry semantics regardless of method.
+  const verifyReq = config.wireProtocol.buildVerifyRequest({
     merchantId: config.merchantId,
     storeId: config.storeId,
     merchantTransactionId: input.merchantTransactionId,
-  }
+    token,
+    xHash,
+    path: config.paths.verify,
+  })
 
   const startMs = Date.now()
-  let response
+  let response: AxiosResponse
   try {
-    response = await client.post(config.paths.verify, body, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'x-hash': xHash,
-      },
+    response = await client.request({
+      method: verifyReq.method,
+      url: verifyReq.path,
+      headers: verifyReq.headers,
+      ...(verifyReq.method === 'GET'
+        ? { params: verifyReq.queryParams }
+        : { data: verifyReq.body }),
     })
   } catch (err) {
     const durationMs = Date.now() - startMs
@@ -185,10 +184,9 @@ async function performVerifyWithRetry(
     'eps.verify.ok',
   )
 
-  const parseResult = VerifyResponseSchema.safeParse(response.data)
-  if (!parseResult.success) {
-    // [truth-gate-verify] See `./eps-wire-diagnostic.ts` for why this fires
-    // alongside the throw.
+  const parsed = config.wireProtocol.parseVerifyResponse(response.data)
+  if (parsed.kind === 'schema-fail') {
+    // [truth-gate-verify] Wire-shape diagnostic — see eps-wire-diagnostic.ts.
     logger.warn(
       {
         eps: {
@@ -196,7 +194,8 @@ async function performVerifyWithRetry(
           requestId,
           mode: config.mode,
           httpStatus: response.status,
-          schemaIssues: parseResult.error.issues,
+          wireProtocol: config.wireProtocol.name,
+          schemaIssues: parsed.issues,
           responseShape: describeResponseShape(response.data),
         },
       },
@@ -207,6 +206,5 @@ async function performVerifyWithRetry(
       { httpStatus: response.status, requestId },
     )
   }
-  const status = normaliseStatus(parseResult.data)
-  return { status, raw: parseResult.data }
+  return { status: parsed.status, raw: parsed.raw }
 }

@@ -38,7 +38,6 @@
  */
 
 import { type AxiosError } from 'axios'
-import { z } from 'zod'
 
 import { logger } from '../../lib/logger.js'
 import {
@@ -65,6 +64,14 @@ export interface InitialiseOrderInput {
   merchantTransactionId: string
   /** Total to charge in PAISA (bigint per §1.3 R2). Wrapper formats to BDT-decimal at the wire. */
   totalPaisa: bigint
+  /**
+   * V4 sandbox only: a merchant-side order reference distinct from
+   * `merchantTransactionId`. Required by `/v1/EPSEngine/InitializeEPS` per
+   * the V4 guide (the "OrderId missing" 400-in-200 envelope surfaced this
+   * at Phase 1.4c). Ignored by the V5 production wire protocol. When
+   * omitted on a sandbox call, the V4 protocol derives one from the mtid.
+   */
+  customerOrderId?: string
 }
 
 export interface InitialiseOrderResult {
@@ -79,29 +86,6 @@ export interface InitialiseOrderResult {
  * already mints IDs meeting these constraints, but defence-in-depth.
  */
 const MERCHANT_TXN_ID_MIN_LENGTH = 10
-
-/**
- * EPS InitializeEPS response shape — defensively typed + passthrough.
- * `RedirectURL` is the only field we consume; aliases captured
- * defensively in case EPS varies casing.
- *
- * [truth-gate-verify] EPS field name may be `RedirectURL` (per SDK
- * source) or `redirectUrl`. Both accepted; pick-fn collapses.
- */
-const InitializeEPSResponseSchema = z
-  .object({
-    RedirectURL: z.string().min(1).optional(),
-    redirectUrl: z.string().min(1).optional(),
-    Code: z.string().optional(),
-    Message: z.string().optional(),
-  })
-  .passthrough()
-
-type InitializeEPSResponse = z.infer<typeof InitializeEPSResponseSchema>
-
-function pickRedirectUrl(body: InitializeEPSResponse): string | null {
-  return body.RedirectURL ?? body.redirectUrl ?? null
-}
 
 /**
  * Format a bigint paisa into the BDT-decimal string EPS expects:
@@ -245,16 +229,19 @@ async function performInitWithRetry(
   const requestId = `eps-init-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const xHash = signEpsField(input.merchantTransactionId, config.hashKey)
 
-  const body = {
+  // Dispatch through the per-config wire protocol — V5 production keeps the
+  // §11.4 shape; V4 sandbox produces the PascalCase TransactionTypeId +
+  // CustomerOrderId + 9 customer-field shape required by V4 InitializeEPS.
+  const body = config.wireProtocol.buildInitBody({
     merchantId: config.merchantId,
     storeId: config.storeId,
     merchantTransactionId: input.merchantTransactionId,
-    totalAmount: formatPaisaForEpsWire(input.totalPaisa),
-    transactionTypeId: 1, // 1=Web per §11.4
+    totalAmountBdt: formatPaisaForEpsWire(input.totalPaisa),
     successUrl: redirects.successUrl,
     failUrl: redirects.failUrl,
     cancelUrl: redirects.cancelUrl,
-  }
+    customerOrderId: input.customerOrderId,
+  })
 
   const startMs = Date.now()
   let response
@@ -323,11 +310,9 @@ async function performInitWithRetry(
     'eps.init.ok',
   )
 
-  const parseResult = InitializeEPSResponseSchema.safeParse(response.data)
-  if (!parseResult.success) {
-    // [truth-gate-verify] See `./eps-wire-diagnostic.ts` for why this fires
-    // alongside the throw: empirical body shape + zod issues so the next
-    // iteration pins the schema rather than guesses.
+  const parsed = config.wireProtocol.parseInitResponse(response.data)
+  if (parsed.kind === 'schema-fail') {
+    // [truth-gate-verify] Wire-shape diagnostic — see eps-wire-diagnostic.ts.
     logger.warn(
       {
         eps: {
@@ -335,7 +320,8 @@ async function performInitWithRetry(
           requestId,
           mode: config.mode,
           httpStatus: response.status,
-          schemaIssues: parseResult.error.issues,
+          wireProtocol: config.wireProtocol.name,
+          schemaIssues: parsed.issues,
           responseShape: describeResponseShape(response.data),
         },
       },
@@ -346,12 +332,10 @@ async function performInitWithRetry(
       requestId,
     })
   }
-  const redirectUrl = pickRedirectUrl(parseResult.data)
-  if (!redirectUrl) {
-    // [truth-gate-verify] Schema accepted the body but no recognised redirect
-    // URL field appeared. Log the structured shape so the alias list can be
-    // extended empirically (V4 may use a field name our `pickRedirectUrl`
-    // doesn't yet alias).
+  if (parsed.kind === 'eps-error') {
+    // EPS accepted the request structure but refused: e.g. V4 "OrderId missing"
+    // returns 200 + ErrorCode=400 + RedirectURL=null. Logged + thrown as a
+    // typed EpsResponseError carrying the EPS code + message.
     logger.warn(
       {
         eps: {
@@ -359,17 +343,23 @@ async function performInitWithRetry(
           requestId,
           mode: config.mode,
           httpStatus: response.status,
-          responseShape: describeResponseShape(parseResult.data),
+          wireProtocol: config.wireProtocol.name,
+          epsErrorCode: parsed.errorCode,
+          epsErrorMessage: parsed.errorMessage,
         },
       },
-      'eps.init.missing_redirect_url',
+      'eps.init.eps_error',
     )
-    throw new EpsResponseError('EPS InitializeEPS response missing RedirectURL', {
-      httpStatus: response.status,
-      epsCode: parseResult.data.Code ?? null,
-      epsMessage: parseResult.data.Message ?? null,
-      requestId,
-    })
+    throw new EpsResponseError(
+      `EPS InitializeEPS returned error${parsed.errorMessage ? `: ${parsed.errorMessage}` : ''}`,
+      {
+        httpStatus: response.status,
+        epsCode: parsed.errorCode == null ? null : String(parsed.errorCode),
+        epsMessage: parsed.errorMessage,
+        requestId,
+      },
+    )
   }
-  return { redirectUrl, raw: parseResult.data }
+  // parsed.kind === 'success'
+  return { redirectUrl: parsed.redirectUrl, raw: parsed.raw }
 }

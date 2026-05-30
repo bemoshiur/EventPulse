@@ -202,9 +202,16 @@ describe('initialiseOrderHttp — truth-gate sandbox block bypass (harness-scope
     // Sandbox deps use V4 paths (per V4_SANDBOX_PATHS in sandbox-config.ts) —
     // /v1/Auth/GetToken + /v1/EPSEngine/InitializeEPS, NOT the V5 prod prefix.
     const getToken = nock(SANDBOX_BASE).post('/v1/Auth/GetToken').reply(200, { Token: 'sb-jwt' })
-    const init = nock(SANDBOX_BASE)
-      .post('/v1/EPSEngine/InitializeEPS')
-      .reply(200, { RedirectURL: 'https://sandboxpgapi.eps.com.bd/checkout/abc' })
+    // V4 success envelope requires BOTH TransactionId AND RedirectURL non-null
+    // (per V4_SANDBOX_PROTOCOL.parseInitResponse). Without TransactionId, the
+    // protocol would classify this as an eps-error.
+    const init = nock(SANDBOX_BASE).post('/v1/EPSEngine/InitializeEPS').reply(200, {
+      TransactionId: '00000000-0000-0000-0000-000000000abc',
+      RedirectURL: 'https://sandboxpgapi.eps.com.bd/checkout/abc',
+      ErrorMessage: '',
+      ErrorCode: null,
+      FinancialEntityList: null,
+    })
 
     const result = await initialiseOrderHttp(
       { merchantTransactionId: 'TXN-TG-A-12345', totalPaisa: 100_000n },
