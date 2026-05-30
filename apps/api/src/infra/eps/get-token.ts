@@ -35,6 +35,7 @@ import { z } from 'zod'
 import { logger } from '../../lib/logger.js'
 import { cfg, type EpsCallDeps, http } from './core.js'
 import { EpsNetworkError, EpsResponseError } from './eps-http-errors.js'
+import { describeResponseShape } from './eps-wire-diagnostic.js'
 import { signEpsField } from './hash.js'
 
 /**
@@ -189,6 +190,24 @@ export async function fetchAccessTokenFromEps(
 
   const parseResult = GetTokenResponseSchema.safeParse(response.data)
   if (!parseResult.success) {
+    // [truth-gate-verify] Wire-shape diagnostic: structured-log the actual
+    // body shape + zod issues so an empirical follow-up can pin the schema
+    // rather than guess. Safe in prod (EPS responses carry no buyer PII;
+    // body capped at 1000 chars). Steady-state cost: zero — this branch is
+    // unreachable in normal operation.
+    logger.warn(
+      {
+        eps: {
+          endpoint: 'GetToken',
+          requestId,
+          mode: config.mode,
+          httpStatus: response.status,
+          schemaIssues: parseResult.error.issues,
+          responseShape: describeResponseShape(response.data),
+        },
+      },
+      'eps.get_token.schema_validation_failed',
+    )
     throw new EpsResponseError('EPS GetToken response failed schema validation', {
       httpStatus: response.status,
       requestId,
