@@ -142,17 +142,19 @@ describe('makeLiveSandboxObservationProvider — sandbox-only isolation', () => 
     expect(nock.pendingMocks()).toEqual([])
   })
 
-  it('drives GetToken + Init + Verify against the SANDBOX host only', async () => {
-    // Register interceptors on the SANDBOX base. NOTHING on prod — if the
-    // provider hit prod, disableNetConnect would throw.
+  it('drives GetToken + Init + Verify against the SANDBOX host using V4 paths only', async () => {
+    // Register interceptors on the SANDBOX base + V4 paths (per V4_SANDBOX_PATHS
+    // in sandbox-config.ts: /v1/Auth/ + /v1/EPSEngine/). NOTHING on prod, and
+    // nothing on the V5 paths — if the provider hit prod OR used V5 paths,
+    // disableNetConnect would throw.
     const getToken = nock(SANDBOX_BASE)
-      .post('/api/v1/GetToken')
+      .post('/v1/Auth/GetToken')
       .reply(200, { Token: 'sandbox-jwt' })
     const init = nock(SANDBOX_BASE)
-      .post('/api/v1/InitializeEPS')
+      .post('/v1/EPSEngine/InitializeEPS')
       .reply(200, { RedirectURL: 'https://sandboxpgapi.eps.com.bd/checkout/x' })
     const verify = nock(SANDBOX_BASE)
-      .post('/api/v1/CheckMerchantTransactionStatus')
+      .post('/v1/EPSEngine/CheckMerchantTransactionStatus')
       .reply(200, { Status: 'SUCCESS', epsFee: 2506 })
 
     const provider = makeLiveSandboxObservationProvider(stubFetcher)

@@ -92,6 +92,13 @@ describe('cfg', () => {
       password: 'p',
       hashKey: 'k',
       mode: 'production',
+      // Env path always carries the V5 production paths (per core.ts cfg()) —
+      // the V4 sandbox paths are produced only by sandbox-config.ts's loader.
+      paths: {
+        getToken: '/api/v1/GetToken',
+        initialise: '/api/v1/InitializeEPS',
+        verify: '/api/v1/CheckMerchantTransactionStatus',
+      },
     })
   })
 
