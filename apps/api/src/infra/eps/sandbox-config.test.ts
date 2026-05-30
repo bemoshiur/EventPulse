@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { BASE_URLS, defaultEpsCallDeps, defaultTokenCache, V5_PRODUCTION_PATHS } from './core.js'
+import { V4_SANDBOX_PROTOCOL, V5_PRODUCTION_PROTOCOL } from './eps-wire-protocol.js'
 import {
   createSandboxEpsCallDeps,
   DEFAULT_SANDBOX_RETURN_URLS,
@@ -234,6 +235,25 @@ describe('per-endpoint path map — V4 sandbox vs V5 production isolation', () =
     expect(setup.config.paths.getToken).toBe('/v1/Auth/GetToken')
     expect(setup.config.paths.initialise).toBe('/v1/EPSEngine/InitializeEPS')
     expect(setup.config.paths.verify).toBe('/v1/EPSEngine/CheckMerchantTransactionStatus')
+  })
+
+  it('loaded sandbox config carries V4_SANDBOX_PROTOCOL (NEVER V5 protocol)', async () => {
+    const setup = await loadSandboxEpsConfig(stubFetcher())
+    expect(setup.config.wireProtocol).toBe(V4_SANDBOX_PROTOCOL)
+    expect(setup.config.wireProtocol).not.toBe(V5_PRODUCTION_PROTOCOL)
+    expect(setup.config.wireProtocol.name).toBe('v4-sandbox')
+  })
+
+  it('default (env) deps wireProtocol is V5_PRODUCTION_PROTOCOL regardless of EPS_MODE', () => {
+    process.env['EPS_MERCHANT_ID'] = 'm'
+    process.env['EPS_STORE_ID'] = 's'
+    process.env['EPS_USERNAME'] = 'u'
+    process.env['EPS_PASSWORD'] = 'p'
+    process.env['EPS_HASH_KEY'] = 'k'
+    process.env['EPS_MODE'] = 'sandbox' // does NOT switch protocol
+    const deps = defaultEpsCallDeps()
+    expect(deps.config.wireProtocol).toBe(V5_PRODUCTION_PROTOCOL)
+    expect(deps.config.wireProtocol).not.toBe(V4_SANDBOX_PROTOCOL)
   })
 
   it('secret CANNOT inject V5 paths into the sandbox config (paths are code-only)', async () => {

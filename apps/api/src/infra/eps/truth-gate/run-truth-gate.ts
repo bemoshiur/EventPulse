@@ -32,6 +32,7 @@
 
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager'
 
+import { parseBdtDecimalToPaisa } from '../bdt-decimal.js'
 import {
   createSandboxEpsCallDeps,
   loadSandboxEpsConfig,
@@ -41,7 +42,7 @@ import {
 import { initialiseOrderHttp } from '../initialise-order.js'
 import { verifyOrderHttp } from '../verify-order.js'
 import { formatReport, runTruthGate, type EpsObservationProvider } from './harness.js'
-import { TRUTH_GATE_SCENARIOS } from './scenarios.js'
+import { TRUTH_GATE_SCENARIOS, type TruthGateScenario } from './scenarios.js'
 
 const AWS_REGION = 'ap-southeast-1'
 
@@ -80,36 +81,56 @@ export function makeSecretsManagerFetcher(
 }
 
 /**
- * Pull the EPS-charged fee (paisa) out of a Verify response.
+ * Derive the EPS-fee observation in paisa from a V4 CheckMerchantTransactionStatus
+ * response by parsing the `TotalAmount` BDT-decimal string and subtracting the
+ * §14.2 subtotal. V4 Verify does NOT return a separately broken-out EPS fee
+ * field — only the total buyer was charged. So we derive.
  *
- * [truth-gate-verify] The exact field EPS uses for the gateway fee in the
- * CheckMerchantTransactionStatus response is NOT pinned by §11 — it will be
- * confirmed against the first live sandbox response at Phase-1 execution.
- * This reads the most likely candidates (top-level + nested `data.*`) and
- * throws a clear, actionable error when none is present, rather than
- * silently returning 0 (which would fake a "match" and defeat the gate).
+ * **Per-mode interpretation of the returned value (READ THIS — it differs per mode):**
+ *   - **Mode A (PT/PT)** — buyer pays subtotal + platform + eps. The derived
+ *     value is `platform_fee + eps_fee`, NOT eps_fee alone. The harness reports
+ *     it under `observedEpsFeePaisa` per the user-specified literal formula;
+ *     the comparator must interpret this as a combined-fee observation, not as
+ *     a pure eps_fee. To recover the pure eps_fee for Mode A:
+ *     `eps_fee = (derived - predicted_platform_fee)`.
+ *   - **Mode B (AB/AB)** — buyer pays subtotal only. Both fees absorbed by
+ *     merchant. Derived value will always be 0. **EPS fee is empirically
+ *     invisible on the buyer side in Mode B** — only verifiable by deduction
+ *     from the modes where it IS visible.
+ *   - **Mode C (AB/PT)** — buyer pays subtotal + eps. Derived value EQUALS
+ *     eps_fee directly. **This is the load-bearing mode for Decision N**:
+ *     calculator predicts 2500 paisa; §14.2 narrative says 2506. The empirical
+ *     observation here resolves the question.
+ *   - **Mode D (PT/AB)** — buyer pays subtotal + platform. Derived value is
+ *     `platform_fee`, NOT eps_fee. **EPS fee is empirically invisible on the
+ *     buyer side in Mode D** (same blind spot as Mode B; user mentioned only
+ *     B but D is the same by symmetry of the absorb side).
+ *
+ * Mode B/D blind-spot mitigation: the comparator's report includes the per-mode
+ * "what this observation means" annotation so the reviewer reads the table
+ * correctly and doesn't treat blind-spot modes as legitimate matches/shifts.
  */
-export function extractEpsFeePaisa(raw: unknown): bigint {
-  const candidates = ['epsFee', 'EpsFee', 'EPSFee', 'gatewayFee', 'GatewayFee', 'fee', 'Fee']
-  const roots: unknown[] = [raw]
-  if (raw != null && typeof raw === 'object' && 'data' in raw) {
-    roots.push((raw as Record<string, unknown>)['data'])
+export function extractEpsFeePaisa(
+  scenario: { calculatorPrediction: { subtotalPaisa: bigint } },
+  raw: unknown,
+): bigint {
+  // V4 Verify success envelope (per V4_VERIFY_RESPONSE_SCHEMA): TotalAmount is
+  // a BDT-decimal string at top level. Parse strictly; never use parseFloat
+  // (IEEE-754 loses paisa on common amounts — see bdt-decimal.ts).
+  if (raw == null || typeof raw !== 'object') {
+    throw new Error(
+      `[truth-gate-verify] extractEpsFeePaisa: Verify raw is not an object (typeof=${typeof raw}); cannot read TotalAmount.`,
+    )
   }
-  for (const root of roots) {
-    if (root == null || typeof root !== 'object') continue
-    const obj = root as Record<string, unknown>
-    for (const key of candidates) {
-      const v = obj[key]
-      if (typeof v === 'bigint') return v
-      if (typeof v === 'number' && Number.isInteger(v)) return BigInt(v)
-      if (typeof v === 'string' && /^\d+$/.test(v)) return BigInt(v)
-    }
+  const obj = raw as Record<string, unknown>
+  const totalAmountBdt = obj['TotalAmount']
+  if (typeof totalAmountBdt !== 'string') {
+    throw new Error(
+      `[truth-gate-verify] extractEpsFeePaisa: V4 Verify response missing string TotalAmount field. Got: ${JSON.stringify(totalAmountBdt)}. Keys seen: ${Object.keys(obj).join(',')}`,
+    )
   }
-  throw new Error(
-    '[truth-gate-verify] extractEpsFeePaisa: no recognised EPS-fee field in Verify response. ' +
-      'Pin the actual field name against the first live sandbox response, then extend `candidates`. ' +
-      `Raw keys seen: ${raw && typeof raw === 'object' ? Object.keys(raw as object).join(',') : typeof raw}`,
-  )
+  const buyerTotalPaisa = parseBdtDecimalToPaisa(totalAmountBdt)
+  return buyerTotalPaisa - scenario.calculatorPrediction.subtotalPaisa
 }
 
 /**
@@ -149,18 +170,26 @@ export function makeLiveSandboxObservationProvider(
     depsPromise ??= buildSandboxDeps()
     const deps = await depsPromise
     const merchantTransactionId = `TXN-TRUTH-${scenario.modeId}-${Date.now()}`
+    // V4 sandbox requires a SEPARATE merchant-side order reference per the
+    // V4 guide. We derive one from the mtid to keep them deterministically
+    // related but distinct (mtid stays the EPS-side reference).
+    const customerOrderId = `ORDER-${merchantTransactionId}`
     // Init the order in sandbox (returns a RedirectURL). At execution time a
     // sandbox test-card autopay / buyer click-through completes payment
     // between init and verify; the gate is never run unattended.
     await initialiseOrderHttp(
       {
         merchantTransactionId,
+        customerOrderId,
         totalPaisa: scenario.calculatorPrediction.buyerTotalPaisa,
       },
       deps,
     )
     const result = await verifyOrderHttp({ merchantTransactionId }, deps)
-    return { observedEpsFeePaisa: extractEpsFeePaisa(result.raw), rawResponse: result.raw }
+    return {
+      observedEpsFeePaisa: extractEpsFeePaisa(scenario, result.raw),
+      rawResponse: result.raw,
+    }
   }
 }
 
@@ -187,13 +216,16 @@ async function runInitPhase(fetchSecret: SecretFetcher): Promise<void> {
   console.log('Decision N truth-gate — INIT phase (sandbox; block bypassed via token)')
   for (const s of TRUTH_GATE_SCENARIOS) {
     const mtid = `TXN-TG-${s.modeId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    // V4 sandbox requires a distinct merchant-side CustomerOrderId per the
+    // V4 guide. We derive deterministically from mtid.
+    const customerOrderId = `ORDER-${mtid}`
     const totalPaisa = s.calculatorPrediction.buyerTotalPaisa
     const { redirectUrl } = await initialiseOrderHttp(
-      { merchantTransactionId: mtid, totalPaisa },
+      { merchantTransactionId: mtid, customerOrderId, totalPaisa },
       deps,
     )
     console.log(
-      `TG_INIT mode=${s.modeId} label=${s.modeLabel} buyerTotalPaisa=${totalPaisa.toString()} mtid=${mtid} url=${redirectUrl}`,
+      `TG_INIT mode=${s.modeId} label=${s.modeLabel} buyerTotalPaisa=${totalPaisa.toString()} mtid=${mtid} customerOrderId=${customerOrderId} url=${redirectUrl}`,
     )
   }
   console.log('TG_INIT_DONE — pay each url, then run: verify mode:mtid mode:mtid ...')
@@ -228,20 +260,60 @@ async function runVerifyPhase(fetchSecret: SecretFetcher, pairs: string[]): Prom
         (s.platformFeeHandling === 'pass_through' ? p.platformFeePaisa : 0n) +
         (s.epsFeeHandling === 'pass_through' ? p.epsFeePaisa : 0n) ===
       p.buyerTotalPaisa
-    let observed: string
+    // Parse observed buyer total directly from V4 Verify.TotalAmount. The
+    // per-mode interpretation is annotated below — see extractEpsFeePaisa
+    // for the long-form blind-spot doc.
+    let observedBuyerTotalPaisa: bigint | null = null
+    let derived: string
     try {
-      observed = extractEpsFeePaisa(result.raw).toString()
+      const rawObj = result.raw as Record<string, unknown> | null
+      const totalAmountBdt = rawObj?.['TotalAmount']
+      if (typeof totalAmountBdt === 'string') {
+        observedBuyerTotalPaisa = parseBdtDecimalToPaisa(totalAmountBdt)
+      }
+      derived = extractEpsFeePaisa(s, result.raw).toString()
     } catch (err) {
-      observed = `UNEXTRACTED (${err instanceof Error ? err.message : String(err)})`
+      derived = `UNEXTRACTED (${err instanceof Error ? err.message : String(err)})`
     }
+    const interpretation = interpretDerivationPerMode(s)
     console.log(`TG_VERIFY mode=${s.modeId} status=${result.status} mtid=${mtid}`)
-    console.log(`  predictedEpsPaisa=${p.epsFeePaisa.toString()} observedEpsFee=${observed}`)
     console.log(
-      `  buyerTotalPaisa=${p.buyerTotalPaisa.toString()} §14.10_invariant1=${inv ? 'PASS' : 'FAIL'}`,
+      `  predictedBuyerTotalPaisa=${p.buyerTotalPaisa.toString()} observedBuyerTotalPaisa=${
+        observedBuyerTotalPaisa?.toString() ?? '(unparseable)'
+      }`,
+    )
+    console.log(
+      `  predictedEpsPaisa=${p.epsFeePaisa.toString()} derivedFromVerify=${derived}  (${interpretation})`,
+    )
+    console.log(
+      `  §14.10_invariant1=${inv ? 'PASS' : 'FAIL'} (subtotal + pass-through fees == buyerTotal)`,
     )
     console.log(`  RAW=${JSON.stringify(result.raw)}`)
   }
   console.log('TG_VERIFY_DONE')
+}
+
+/**
+ * Per-mode interpretation of `extractEpsFeePaisa`'s return value. The
+ * derivation `TotalAmount - subtotal` means different things per the §14.2
+ * absorb/pass-through composition — vital to read the verify report correctly.
+ *
+ *  - Mode A (PT/PT): derived = platform_fee + eps_fee  (NOT pure eps_fee)
+ *  - Mode B (AB/AB): derived = 0; EPS fee invisible on buyer side (BLIND SPOT)
+ *  - Mode C (AB/PT): derived = eps_fee directly       (Decision N mode)
+ *  - Mode D (PT/AB): derived = platform_fee; EPS fee invisible (BLIND SPOT)
+ */
+function interpretDerivationPerMode(scenario: TruthGateScenario): string {
+  switch (scenario.modeId) {
+    case 'A':
+      return 'Mode A: TotalAmount-subtotal = platform_fee + eps_fee combined (NOT pure eps_fee)'
+    case 'B':
+      return 'Mode B: EPS-fee BLIND SPOT — buyer paid subtotal, both fees absorbed by merchant'
+    case 'C':
+      return 'Mode C: TotalAmount-subtotal = eps_fee directly (Decision N: 2500 vs 2506)'
+    case 'D':
+      return 'Mode D: EPS-fee BLIND SPOT — TotalAmount-subtotal = platform_fee only; eps_fee absorbed'
+  }
 }
 
 async function main(): Promise<void> {

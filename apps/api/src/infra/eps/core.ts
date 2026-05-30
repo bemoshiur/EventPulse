@@ -19,6 +19,7 @@
 
 import axios, { type AxiosInstance } from 'axios'
 
+import { V5_PRODUCTION_PROTOCOL, type EpsWireProtocol } from './eps-wire-protocol.js'
 import { type SandboxPricedCallToken } from './sandbox-priced-call-token.js'
 import { inMemoryTokenCache, type TokenCache } from './token-cache.js'
 
@@ -75,6 +76,14 @@ export interface EpsConfig {
   hashKey: string
   mode: EpsMode
   paths: EpsEndpointPaths
+  /**
+   * Per-config wire protocol — bridges the wrapper to the EPS gateway's
+   * actual request/response shapes. Production uses
+   * {@link V5_PRODUCTION_PROTOCOL}; sandbox uses `V4_SANDBOX_PROTOCOL`
+   * (defined in `eps-wire-protocol.ts`, attached by `sandbox-config.ts`).
+   * Mirrors {@link paths}'s config-with-defaults pattern.
+   */
+  wireProtocol: EpsWireProtocol
 }
 
 /**
@@ -185,6 +194,10 @@ export function cfg(): EpsConfig {
     // here, so a running service can never accidentally point at a sandbox
     // path no matter how `EPS_MODE` is set in env.
     paths: V5_PRODUCTION_PATHS,
+    // Same isolation as paths: env path always uses the V5 production wire
+    // protocol; sandbox-config.ts attaches V4_SANDBOX_PROTOCOL to its loaded
+    // config; the two objects share no reference.
+    wireProtocol: V5_PRODUCTION_PROTOCOL,
   }
 }
 

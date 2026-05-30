@@ -85,21 +85,20 @@ afterEach(() => {
 describe('cfg', () => {
   it('returns a complete config when all env present', () => {
     const c = cfg()
-    expect(c).toEqual({
-      merchantId: 'm',
-      storeId: 's',
-      username: 'u',
-      password: 'p',
-      hashKey: 'k',
-      mode: 'production',
-      // Env path always carries the V5 production paths (per core.ts cfg()) —
-      // the V4 sandbox paths are produced only by sandbox-config.ts's loader.
-      paths: {
-        getToken: '/api/v1/GetToken',
-        initialise: '/api/v1/InitializeEPS',
-        verify: '/api/v1/CheckMerchantTransactionStatus',
-      },
+    // Env path always carries V5 production paths + V5 production wire
+    // protocol; the V4 sandbox shape is produced only by sandbox-config.ts.
+    expect(c.merchantId).toBe('m')
+    expect(c.storeId).toBe('s')
+    expect(c.username).toBe('u')
+    expect(c.password).toBe('p')
+    expect(c.hashKey).toBe('k')
+    expect(c.mode).toBe('production')
+    expect(c.paths).toEqual({
+      getToken: '/api/v1/GetToken',
+      initialise: '/api/v1/InitializeEPS',
+      verify: '/api/v1/CheckMerchantTransactionStatus',
     })
+    expect(c.wireProtocol.name).toBe('v5-production')
   })
 
   it('defaults mode to production when EPS_MODE unset', () => {

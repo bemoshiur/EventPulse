@@ -108,15 +108,46 @@ describe('architectural guard — no running-service path can reach the harness/
   })
 })
 
-describe('extractEpsFeePaisa', () => {
-  it('reads a top-level integer fee field', () => {
-    expect(extractEpsFeePaisa({ epsFee: 2506 })).toBe(2506n)
+describe('extractEpsFeePaisa — derives observation from V4 Verify TotalAmount', () => {
+  const scenarioWithSubtotal = (subtotalPaisa: bigint) =>
+    ({ calculatorPrediction: { subtotalPaisa } }) as Parameters<typeof extractEpsFeePaisa>[0]
+
+  it('Mode A buyer total "1027.56" - subtotal 100000 = 2756 (platform+eps combined per Mode A docstring)', () => {
+    expect(extractEpsFeePaisa(scenarioWithSubtotal(100000n), { TotalAmount: '1027.56' })).toBe(
+      2756n,
+    )
   })
-  it('reads a nested data.* fee field', () => {
-    expect(extractEpsFeePaisa({ data: { GatewayFee: '2500' } })).toBe(2500n)
+  it('Mode C calculator prediction "1025.00" - subtotal 100000 = 2500 (pure eps_fee for Mode C)', () => {
+    expect(extractEpsFeePaisa(scenarioWithSubtotal(100000n), { TotalAmount: '1025.00' })).toBe(
+      2500n,
+    )
   })
-  it('throws (never returns 0) when no fee field present', () => {
-    expect(() => extractEpsFeePaisa({ Status: 'SUCCESS' })).toThrow(/no recognised EPS-fee field/)
+  it('Mode C §14.2 narrative "1025.06" - subtotal 100000 = 2506 (the divergent case)', () => {
+    expect(extractEpsFeePaisa(scenarioWithSubtotal(100000n), { TotalAmount: '1025.06' })).toBe(
+      2506n,
+    )
+  })
+  it('Mode B buyer total "1000.00" - subtotal 100000 = 0 (blind spot — both fees absorbed)', () => {
+    expect(extractEpsFeePaisa(scenarioWithSubtotal(100000n), { TotalAmount: '1000.00' })).toBe(0n)
+  })
+  it('Mode D buyer total "1002.50" - subtotal 100000 = 250 (platform_fee only; eps blind spot)', () => {
+    expect(extractEpsFeePaisa(scenarioWithSubtotal(100000n), { TotalAmount: '1002.50' })).toBe(250n)
+  })
+  it('throws when Verify raw is not an object', () => {
+    expect(() => extractEpsFeePaisa(scenarioWithSubtotal(100000n), null)).toThrow(/not an object/)
+    expect(() => extractEpsFeePaisa(scenarioWithSubtotal(100000n), 'string')).toThrow(
+      /not an object/,
+    )
+  })
+  it('throws when TotalAmount is missing (lists keys seen so the V5/V4 drift surfaces in the message)', () => {
+    expect(() =>
+      extractEpsFeePaisa(scenarioWithSubtotal(100000n), { Status: 'Success', Other: 'x' }),
+    ).toThrow(/missing string TotalAmount/)
+  })
+  it('throws when TotalAmount is a number (V4 spec says string; defend against drift)', () => {
+    expect(() =>
+      extractEpsFeePaisa(scenarioWithSubtotal(100000n), { TotalAmount: 1027.56 }),
+    ).toThrow(/missing string TotalAmount/)
   })
 })
 
@@ -142,30 +173,49 @@ describe('makeLiveSandboxObservationProvider — sandbox-only isolation', () => 
     expect(nock.pendingMocks()).toEqual([])
   })
 
-  it('drives GetToken + Init + Verify against the SANDBOX host using V4 paths only', async () => {
-    // Register interceptors on the SANDBOX base + V4 paths (per V4_SANDBOX_PATHS
-    // in sandbox-config.ts: /v1/Auth/ + /v1/EPSEngine/). NOTHING on prod, and
-    // nothing on the V5 paths — if the provider hit prod OR used V5 paths,
-    // disableNetConnect would throw.
+  it('drives GetToken + V4-shaped Init + V4 GET Verify against the SANDBOX host', async () => {
+    // V4 sandbox wire shape:
+    //  - GetToken: POST /v1/Auth/GetToken
+    //  - Init:     POST /v1/EPSEngine/InitializeEPS, success requires
+    //              BOTH TransactionId AND RedirectURL non-null
+    //  - Verify:   GET  /v1/EPSEngine/CheckMerchantTransactionStatus
+    //              ?merchantTransactionId=<mtid>; returns TotalAmount as BDT
+    //              decimal string. extractEpsFeePaisa(scenario, raw) derives
+    //              observed = parseBdtDecimalToPaisa(TotalAmount) - subtotal.
+    // Scenario A: subtotal 100000, buyerTotal 102756 → TotalAmount "1027.56"
+    //             → derived = 102756 - 100000 = 2756n (= platform_fee + eps_fee
+    //             per Mode A buyer-pays-both-pass-through composition; see
+    //             extractEpsFeePaisa docstring for per-mode interpretation).
     const getToken = nock(SANDBOX_BASE)
       .post('/v1/Auth/GetToken')
       .reply(200, { Token: 'sandbox-jwt' })
-    const init = nock(SANDBOX_BASE)
-      .post('/v1/EPSEngine/InitializeEPS')
-      .reply(200, { RedirectURL: 'https://sandboxpgapi.eps.com.bd/checkout/x' })
+    const init = nock(SANDBOX_BASE).post('/v1/EPSEngine/InitializeEPS').reply(200, {
+      TransactionId: '00000000-0000-0000-0000-00000000000a',
+      RedirectURL: 'https://sandboxpgapi.eps.com.bd/checkout/x',
+      ErrorMessage: '',
+      ErrorCode: null,
+      FinancialEntityList: null,
+    })
     const verify = nock(SANDBOX_BASE)
-      .post('/v1/EPSEngine/CheckMerchantTransactionStatus')
-      .reply(200, { Status: 'SUCCESS', epsFee: 2506 })
+      .get('/v1/EPSEngine/CheckMerchantTransactionStatus')
+      .query({ merchantTransactionId: /^TXN-TRUTH-A-/ })
+      .reply(200, {
+        MerchantTransactionId: 'TXN-TRUTH-A-XXX',
+        Status: 'Success',
+        TotalAmount: '1027.56',
+        ErrorCode: '',
+        ErrorMessage: '',
+      })
 
     const provider = makeLiveSandboxObservationProvider(stubFetcher)
-    const scenarioA = TRUTH_GATE_SCENARIOS[0]! // (PT,PT), buyerTotal > 0
+    const scenarioA = TRUTH_GATE_SCENARIOS[0]! // (PT,PT), buyerTotal=102756 paisa
     const obs = await provider(scenarioA)
 
-    expect(obs.observedEpsFeePaisa).toBe(2506n)
+    // Mode A buyer-total derivation: parseBdt("1027.56") - subtotal(100000) = 2756.
+    expect(obs.observedEpsFeePaisa).toBe(2756n)
     getToken.done()
     init.done()
     verify.done()
-    // Belt-and-braces: no leftover interceptors anywhere.
     expect(nock.pendingMocks()).toEqual([])
   })
 })
