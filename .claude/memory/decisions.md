@@ -4,6 +4,64 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-30 · Phase 1.4 EPS sandbox truth-gate — RUN COMPLETE; pure eps_fee observed per mode; fee-model structural decision PENDING
+
+**Resolves (partially):** the Decision N truth-gate execution carried since Day 24-25 (`decisions.md` 2026-05-19 "Decision N — Fee calculator EPS-base rule locked + mandatory Day 24-25 EPS sandbox truth gate"). Resolution is **partial** — the empirical data is captured; the structural fee-model decision the data demands is deliberately deferred to next session per operator direction.
+
+### Context
+
+PRs #218 + #219 shipped today land the in-house EPS wrapper's V4 sandbox wire-protocol and a `StoreAmount`-based derivation of pure eps_fee. The 4 §14.2 scenario sandbox payments (mtids `TXN-TG-{A,B,C,D}-1780147…`) were paid via MFS test-card (bKash on A/B/C, Nagad on D) and verified end-to-end through the production-shape adapter pipeline.
+
+### Empirical findings — Phase 1.4 Predicted-vs-Actual Table
+
+All amounts paisa unless decimal. `RAW` envelopes archived in SSM command-invocation `ffcfacd0-581b-4db5-b17e-d4345c72273a` (also reproduced in handoff.md).
+
+| Mode | EPS Status | FinancialEntity | Predicted buyer total | Observed TotalAmount | Observed StoreAmount | **Observed eps_fee** | Predicted eps_fee | Δ eps_fee | EPS rate on Total | §14.10 Inv-1 |
+|:-:|:-:|:-:|--:|--:|--:|--:|--:|--:|:-:|:-:|
+| **A** (PT,PT) | Success ✅ | bKash | 102 756 | 102 756 | 101 009 | **1 747** | 2 506 | **−759** | 1.6997% | PASS |
+| **B** (AB,AB) | Success ✅ | bKash | 100 000 | 100 000 |  98 300 | **1 700** | 2 500 | **−800** | 1.7000% | PASS |
+| **C** (AB,PT) | **Fail** ⚠️ | bKash | 102 500 | 102 500 | 100 757 | **1 743** | 2 500 | **−757** | 1.7005% | PASS |
+| **D** (PT,AB) | **Fail** ⚠️ | Nagad | 100 250 | 100 250 |  98 546 | **1 704** | 2 506 | **−802** | 1.7000% | PASS |
+
+### Decision
+
+1. **§14.10 Invariant-1 PASSED across all 4 modes.** The calculator's internal decomposition is sound (subtotal + pass-through-fees == buyerTotal). The mismatch is **not internal arithmetic** — it's that `epsFeeBps` does not match empirical reality.
+2. **EPS charges ≈1.7000% of `TotalAmount`, rounded to integer paisa, consistently across both MFS methods tested (bKash + Nagad).** Calculator currently models 2.5% (card-rate). The calculator over-predicts EPS's cut by ~800 paisa per BDT 1 000 face-value transaction at the observed MFS rate.
+3. **Mode C "AB,PT" sent buyerTotal=102 500 (calculator); EPS captured exactly 102 500.** The §14.2 narrative's 1025.06 was arithmetically inconsistent with the calculator's `floor((subtotal+platform_pt) × eps_bps / 10000)` rule and is **not what EPS actually charges**. The Decision-N "2500 vs 2506" question is resolved as a **documentation drift** — there's no behavioural question at the calculator level. The 2506 narrative in §14.2 Mode C primary will be amended on the next playbook revision; calculator rule stays.
+4. **EPS V5 production wire shape matches V4 sandbox almost identically** per the EPS V5 production integration guide received today (Moshiur, message uploaded). The four "V4-vs-V5 divergences" feared during the wire-protocol abstraction (PR #218) are **not divergent in production**; the per-config `EpsWireProtocol` pattern is still useful for sandbox vs production schema variance but the production protocol body shape is essentially V4. Three small additive differences to handle in the V5 production schema (small follow-up PR):
+   - `EpsTransactionId` (string, optional) — V5 publishes this where V4 does not, alternative hash/query param target.
+   - `PaymentReferance` (NOTE THE TYPO — EPS uses "Referance" not "Reference"; match character-for-character) — string, optional.
+   - `StoreAmount` — **unresolved whether V5 production publishes this.** Doc example doesn't show it; doc example is minimal (also missing the documented `EpsTransactionId`). Make `StoreAmount` optional in BOTH sandbox and production response schemas. If present → derive eps_fee from (TotalAmount − StoreAmount); if absent → fall back to (TotalAmount − subtotal) with a clear log line at runtime indicating which derivation is active. Production smoke (BDT 100, post-cutover) will empirically confirm V5 StoreAmount presence.
+
+### Structural fee-model decision — DEFERRED to next session
+
+Per operator direction (verbatim): "The data is now informational — I need to decide whether the fee model becomes payment-method-aware (per-method rates), stays single-rate with platform absorbing variance, or restricts launch to one method. That's a deliberate decision for the next session, not auto-derivable from the table."
+
+**Pending options on the table** (none chosen, none preferred from the build side):
+
+- **Option 1** — payment-method-aware fee model (look up `epsFeeBps` per `FinancialEntity` at order-creation time). Requires catalogue of per-method rates, kept fresh as EPS publishes changes; schema change for `tenant_fee_config` or `events`; calculator API change.
+- **Option 2** — single-rate calculator with platform absorbing variance (pick a conservative rate, swallow over/under). Existing calculator stays; sets the rate prudently (above observed MFS, below observed card) and accepts that organisers may net slightly more in MFS-heavy events than predicted, slightly less in card-heavy. Predictable but accumulates rounding errors.
+- **Option 3** — restrict launch to one payment method until per-method rates are catalogued. Lowest engineering complexity; commercially restrictive.
+- **Option 4** — best-effort estimate + reconcile-at-settlement (calculator outputs an *estimate*; the disbursement engine reconciles to actual `StoreAmount` from the EPS settlement report; organiser-facing dashboards show estimate-and-actual side-by-side). Largest behavioural change; closest to a long-term-correct solution.
+
+### Consequences
+
+- **Calculator stays unchanged this session.** No `apps/api/src/domain/payments/fee-calculator.ts` edit. No §14.2 amendment in the playbook today. The HARD STOP held; the data is in memory for the next-session decision.
+- **The Decision-N narrative simplifies.** "Did the calculator pick the right Mode-C arithmetic" is no longer the load-bearing question. "Does the calculator track EPS's payment-method-dependent rates" is the actual question, and only Option-1 / Option-4 attempt to answer it; Options 2 + 3 are deliberate-mismatch acceptance.
+- **The sandbox truth-gate work is essentially complete on the sandbox side.** Phase 1.5's "predicted-vs-actual reconciliation" is this entry's table. Phase 1.6 (memory commit) is this entry. The remaining truth-gate work is (a) the V5-tolerant additive-field follow-up PR before any production smoke; (b) the small production smoke itself (BDT 100, one transaction, verifies StoreAmount presence in V5 + that the wire-protocol abstraction works in production); (c) executing the fee-model structural decision when the next session lands.
+- **Modes C + D returned EPS `Status: "Fail"`** despite the buyer flow completing per operator. EPS sandbox populated TotalAmount + StoreAmount on the failed responses anyway, so the fee-rate observation holds, but C + D are NOT clean-success transactions. Not a blocker; flagged in handoff for next-session diagnosis if the structural decision wants more datapoints.
+- **`STAGING_PAYMENT_BLOCK=1` remains enforcing.** Removing requires its own `decisions.md` entry per §11.0 and is gated on completing the V5-tolerant follow-up PR + the structural fee-model decision.
+
+### Cross-references
+
+- `decisions.md` "Decision N — Fee calculator EPS-base rule locked + mandatory Day 24-25 EPS sandbox truth gate" (2026-05-19) — the original Decision-N spec this entry empirically answers (partially).
+- `decisions.md` "EPS library choice locked for Sprint 3 — in-house wrapper" (2026-05-19) — the wrapper that emits the V4 body shape verified today.
+- PR #218 — V4 sandbox wire-protocol pluggable abstraction (merged `2882d9c`).
+- PR #219 — V4 Verify schema null-tolerance + StoreAmount-based derivation (merged `f3eaa92`).
+- `gotchas.md` "EPS V4 sandbox Verify returns null ErrorMessage/ErrorCode on success" (2026-05-30) + "EPS Verify publishes StoreAmount — pure eps_fee derivation" (2026-05-30).
+
+---
+
 ## 2026-05-27 · Trust Center v1.0 / counsel engagement — CORE DOCUMENTS IN HAND (Law Legacy Bangladesh, Mahmudus Salehin)
 
 **Resolves (substantially):** the "Trust Center v1.0 documents from counsel" launch-gate blocker carried since Day 19 (`decisions.md` 2026-05-17 "Trust Center v0.1 placeholders — skeleton-only") and amplified Day 34 ("Public buyer form: no blocking consent checkbox under v0.1-placeholder Trust Center" 2026-05-26) + Day 35 ("Build-track owns gate-track drafts" 2026-05-26 Phase 0.5) + Day 36 AIT entry (2026-05-26: agency model in contracts is a hard tax-correctness dependency for the disbursement-leg no-withholding treatment).

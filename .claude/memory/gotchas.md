@@ -4,6 +4,53 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## EPS V4 sandbox Verify returns null ErrorMessage + null ErrorCode on success (Postman/guide samples are wrong) (2026-05-30 / Phase 1.4c)
+
+**Symptom.** PR #218 shipped a V4 Verify schema with `ErrorMessage: z.string().optional()` per the EPS V4 Postman collection and integration guide (which showed `""`). The first live Verify run against the EPS sandbox returned HTTP 200 with a valid response body — but our schema rejected it. PR #217's diagnostic surfaced: `ErrorMessage: null` and `ErrorCode: null` on the success envelope. All 4 truth-gate verify calls blocked.
+
+**Why it happens.** EPS sandbox returns `null` for both error fields on a successful transaction; the V4 Postman + integration guide samples show empty strings (`""`). The doc is wrong (or at minimum, divergent from the live sandbox). Don't trust the doc-published shape over the live shape when the schema accepts only one.
+
+**Fix.** Use `z.union([z.string(), z.null()]).optional()` for both `ErrorMessage` and `ErrorCode` in V4VerifyResponseSchema (and any field documented as "always present" — empty-string-vs-null is the most likely sandbox vs guide drift). PR #219 shipped this. Pin both null-shape AND empty-string-shape acceptance in tests so a future "tighten the schema" PR can't regress.
+
+**How to avoid.** When wiring any third-party schema, even when the vendor's Postman collection appears authoritative: write the test against the **live response shape** the moment you have one, and treat the vendor doc as a starting point that may not match reality. Run-truth-gate's diagnostic (PR #217) was the load-bearing instrument that surfaced this within minutes — keep diagnostic logging on schema-validation failures permanently; do not optimise it away.
+
+**Related discoveries (same Verify response).** The V4 sandbox Verify success envelope also publishes `StoreAmount` — see "EPS Verify publishes StoreAmount" entry below.
+
+---
+
+## EPS V4 Verify publishes StoreAmount — pure eps_fee derivation is mode-agnostic (2026-05-30 / Phase 1.4c)
+
+**Symptom.** The original truth-gate derivation `eps_fee_paisa = TotalAmount_paisa − subtotal_paisa` had structural blind spots: Mode A conflated platform+EPS combined, Modes B + D absorbed EPS-fee on the buyer side and the derivation returned 0 (B) or platform_fee-only (D). Only Mode C directly yielded pure eps_fee. The §14.2 / Decision-N target — verify EPS's actual EPS-fee per mode — was unreachable for half the modes through this rule.
+
+**Why it happens.** The V4 sandbox Verify envelope publishes both `TotalAmount` (what EPS captured from buyer) AND `StoreAmount` (what EPS will settle to the merchant after deducting its own gateway fee). The doc example we modelled the schema after only mentioned `TotalAmount`. The live response has BOTH.
+
+**Fix.** Adopt the mode-agnostic derivation:
+
+```text
+eps_fee_paisa = parseBdtDecimalToPaisa(TotalAmount)
+              − parseBdtDecimalToPaisa(StoreAmount)
+```
+
+Every mode yields pure eps_fee directly from EPS's authoritative split, independent of absorb/pass-through composition. The Mode-B/D blind spots disappear; the Mode-A combined-fee conflation disappears. PR #219 shipped this. `extractEpsFeePaisa(raw)` lost its `scenario` arg (no longer needed).
+
+**How to avoid.** When deriving a quantity from an external API response, before adopting a derived rule that only works in some cases, dump the full live response shape and **check whether the quantity is reported directly**. PR #217's diagnostic surfaced StoreAmount within minutes of the first live Verify call — would have been invisible if we'd cherry-picked TotalAmount-only out of the response shape based on doc skimming.
+
+**V5 production caveat.** The V5 production integration guide example does NOT show StoreAmount; the doc example is minimal (and also missing the documented `EpsTransactionId`). Schema MUST make StoreAmount optional in both V4 sandbox and V5 production response schemas; if present → use the (T − S) rule; if absent → fall back to (TotalAmount − subtotal) WITH a clear runtime log line indicating which derivation path is active. Production smoke (BDT 100) is the empirical confirmation point. Decisions.md 2026-05-30 entry tracks this.
+
+---
+
+## EPS uses "PaymentReferance" (NOT "PaymentReference") in V5 Verify response — match character-for-character in schema (2026-05-30 / Phase 1.4c)
+
+**Symptom.** N/A in code yet (V5 production schema not extended yet — this is a forward-looking gotcha captured from the V5 production integration guide before it bites us). Will manifest as a missing field on the V5 production response when we add it to the schema, if we silently correct the typo to "Reference".
+
+**Why it happens.** EPS's V5 production integration guide spells the field `PaymentReferance` (with two A's instead of "Reference"). Their server emits exactly that spelling; a `PaymentReference` field name would never match.
+
+**Fix.** When extending V5VerifyResponseSchema for the production additive fields (next follow-up PR), match EPS's typo character-for-character: `PaymentReferance: z.string().optional()`. Do NOT correct it in our schema. Add an inline code comment pointing at the EPS V5 doc so a future "spelling fix" PR doesn't quietly break it.
+
+**How to avoid.** Treat vendor field names as strings to copy-paste, never as words to interpret. If a field name looks misspelled, copy it verbatim from the live response (or the vendor doc) — never retype.
+
+---
+
 ## Staging EC2 (t3.small, 2GB, no swap) went unreachable mid-session — in-VM hang under the full stack (2026-05-25 / Day 33 incident)
 
 **Symptom.** Mid-Day-33-Phase-4-EOD-smoke, the staging EC2 became unreachable:
