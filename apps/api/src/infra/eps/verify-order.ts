@@ -31,6 +31,7 @@ import { z } from 'zod'
 import { logger } from '../../lib/logger.js'
 import { _accessTokenCacheKey, defaultEpsCallDeps, type EpsCallDeps } from './core.js'
 import { EpsNetworkError, EpsResponseError } from './eps-http-errors.js'
+import { describeResponseShape } from './eps-wire-diagnostic.js'
 import { fetchAccessTokenFromEps } from './get-token.js'
 import { signEpsField } from './hash.js'
 import { normaliseStatus, type EpsStatus } from './normalise-status.js'
@@ -186,6 +187,21 @@ async function performVerifyWithRetry(
 
   const parseResult = VerifyResponseSchema.safeParse(response.data)
   if (!parseResult.success) {
+    // [truth-gate-verify] See `./eps-wire-diagnostic.ts` for why this fires
+    // alongside the throw.
+    logger.warn(
+      {
+        eps: {
+          endpoint: 'CheckMerchantTransactionStatus',
+          requestId,
+          mode: config.mode,
+          httpStatus: response.status,
+          schemaIssues: parseResult.error.issues,
+          responseShape: describeResponseShape(response.data),
+        },
+      },
+      'eps.verify.schema_validation_failed',
+    )
     throw new EpsResponseError(
       'EPS CheckMerchantTransactionStatus response failed schema validation',
       { httpStatus: response.status, requestId },

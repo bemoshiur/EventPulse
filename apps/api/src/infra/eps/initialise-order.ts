@@ -48,6 +48,7 @@ import {
   type EpsCallDeps,
 } from './core.js'
 import { EpsNetworkError, EpsResponseError } from './eps-http-errors.js'
+import { describeResponseShape } from './eps-wire-diagnostic.js'
 import { fetchAccessTokenFromEps } from './get-token.js'
 import { signEpsField } from './hash.js'
 import { isSandboxPricedCallToken } from './sandbox-priced-call-token.js'
@@ -324,6 +325,22 @@ async function performInitWithRetry(
 
   const parseResult = InitializeEPSResponseSchema.safeParse(response.data)
   if (!parseResult.success) {
+    // [truth-gate-verify] See `./eps-wire-diagnostic.ts` for why this fires
+    // alongside the throw: empirical body shape + zod issues so the next
+    // iteration pins the schema rather than guesses.
+    logger.warn(
+      {
+        eps: {
+          endpoint: 'InitializeEPS',
+          requestId,
+          mode: config.mode,
+          httpStatus: response.status,
+          schemaIssues: parseResult.error.issues,
+          responseShape: describeResponseShape(response.data),
+        },
+      },
+      'eps.init.schema_validation_failed',
+    )
     throw new EpsResponseError('EPS InitializeEPS response failed schema validation', {
       httpStatus: response.status,
       requestId,
@@ -331,6 +348,22 @@ async function performInitWithRetry(
   }
   const redirectUrl = pickRedirectUrl(parseResult.data)
   if (!redirectUrl) {
+    // [truth-gate-verify] Schema accepted the body but no recognised redirect
+    // URL field appeared. Log the structured shape so the alias list can be
+    // extended empirically (V4 may use a field name our `pickRedirectUrl`
+    // doesn't yet alias).
+    logger.warn(
+      {
+        eps: {
+          endpoint: 'InitializeEPS',
+          requestId,
+          mode: config.mode,
+          httpStatus: response.status,
+          responseShape: describeResponseShape(parseResult.data),
+        },
+      },
+      'eps.init.missing_redirect_url',
+    )
     throw new EpsResponseError('EPS InitializeEPS response missing RedirectURL', {
       httpStatus: response.status,
       epsCode: parseResult.data.Code ?? null,
