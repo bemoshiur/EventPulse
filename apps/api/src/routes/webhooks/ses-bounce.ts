@@ -117,8 +117,18 @@ sesBounceRoutes.post('/', async (c) => {
     allowedTopicArns: allowedBounceTopicArns(),
   })
   if (verify.kind !== 'verified') {
+    // Include topicArn so ops can distinguish misconfiguration
+    // (legitimate-but-not-allowlisted topic) from attempted attack
+    // (attacker topic) without needing to correlate with separate
+    // log lines. Closes the observability gap surfaced in the
+    // Phase 4 security review.
     logger.warn(
-      { webhook: 'ses-bounce', verify: verify.kind, messageId: body.MessageId },
+      {
+        webhook: 'ses-bounce',
+        verify: verify.kind,
+        topicArn: body.TopicArn,
+        messageId: body.MessageId,
+      },
       'webhook.sig.failed',
     )
     return c.json({ ok: true, ignored: 'signature_failed' })

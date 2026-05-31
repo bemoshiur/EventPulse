@@ -68,8 +68,14 @@ sesComplaintRoutes.post('/', async (c) => {
     allowedTopicArns: allowedComplaintTopicArns(),
   })
   if (verify.kind !== 'verified') {
+    // Include topicArn — see ses-bounce.ts for rationale (same gap).
     logger.warn(
-      { webhook: 'ses-complaint', verify: verify.kind, messageId: body.MessageId },
+      {
+        webhook: 'ses-complaint',
+        verify: verify.kind,
+        topicArn: body.TopicArn,
+        messageId: body.MessageId,
+      },
       'webhook.sig.failed',
     )
     return c.json({ ok: true, ignored: 'signature_failed' })
