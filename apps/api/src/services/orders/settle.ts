@@ -66,10 +66,11 @@ import {
   validateTransition,
   type OrderStatus,
 } from '../../domain/order-state-machine.js'
+import { isBkashFinancialEntity } from '../../infra/eps/bkash-financial-entity.js'
 import { verifyOrder } from '../../infra/eps/client.js'
 import { logger } from '../../lib/logger.js'
 import { enqueueOrderDelivery } from '../../workers/delivery-queue.js'
-import { writeOrderSettled } from '../audit/orders.js'
+import { writeOrderDisputed, writeOrderSettled } from '../audit/orders.js'
 
 // ─── error / outcome types ──────────────────────────────────────────
 
@@ -169,7 +170,28 @@ export async function settleOrderFromEps(input: SettleOrderInput): Promise<Settl
   })
 
   // STEP 4 — map EPS canonical status to order target.
-  const target = mapEpsStatusToOrderTransition(verifyResult.status)
+  const epsTarget = mapEpsStatusToOrderTransition(verifyResult.status)
+
+  // STEP 4.5 — v1.0 single-method launch Verify-guard (Day 38 Phase 2
+  // mechanism (d), per decisions.md 2026-05-31 "EPS fee-model structural
+  // decision — Option 3 (single-method launch, bKash-only for v1.0)
+  // CHOSEN"). When EPS Verify returns Success but the buyer used a
+  // non-bKash payment method on EPS's hosted checkout page, divert the
+  // transition target from 'paid' to 'disputed' — the platform refuses
+  // to honor the order because the payment method violates the v1.0
+  // single-method constraint. The buyer's money is in EPS's hands; ops
+  // initiates a manual refund via the EPS merchant dashboard (V5 has no
+  // public refund API per §11.4). The audit row + order_events row
+  // both carry the verbatim FinancialEntity value so ops can see what
+  // method the buyer actually used.
+  //
+  // Guard ONLY applies to the success path. EPS-reported failures or
+  // cancellations route normally to 'failed' / 'cancelled' regardless
+  // of FinancialEntity (those are EPS-side rejection paths).
+  const financialEntity = pickStringField(verifyResult.raw, 'FinancialEntity') ?? null
+  const isDisputed = epsTarget === 'paid' && !isBkashFinancialEntity(financialEntity)
+  const target: OrderStatus | null = isDisputed ? 'disputed' : epsTarget
+
   if (target === null) {
     // EPS says pending or unknown. Don't transition; the webhook
     // re-delivery (or a manual retry) will reconcile later.
@@ -237,7 +259,11 @@ export async function settleOrderFromEps(input: SettleOrderInput): Promise<Settl
 
     await db.update(orders).set(updates).where(eq(orders.id, orderRow.id))
 
-    // order_events — append-only event-sourcing trail (§2.5).
+    // order_events — append-only event-sourcing trail (§2.5). For
+    // the v1.0 Verify-guard dispute path, the payload additionally
+    // carries `financial_entity` (verbatim from EPS Verify) +
+    // `dispute_reason` so the event trail tells the full story
+    // without needing to join back to audit_logs.
     await db.insert(orderEvents).values({
       tenantId: orderRow.tenantId,
       orderId: orderRow.id,
@@ -250,21 +276,46 @@ export async function settleOrderFromEps(input: SettleOrderInput): Promise<Settl
         eps_status: verifyResult.status,
         ...(epsTransactionId ? { eps_transaction_id: epsTransactionId } : {}),
         ...(epsPaymentMethod ? { eps_payment_method: epsPaymentMethod } : {}),
+        ...(isDisputed
+          ? {
+              dispute_reason: 'non_bkash_method_at_verify',
+              financial_entity: financialEntity,
+            }
+          : {}),
       },
     })
 
-    // audit_logs — platform audit (§1.3 R8) via one-per-domain helper.
-    await writeOrderSettled(db, {
-      orderId: orderRow.id,
-      tenantId: orderRow.tenantId,
-      eventId: orderRow.eventId,
-      merchantTransactionId: input.merchantTransactionId,
-      previousStatus: currentStatus,
-      newStatus: target,
-      epsStatus: verifyResult.status,
-      source: input.source,
-      ...(epsTransactionId ? { epsTransactionId } : {}),
-    })
+    // audit_logs — platform audit (§1.3 R8) via the one-per-domain
+    // helpers. v1.0 single-method launch Verify-guard disputes route
+    // through writeOrderDisputed (which captures dispute_reason +
+    // financial_entity); regular settlements (paid / failed /
+    // cancelled) route through writeOrderSettled.
+    if (isDisputed) {
+      await writeOrderDisputed(db, {
+        orderId: orderRow.id,
+        tenantId: orderRow.tenantId,
+        eventId: orderRow.eventId,
+        merchantTransactionId: input.merchantTransactionId,
+        previousStatus: currentStatus,
+        epsStatus: verifyResult.status,
+        source: input.source,
+        disputeReason: 'non_bkash_method_at_verify',
+        financialEntity,
+        ...(epsTransactionId ? { epsTransactionId } : {}),
+      })
+    } else {
+      await writeOrderSettled(db, {
+        orderId: orderRow.id,
+        tenantId: orderRow.tenantId,
+        eventId: orderRow.eventId,
+        merchantTransactionId: input.merchantTransactionId,
+        previousStatus: currentStatus,
+        newStatus: target,
+        epsStatus: verifyResult.status,
+        source: input.source,
+        ...(epsTransactionId ? { epsTransactionId } : {}),
+      })
+    }
   })
 
   logger.info(
@@ -274,8 +325,17 @@ export async function settleOrderFromEps(input: SettleOrderInput): Promise<Settl
       newStatus: target,
       epsStatus: verifyResult.status,
       source: input.source,
+      ...(isDisputed
+        ? {
+            // v1.0 Verify-guard dispute — separate fields so log
+            // aggregation can group + alert on the dispute cohort
+            // distinct from regular settlements.
+            disputeReason: 'non_bkash_method_at_verify',
+            financialEntity,
+          }
+        : {}),
     },
-    'order.settle.transitioned',
+    isDisputed ? 'order.settle.disputed_non_bkash' : 'order.settle.transitioned',
   )
 
   // Day 28 Phase 3 — enqueue post-paid delivery (PDF + email). NEVER

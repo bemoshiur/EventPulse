@@ -141,6 +141,90 @@ export async function writeOrderSettled(tx: Tx, input: WriteOrderSettledInput): 
   })
 }
 
+// ─── writeOrderDisputed (Day 38 Phase 2 — v1.0 single-method launch) ─
+
+export interface WriteOrderDisputedInput {
+  orderId: string
+  tenantId: string
+  eventId: string
+  merchantTransactionId: string
+  /** State machine `from` — typically `awaiting_payment` for the v1.0 Verify-guard path. */
+  previousStatus: string
+  /** EPS canonical status from verifyOrder — typically `success` (EPS accepted; we refused). */
+  epsStatus: 'success' | 'failed' | 'cancelled' | 'pending' | 'unknown'
+  /** Which trigger source caused the dispute discovery: 'webhook' / 'redirect_success' / etc. */
+  source: string
+  /**
+   * Machine-readable reason code. v1.0 launch uses
+   * `'non_bkash_method_at_verify'` exclusively (Verify-guard for the
+   * single-method launch). Future expansion: `'eps_chargeback'`,
+   * `'tenant_initiated'`, etc. Tracked as a string union at the
+   * application layer rather than a DB enum to keep dispute reasons
+   * extensible without migration.
+   */
+  disputeReason: 'non_bkash_method_at_verify'
+  /**
+   * The actual FinancialEntity value EPS reported on the Verify
+   * response. For v1.0 this is anything-not-bKash; captured verbatim
+   * (no normalisation) so ops can see exactly what method the buyer
+   * used. May be null/missing if EPS didn't populate the field.
+   */
+  financialEntity: string | null
+  /** Optional EPS-side transaction id captured from the verify response (when present). */
+  epsTransactionId?: string
+}
+
+/**
+ * Dispute audit. Fires when the v1.0 single-method launch Verify-guard
+ * (Day 38 Phase 2 (d), per decisions.md 2026-05-31 Option 3) diverts an
+ * awaiting_payment order to `disputed` because EPS Verify returned
+ * Success but the buyer used a non-bKash payment method.
+ *
+ * The diff carries previous_status + new_status (mirroring
+ * writeOrderSettled's structure for a regular settlement) PLUS
+ * dispute_reason + financial_entity so ops + reviewers can see at a
+ * glance:
+ *
+ *   - what status this order was in (awaiting_payment)
+ *   - what status it's now in (disputed)
+ *   - why we disputed (non_bkash_method_at_verify)
+ *   - what method the buyer actually used (the verbatim FinancialEntity)
+ *
+ * Fires in the same tx as the orders UPDATE + order_events INSERT
+ * under withSuperAdmin. No PII — buyer details stay on the orders row.
+ *
+ * **Ops queue source (v1.0):** until the Phase 2b admin queue UI
+ * lands, ops queries the `audit_logs` table directly for rows with
+ * `action = 'order.disputed'` to drive the manual-refund work. This
+ * is documented as the v1.0 launch posture per the Day 38 Phase 2 (d)
+ * decision.
+ */
+export async function writeOrderDisputed(tx: Tx, input: WriteOrderDisputedInput): Promise<void> {
+  await tx.insert(auditLogs).values({
+    tenantId: input.tenantId,
+    actorType: 'system',
+    actorId: null,
+    action: 'order.disputed',
+    entityType: 'order',
+    entityId: input.orderId,
+    diff: {
+      previous_status: input.previousStatus,
+      new_status: 'disputed',
+      eps_status: input.epsStatus,
+      dispute_reason: input.disputeReason,
+      // FinancialEntity verbatim from EPS — could be 'card', 'Nagad',
+      // 'Rocket', null, or any string EPS chose. Captured exactly as
+      // observed so future analysis can decode deviation patterns.
+      financial_entity: input.financialEntity,
+      merchant_transaction_id: input.merchantTransactionId,
+      ...(input.epsTransactionId ? { eps_transaction_id: input.epsTransactionId } : {}),
+    },
+    metadata: { source: input.source, event_id: input.eventId },
+    ip: null,
+    userAgent: null,
+  })
+}
+
 // ─── writeOrderDelivered (Day 28 Phase 3) ────────────────────────────
 
 export interface WriteOrderDeliveredInput {
