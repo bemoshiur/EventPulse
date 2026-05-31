@@ -4,6 +4,41 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-31 · Day 37 — Operator launch target SET to June 10, 2026; audit critical-path adopted as tracking surface; four reconciliation gaps captured
+
+**Context:** Day 37 operator (Moshiur) set the **official Phase 1 MVP launch target as 2026-06-10** (10 calendar days from today). A 137-finding multi-agent audit ran today (see "Pending Work to Ship EventPulse" audit dated 2026-05-31). It identifies 1 active launch-gate item (EPS fee-model decision + production smoke), 3 pre-launch commitments, ~9 Sprint 4 remaining buildables + the prod-cutover surface (Secrets Manager prod entries, KMS prod CMKs, prod EC2 Ansible bootstrap, Route 53 records, wildcard cert, OIDC role, CloudWatch alarm catalogue) + the §17.11 alarm catalogue beyond the single memory alarm. Critic verdict: good-with-minor-gaps; 12 missing items reconciled into the report; honest critical path is ~5-7 buildable workdays + the externals (NBR/VAT opinion, Buyer Terms body, EPS prod-credential procurement).
+
+### Decision
+
+**The audit's 17-step critical path replaces the §26.1 Sprint-4-day-by-day plan as the project's primary tracking surface from Day 37 onwards.** `handoff.md` is restructured around the path; `progress.md` continues to record day deliverables but each entry now ties back to the path-step it advances. The §26.1 sprint-day-by-day plan was authored assuming a perfectly-sequenced Phase 1; Day 37 reality has steps overlapping (V5 schema + refund flow + SNS suppression-list + marketing all parallel-safe) and the path captures that better.
+
+### Four reconciliation gaps captured today
+
+**Gap 1 — Modes C+D `Status: Fail` reframed.** The Phase 1.4 truth-gate empirical observation (decisions.md 2026-05-30) reported all 4 sandbox payments with footnote "Modes C+D returned EPS Status:Fail … informational, not blocking the fee-rate observation." **Reframe:** the fee-model structural decision is being made on **partial empirical data — only Mode A's bKash transaction (1.747% MFS rate) cleanly succeeded end-to-end.** Mode B succeeded but is the both-absorbed mode (least informative for organiser-facing rate display). Modes C + D produced fee fields but EPS marked the transactions Failed — which means the StoreAmount field on those rows may or may not reflect what EPS would have actually settled in a Success case. We do **not** have a card-rate observation; we do **not** have a Nagad observation that cleanly succeeded; we do **not** have a Rocket / Upay / bank-transfer observation. Implication: the fee-model decision (Options 1/2/3/4 per decisions.md 2026-05-30) should account for this **single-data-point empirical state** when weighing Option 1 (per-method rate catalogue — would require more data to populate honestly), Option 2 (single-rate-absorb-variance — safest under data scarcity), Option 3 (single-method launch — bKash-only would be most empirically grounded), Option 4 (StoreAmount-as-source-of-truth — robust to data scarcity by design, reads actual EPS settlement on every transaction).
+
+**Gap 2 — §29 #9 AIT documentation drift.** AIT withholding-tax classification was **resolved 2026-05-26** via CA consultation (decisions.md "AIT (Advance Income Tax) treatment under ITA 2023 — RESOLVED"). CLAUDE.md §29 "Still open" list **still lists #9 as open.** This is documentation drift, not a real blocker. Capture for v2.4 playbook bump: §29 #9 should move to the "Resolved in v2.X" list with pointer to the 2026-05-26 decision; §29 #10 (VAT/Mushak registration model) remains the only genuine legal-opinion launch-blocker in §29.
+
+**Gap 3 — §29 #10 NBR/VAT external clock surfaced.** The VAT/Mushak registration model (CLAUDE.md §29 #10: "whether the 0.25% platform fee VAT is paid by Event Pulse on its gross fee receipt, or whether tenants are the VAT-bearing party for the service fee component") **was not tracked in handoff.md as a live external clock.** It is now. The operator action: secure a written NBR/VAT opinion from the CA who handled AIT (their AIT opinion was excellent and fast); the operator queues the request today/tomorrow. Until resolved this is a launch-blocking decision per playbook framing ("MUST resolve with NBR before MVP launch").
+
+**Gap 4 — prod branch divergence captured as pre-cutover requirement.** `origin/prod` is at SHA `21dad2cc` (last Sprint 1 era); `main` is at `ad0f5fe`. Sprint 2-4 work (~80+ commits across PRs #100-#221) is **not on the prod branch**. Prod EC2 cutover requires ff-merge or cherry-pick of Sprint 2-4 work onto `prod` before any production deploy can read sane code. This becomes critical-path step [14] sub-task. Pattern documented for v2.4 bump: track prod-branch SHA in standing-invariants section of handoff.md.
+
+### Consequences
+
+- **`handoff.md` is overwritten** to lead with the June 10 target + the 17-step critical path + the four reconciliation gaps. The audit becomes the day-by-day tracking surface for Day 37 → June 10.
+- **Operator parallel actions queued today** (not Claude-Code's job — operator queues): (a) email EPS to request production credentials; (b) email Salehin (counsel) re Buyer Terms body + Pvt Ltd incorporation question pre-June-10; (c) email CA for NBR/VAT opinion on §29 #10; (d) identify candidate first paying tenant. Critical-path steps [4], [11], [13], [17] depend on these external clocks; clocks must start today.
+- **HARD STOP on `fee-calculator.ts` carries.** Fee-model decision is operator-only and deferred to next session (Day 38) per the user's Phase 4 instruction; this session surfaces the decision-surface document for overnight reflection.
+- **v2.4 playbook bump backlog grows by 4 items today** (audit Gap 1 framing, Gap 2 §29 #9 reclassification, Gap 3 §29 list housekeeping, Gap 4 prod-branch tracking discipline) on top of the Sprint 2-4 backlog already captured in `progress.md`. The v2.4 bump itself is not launch-blocking but is a pre-MVP-press-release quality bar.
+- **STAGING_PAYMENT_BLOCK=1 stays enforcing through the entire remaining 10-day runway.** The only authorized lift is the BDT-100 production smoke on its own gated session (critical-path step [6]) and must be re-enabled immediately after. This invariant is non-negotiable; operator surfaced it explicitly in the Day 37 prompt.
+
+### Cross-references
+
+- `decisions.md` 2026-05-30 Phase 1.4 truth-gate empirical table (the canonical source for Option 1/2/3/4 framing + the Mode A bKash data point).
+- `decisions.md` 2026-05-26 AIT decision (the resolution that §29 #9 should reference).
+- `decisions.md` 2026-05-26 "Build-track owns gate-track drafts" — applies to all 4 operator-parallel actions (EPS prod-cred memo, Salehin follow-up template, NBR/VAT opinion brief, first-tenant onboarding outreach). Drafts land as `docs(ops):` PRs as Claude Code can produce them.
+- `handoff.md` (overwritten Day 37) — the critical-path tracking surface.
+
+---
+
 ## 2026-05-31 · SES production access GRANTED (AWS Support case 177899559700777, ap-southeast-1) — launch-gate blocker RESOLVED with pre-launch commitment to AWS
 
 **Resolves:** the SES out-of-sandbox launch-gate blocker carried since Day 35 Phase 0.5 (`decisions.md` 2026-05-26 "Build-track owns gate-track drafts" — the `docs/ops/ses-out-of-sandbox-request.md` case body draft was the first build-track move on the launch gate).

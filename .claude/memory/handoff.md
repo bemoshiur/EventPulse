@@ -1,95 +1,135 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-05-31 — Sprint 4 Day 37; **SES production access GRANTED (AWS case 177899559700777, ap-southeast-1) — launch gate now 1 active blocker (EPS fee-model decision + production smoke).**
+**Last update:** 2026-05-31 EOD — Day 37 of 47-day Phase 1 MVP runway.
+**LAUNCH TARGET: 2026-06-10** (10 calendar days from today; operator set 2026-05-31).
 **Driver:** Claude Code (Opus 4.7).
+**Audit:** "Pending Work to Ship EventPulse" — 137 findings across 5 lenses + completeness critic; verdict good-with-minor-gaps; the 17-step critical path is the tracking surface.
 
-## 🆕 LAUNCH-GATE MOVE TODAY (2026-05-31)
+## 🎯 The 17-step critical path (audit-derived; replaces §26.1 day-by-day plan)
 
-**SES out-of-sandbox APPROVED in ap-southeast-1.** AWS Support case **177899559700777**. Send-to-full-audience capability now available. **The launch gate dropped 2 → 1.** Full entry in `decisions.md` 2026-05-31 (top).
+```text
+[1] OPERATOR: EPS fee-model decision (Options 1/2/3/4)
+     │                                                      Decision surface
+     ├──────────┬──────────┬──────────┐                     overnight @ Day 37
+     │          │          │          │                     → operator decides
+[2] Update    [3] V5-     [7] Refund  [8] SNS bounce/         Day 38 AM
+    fee-calc      tolerant     flow +     complaint
+    per chosen    schema PR    manual     suppression
+    option (Day   (Day 37)     disburse-  pipeline
+    38+)                       ment       (gates step 9
+                                          MAIL_DRY_RUN=0)
+     │                            │
+[4] Operator + EPS: prod
+    credential procurement        │      ← Operator-action #1 today
+     │                            │
+[5] STAGING_PAYMENT_BLOCK
+    lift (decisions.md entry)     │
+     │                            │
+[6] BDT-100 prod smoke ←──────────┘      ← Its own gated session;
+    (re-enable block after)                STAGING_PAYMENT_BLOCK=1 every
+     │                                     other session
+     ├──────────┬──────────┐
+     │          │          │
+[10] Marketing  [13] §29   [14] Prod EC2 + Route 53
+     pages w/        #10        + OIDC role + Ansible
+     fee-mode-       NBR        + Secrets Manager (11)
+     calc            VAT        + KMS CMKs (2) + wildcard
+                    opinion     cert + alarm catalogue
+                              + prod-branch ff-merge (21dad2cc → ad0f5fe9)
+     │                              │
+[11] Counsel returns Buyer Terms body  ← Operator-action #2 today
+     │
+[12] Wire real consent_records on buyer-form
+     │
+[15] t3.medium upgrade decision        ← Pre-cutover Moshiur decision
+     │
+[16] CloudWatch alarms wired           ← ASK-FIRST AWS-write
+     │
+[17] Sprint 4 Day 10 launch readiness:
+     AUP review + host-liability lawyer sign-off
+     + security checklist + prod cutover
+     + onboard first paying tenant     ← Operator-action #4 today
+```
 
-- ~~SES out-of-sandbox approval~~ ✅ **RESOLVED 2026-05-31** (this move).
-- **EPS fee-model structural decision + production smoke** — the active launch-gate item now (Options 1/2/3/4 in decisions.md 2026-05-30; operator-only decision).
+## 🚨 Four reconciliation gaps captured today (see decisions.md 2026-05-31 Day 37 entry)
 
-**Loose ends (low priority, NOT gating launch):** Counsel docs 4-8 bodies — Buyer Terms remains the load-bearing one for unblocking the buyer-form checkout-consent UI per the Day-34 link-footer pattern; rest of counsel follow-ups are forward-progress not gating.
+1. **Modes C+D `Status: Fail` reframed** — Phase 1.4 truth-gate empirical state is **partial: only Mode A's bKash transaction (1.747% MFS rate) cleanly succeeded.** No card rate, no Nagad clean success, no other MFS, no bank-transfer observation. Fee-model decision (Options 1/2/3/4) is being made on a **single clean data point**. This shapes Option 4's "robust to data scarcity by design" framing.
+2. **§29 #9 AIT documentation drift** — resolved 2026-05-26 in memory, still "open" in CLAUDE.md §29. v2.4 bump backlog item.
+3. **§29 #10 NBR/VAT opinion** — was NOT tracked as external clock; **NOW IS** (this entry + operator-action #3 below).
+4. **prod branch SHA divergence** — `origin/prod` at `21dad2cc` (Sprint 1 era); `main` at `ad0f5fe`. Sprint 2-4 work (~80+ commits) NOT on prod. ff-merge or cherry-pick required before any production deploy. Critical-path step [14] sub-task.
 
-## 🚨 NEW PRE-LAUNCH COMMITMENT (gates the env flip, NOT the SES blocker)
+## 📨 Operator parallel actions QUEUED TODAY (not Claude Code's job)
 
-**SNS bounce/complaint → suppression-list wiring MUST exist BEFORE flipping `MAIL_DRY_RUN=0`.** Promised verbatim to AWS in the case reply ("will be fully active before we begin production sending"). The SES blocker is resolved; **the env flip has a separate gate of our own making**. Required scope before flip:
+These are 5-minute emails/messages the operator sends today so external clocks start running:
 
-1. SES bounce + complaint SNS topics (separate per type, per AWS pattern).
-2. Webhook handlers at `apps/api/src/routes/webhooks/ses-bounce.ts` + `ses-complaint.ts` (CLAUDE.md §10.5 already lists these as planned). Signature-verify → SQS enqueue → worker process (per R9).
-3. Global suppression list (Postgres) — bounce/complaint → permanent suppression for hard bounces + complaints; exponential-backoff retry cap → promotion to hard for soft bounces.
-4. Outbound email service checks suppression list BEFORE attempting send. Suppressed → noop + audit log (no SES API call). Notification log status: `bounced`/`failed` per AWS-classified reason.
+1. **EPS production credentials** — email EPS to request prod creds for `eventpulse.com.bd` live merchant account. Same contact who provided V5 docs + sandbox creds. Specify prod base URL (`pgapi.eps.com.bd`), confirm V5 integration guide received, request `merchant_id` / `store_id` / `username` / `password` / `hash_key` set. Critical-path step [4]; clock must start today.
+2. **Counsel follow-up (Salehin)** — (a) Buyer Terms body for buyer-form `consent_records` UI (critical-path step [11]); (b) Pvt Ltd incorporation question given June 10 launch with real money flow — is the recommendation to incorporate before first paying tenant?
+3. **NBR/VAT opinion (§29 #10)** — written opinion on the platform's VAT registration model. Fastest path: ask the CA who handled AIT (their opinion was excellent and fast). External clock; gates launch per playbook framing.
+4. **Candidate first paying tenant** — identify a real organiser ready to sign Organiser Agreement + complete KYC + have an event to ticket. Without this, "platform ready" ≠ "earning real money on launch day." Critical-path step [17].
 
-**Why non-negotiable:** AWS revokes SES access on bounce rate >5% or complaint rate >0.1%; we promised a working pipeline before producing real volume.
+## ⚠️ TL;DR for next session
 
-## ⚠️ TL;DR — Phase 1.4 truth-gate context (carries from 2026-05-30)
+- **First-thing-tomorrow (Day 38 AM):** operator sits with the **fee-model decision document** (decisions.md 2026-05-31 Day 37 entry + Phase 4 surfacing doc — see below). Operator decides Option 1/2/3/4 with a fresh head. Records decision in decisions.md. THEN Phase 6 executes the chosen option in `fee-calculator.ts` / settlement code (STOP-ASK before the money-math PR lands).
+- **Then Phase 7:** SNS bounce/complaint suppression-list wiring (gates MAIL_DRY_RUN=0).
+- **Then (subject to EPS prod-credential arrival):** the BDT-100 production smoke, on its own gated session.
 
-- **The truth-gate work that has been carried since Day 24-25 is essentially DONE on the sandbox side.** All 4 §14.2 scenarios paid on EPS sandbox; pure eps_fee derived per mode via the StoreAmount-based mode-agnostic rule; §14.10 Invariant-1 PASS across all 4. Full empirical table is in `decisions.md` 2026-05-30 entry.
-- **Fee-model structural decision PENDING.** EPS empirically charges ≈1.7000% on TotalAmount across both MFS providers tested (bKash + Nagad). Calculator models 2.5% (card-rate). The mismatch is real — Options 1/2/3/4 in decisions.md await operator decision NEXT SESSION. Do NOT touch `apps/api/src/domain/payments/fee-calculator.ts` until that decision lands.
-- **One small follow-up PR ready to ship** (offered, awaiting approval): V5 production response schema extension for the 3 additive fields per EPS V5 integration guide — `EpsTransactionId` (string, optional), `PaymentReferance` (string, optional; NOTE the EPS typo — verbatim spelling), `StoreAmount` (string, optional with fallback to `TotalAmount − subtotal` derivation + clear runtime log line indicating which path is active). This is the final wire-shape work before production smoke; it does not touch fee-calculator.ts.
+## ⚠️ Today's deliverables (Day 37)
 
-## ⚠️ Major state change (2026-05-30)
+- **PR #222 (memory)** — Day 37 audit reconciliation + June 10 launch target. This commit.
+- **PR (Phase 3, V5 schema)** — `EpsTransactionId` + `PaymentReferance` (verbatim EPS typo) + `StoreAmount` (optional with fallback) added to V5 production VerifyResponseSchema. ~30 LOC + tests.
+- **Phase 4 fee-model decision surface** — captured in decisions.md as a structured Options 1/2/3/4 comparison for operator overnight review (NOT decided this session).
+- **No code touched in `apps/api/src/domain/payments/fee-calculator.ts`** — HARD STOP holds.
 
-**V5 production wire shape confirmed near-identical to V4 sandbox** per uploaded EPS V5 integration guide. The four "V4-vs-V5 divergences" feared during the wire-protocol abstraction (PR #218) are **not divergent in production**. The pluggable `EpsWireProtocol` pattern remains valuable for schema variance (V4-vs-V5 additive fields), but the body shape + endpoints + hash mechanism + response envelope are essentially V4 in V5 too. Production smoke complexity drops materially.
+## ⚠️ The launch gate state — 1 active (today)
 
-Single unresolved empirical question for V5 production: **whether V5 publishes `StoreAmount`**. Doc example is minimal (also missing the documented `EpsTransactionId`), so doc-absence is non-determinative. Make schema optional in both V4 + V5; if present → mode-agnostic eps_fee derivation; if absent → fall back to `(TotalAmount − subtotal)` with a runtime log line. Production smoke (BDT 100, one transaction) will empirically confirm.
+1. ~~EPS sandbox credentials~~ ✅ RESOLVED 2026-05-26.
+2. ~~SES out-of-sandbox~~ ✅ RESOLVED 2026-05-31 (case 177899559700777, ap-southeast-1).
+3. **EPS fee-model structural decision + production smoke** — ACTIVE; operator-decides Day 38 AM.
 
-## ⚠️ FIRST THING NEXT SESSION
+**Pre-launch commitments (gate env flips, not launch itself):**
+- **SNS bounce/complaint suppression-list wiring** (decisions.md 2026-05-31) — gates `MAIL_DRY_RUN=0`. AWS commitment (case 177899559700777 reply). Sequenceable parallel with fee-model + V5 schema.
+- **STAGING_PAYMENT_BLOCK lift for prod smoke** — own gated session; re-enable immediately after.
+- **Buyer Terms body** — gates real `consent_records` capture on buyer-form (replaces Day-34 link-footer pattern).
 
-1. **Fee-model structural decision** (per decisions.md 2026-05-30 entry — Options 1/2/3/4). Operator-only decision; the data is in memory; no auto-derivation. Surface the options + the empirical table at session start; wait for choice; then execute whatever the choice implies (no code action until then).
-2. **Offer the V5-tolerant additive-field follow-up PR** (3 fields, schema-only, ~30 lines + tests). Worth shipping BEFORE the production smoke regardless of which fee-model option lands. Standalone — doesn't depend on the fee-model decision.
-3. **Surface the SNS bounce/complaint suppression-list scope as a buildable Sprint 4 work-item** (decisions.md 2026-05-31). Gates the eventual `MAIL_DRY_RUN=0` flip, not the SES blocker itself. Sequenceable in parallel with #1/#2.
+## ⚠️ Empirical findings table — quick recall (decision-grade context for Day 38)
 
-## ⚠️ Today's deliverables
+| Mode | Status | FE | TotalAmount | StoreAmount | observedEps | predictedEps | Δ | Trust |
+|:---:|:---:|:---:|---:|---:|---:|---:|---:|:---:|
+| A (PT,PT) | Success | bKash | 102756 | 101009 | 1747 | 2506 | −759 | **CLEAN** |
+| B (AB,AB) | Success | bKash | 100000 |  98300 | 1700 | 2500 | −800 | clean-but-AB |
+| C (AB,PT) | **Fail** | bKash | 102500 | 100757 | 1743 | 2500 | −757 | **PARTIAL** |
+| D (PT,AB) | **Fail** | Nagad | 100250 |  98546 | 1704 | 2506 | −802 | **PARTIAL** |
 
-- **PR #218** `2882d9c` — V4 sandbox wire-protocol pluggable abstraction. Production V5 byte-shape untouched; sandbox V4 ships CustomerOrderId + 17 mandatory fields + GET Verify + PascalCase response schemas + BDT-decimal string-manipulation parser. 339 EPS tests (was 295).
-- **PR #219** `f3eaa92` — V4 Verify accepts null `ErrorMessage`/`ErrorCode` on success (Postman/guide samples were wrong) + adds required `StoreAmount` + rewrites `extractEpsFeePaisa(raw)` for mode-agnostic `(TotalAmount − StoreAmount)` derivation. 345 EPS tests; 1201 total api tests.
-- **Phase 1.4 truth-gate Init + Verify run** end-to-end on staging via SSM. Full table archived in decisions.md. mtids: `TXN-TG-A-1780147032693-l18j`, `TXN-TG-B-1780147033108-br29`, `TXN-TG-C-1780147033200-gyng`, `TXN-TG-D-1780147033288-to6r`. SSM invocation IDs for Init: `0bd273b1-e8de-4b97-ab45-513e36a6177f`; Verify: `ffcfacd0-581b-4db5-b17e-d4345c72273a`.
-- **Memory commit** — this commit + decisions.md (Phase 1.4 truth-gate entry, V5 confirmation, fee-model options 1-4) + gotchas.md (null Error fields + StoreAmount-publishing + PaymentReferance-typo) + progress.md (Day 36 SHIPPED).
+All amounts paisa. §14.10 Invariant-1 PASS across all 4. **The only fully-clean fee-rate data point is Mode A bKash @ 1.747% MFS rate.** No card-rate observation exists.
 
-## ⚠️ The launch gate state — 2 → 1 (resolved 2026-05-31)
+## ⚠️ Build-track items still in play
 
-1. ~~EPS sandbox credentials~~ ✅ RESOLVED 2026-05-26 + truth-gate run COMPLETE 2026-05-30. **Sub-task remaining:** production credentials for cutover, not sandbox.
-2. ~~SES out-of-sandbox approval~~ ✅ **RESOLVED 2026-05-31** (AWS case 177899559700777, ap-southeast-1).
-3. **EPS fee-model structural decision + production smoke** — the **ACTIVE LAUNCH-GATE ITEM** (decisions.md 2026-05-30 Options 1/2/3/4; operator-only).
+- ⏳ **CloudWatch >85% memory alarm — STILL OPEN.** 5-minute AWS-write task. ASK-FIRST.
+- ⏳ **Full §17.11 alarm catalogue** beyond memory: CPU >85%/10min, mem >90%/5min, disk >80%, error rate >1%/5min, payment success <95%/15min, disbursement batch failure, reconciliation invariant violation. Required pre-prod-cutover.
+- ⏳ **t3.medium upgrade** (4 GB, ~+$15/mo) — pre-prod-cutover Moshiur decision.
+- ⏳ **k6/artillery load test budget** (§24.4 Sprint-4-close CI requirement) — NOT WIRED.
+- ⏳ **`pnpm audit` blocking on high+critical** (§24.4 Sprint-4-close CI requirement) — NOT WIRED.
+- ⏳ **Production cutover surface** — 11 `eventpulse/prod/*` Secrets Manager entries; 2 prod KMS CMKs (`alias/eventpulse-prod` + `alias/eventpulse-kyc-prod`); prod EC2 Ansible bootstrap; prod Route 53 records (8-record set); prod wildcard cert via DNS-01; `eventpulse-deploy-prod` OIDC role; prod-branch ff-merge (`21dad2cc` → `ad0f5fe9`).
+- ⏳ **v2.4 playbook bump backlog** — §14.2 Mode C narrative, §29 #9 AIT reclassification, §29 list housekeeping, prod-branch tracking discipline, Sprint 2-4 accumulated amendments, fee-model resolution once decided.
+- ⏳ **Sprint 4 remaining buildable** — Refund flow + manual disbursement + BEFTN file generator (§26.1 Day 7-8) + Marketing pages w/ two-fee-mode calculator (§26.1 Day 9) + Launch readiness (§26.1 Day 10).
+- ⏳ **Loose ends (low priority):** Counsel docs 4-8 bodies (Refund Policy, AUP, Cookies, DPA, EULA — Buyer Terms load-bearing); manual click-through of OAuth callback redirect (PR #149 carry); stale `magic-link-form.tsx:20` + `super-admin/kyc.ts:51` TODO audit.
 
-**Pre-launch commitments (gates env flips, not launch itself):**
+## Where things live (quick map — Day 37 additions)
 
-- **SNS bounce/complaint suppression-list wiring** (decisions.md 2026-05-31) — gates `MAIL_DRY_RUN=0`. AWS commitment.
+- **Decision surface:** `decisions.md` 2026-05-31 Day 37 entry (this commit) — operator overnight review.
+- **Critical path tracking surface:** this file's diagram at top.
+- **V5 schema PR (this session):** `apps/api/src/infra/eps/eps-wire-protocol.ts` V5VerifyResponseSchema extension.
+- **Audit document:** "Pending Work to Ship EventPulse" — workflow `wq9vfxuf4`, output at `/private/tmp/claude-501/.../tasks/wq9vfxuf4.output` (local-only; transcript dir).
 
-## ⚠️ Empirical findings table — quick recall
+## Standing invariants (still enforcing — 10-day runway protection)
 
-| Mode | Status | FE | TotalAmount | StoreAmount | observedEps | predictedEps | Δ |
-|:---:|:---:|:---:|---:|---:|---:|---:|---:|
-| A (PT,PT) | Success | bKash | 102756 | 101009 | 1747 | 2506 | −759 |
-| B (AB,AB) | Success | bKash | 100000 |  98300 | 1700 | 2500 | −800 |
-| C (AB,PT) | **Fail**⚠️ | bKash | 102500 | 100757 | 1743 | 2500 | −757 |
-| D (PT,AB) | **Fail**⚠️ | Nagad | 100250 |  98546 | 1704 | 2506 | −802 |
-
-All amounts paisa. §14.10 Invariant-1 PASS across all 4. EPS rate consistently ~1.700% of TotalAmount across both MFS methods. Modes C+D returned `Status: Fail` despite operator confirmation that all 4 checkouts completed — EPS sandbox populated fee fields anyway (informational, not blocking the fee-rate observation).
-
-## ⚠️ Build-track items still in play from prior sessions (UNCHANGED)
-
-- ⏳ **CloudWatch >85% memory alarm — STILL OPEN.** Small AWS-write follow-up; 5-minute task when authorized.
-- ⏳ **t3.medium upgrade** (4 GB, ~+$15/mo) — STILL OPEN. Pre-production Moshiur decision.
-- ⏳ **AIT memo / Trust Center per-page outlines / EPS prod-credential request memo** — per Day-35 build-track-owns-gate-track-drafts pattern. None new today.
-- ⏳ **Sprint 4 remaining buildable** — Refund flow + manual disbursement (§26.1 Day 7-8) + Marketing pages (§26.1 Day 9) + Launch readiness (§26.1 Day 10).
-
-## Where things live (quick map — Day 36 additions)
-
-- **Truth-gate runner:** `apps/api/src/infra/eps/truth-gate/run-truth-gate.ts`. Subcommands: `init` (4 RedirectURLs), `verify <MODE:MTID> ...` (Verify each, print predicted-vs-actual). On staging: `sudo -u eventpulse bash -lc "cd /home/eventpulse/app/apps/api && pnpm tsx src/infra/eps/truth-gate/run-truth-gate.ts <subcommand>"` via SSM.
-- **Wire-protocol abstraction:** `apps/api/src/infra/eps/eps-wire-protocol.ts` — `V5_PRODUCTION_PROTOCOL` + `V4_SANDBOX_PROTOCOL` frozen objects + `EpsWireProtocol` interface. V4VerifyResponseSchema accepts null + empty-string for `ErrorCode`/`ErrorMessage`; `StoreAmount` required.
-- **BDT-decimal parser:** `apps/api/src/infra/eps/bdt-decimal.ts` — `parseBdtDecimalToPaisa(input: string): bigint`. String manipulation only (no parseFloat); guards the IEEE-754 paisa-loss regression.
-- **Pure eps_fee derivation:** `apps/api/src/infra/eps/truth-gate/run-truth-gate.ts:extractEpsFeePaisa(raw)`. Mode-agnostic. Throws on missing `TotalAmount`/`StoreAmount`.
-
-## Standing invariants (still enforcing)
-
-- `STAGING_PAYMENT_BLOCK=1` in `.env.staging` + pm2 env id=1. Truth-gate bypasses via the harness-scoped three-lock token (sandboxPricedCallToken + mode==='sandbox' + isSandboxPricedCallToken); operator app traffic still blocked. Removing the env requires a new `decisions.md` entry per §11.0.
-- Branch protection: pre-push hook + workflow_dispatch gates on `main`; no direct commits to `main`.
-- Memory protocol: decisions land in `decisions.md` the turn they're made; gotchas the moment learned.
-- Money math single source: `apps/api/src/domain/payments/fee-calculator.ts`. No fee arithmetic elsewhere. **HARD STOP active until the fee-model structural decision lands next session.**
-- Snapshot-vs-current display discipline (Day-33 Choice A): money dashboards read snapshotted fee fields, NEVER recompute from current config.
+- **`STAGING_PAYMENT_BLOCK=1`** in `.env.staging` + pm2 env id=1. Truth-gate three-lock bypass remains harness-scoped; operator-app traffic still blocked. **Only authorized lift: BDT-100 production smoke on its own gated session per decisions.md §11.0; re-enable immediately after.** Non-negotiable through June 10.
+- **HARD STOP on `apps/api/src/domain/payments/fee-calculator.ts`** — holds until operator decides fee-model option (Day 38 AM).
+- Branch protection: pre-push hook + workflow_dispatch gates on `main`; memory commits go through PRs.
+- Memory protocol: decisions → decisions.md the turn they're made; gotchas → gotchas.md the moment learned.
+- Money math single source: `fee-calculator.ts`. No fee arithmetic elsewhere.
+- Snapshot-vs-current display discipline (Day-33 Choice A).
 - Auth-gate-is-the-entire-security-model for `/api/v1/admin/*` (Day-35).
 - Build-track owns surfacing what's draftable for the launch gate (Day-35).
-- Wire-protocol diagnostic logging (PR #217) — keep ON permanently. Load-bearing instrument that surfaced today's null-Error + StoreAmount findings within minutes.
+- Wire-protocol diagnostic logging (PR #217) — keep ON permanently.
+- **Prod branch tracking discipline (new today):** track `origin/prod` SHA every session; if it diverges from `main` by more than a sprint, document as pre-cutover requirement (current: `21dad2cc` vs `ad0f5fe9`).
