@@ -69,16 +69,20 @@ These are 5-minute emails/messages the operator sends today so external clocks s
 
 ## ⚠️ TL;DR for next session
 
-- **First-thing-tomorrow (Day 38 AM):** operator sits with the **fee-model decision document** (decisions.md 2026-05-31 Day 37 entry + Phase 4 surfacing doc — see below). Operator decides Option 1/2/3/4 with a fresh head. Records decision in decisions.md. THEN Phase 6 executes the chosen option in `fee-calculator.ts` / settlement code (STOP-ASK before the money-math PR lands).
-- **Then Phase 7:** SNS bounce/complaint suppression-list wiring (gates MAIL_DRY_RUN=0).
-- **Then (subject to EPS prod-credential arrival):** the BDT-100 production smoke, on its own gated session.
+- **First-thing-tomorrow (Day 38 AM):** operator sits with **`docs/decisions/fee-model.md`** (the structured comparison surface shipped today in PR #224) **for an hour without typing**, makes the Option 1/2/3/4 call, records the decision in `.claude/memory/decisions.md` using the §9 template embedded in the surface doc. Reading time: ~15 minutes; reflection time: 45+ minutes. The §8 hybrid (Option 2 at launch + Option 4 by Sprint 7 close as a COMMITTED DELIVERABLE not a "revisit") is on the table explicitly. **Operator's sharpened framings landed in §6 Risk 2 (stranded-investment + smoke-first-decision-second sequencing) and §6 Risk 4 (refund-flow critical-path coupling).**
+- **Then Phase 6 (Day 38 PM or Day 39):** Claude Code implements the chosen fee-model option in `apps/api/src/domain/payments/fee-calculator.ts` + settlement code. **STOP-ASK before the money-math PR lands** — operator reviews the implementation plan before code changes commit. HARD STOP on fee-calculator.ts lifts only once the decision is recorded in decisions.md.
+- **Then Phase 7 (Day 39-40):** SNS bounce/complaint suppression-list wiring per the scope captured in `decisions.md` 2026-05-31 SES entry (2 SNS topics + sig-verified webhook handlers + global Postgres suppression list + outbound-send guard). Gates `MAIL_DRY_RUN=0` per the AWS commitment in case 177899559700777 reply.
+- **Then (Day 39+, subject to EPS prod-credential arrival):** BDT-100 production smoke per critical-path step [6], on its own gated session with the staging-only STAGING_PAYMENT_BLOCK lift recorded in decisions.md per §11.0; **re-enable block immediately after.**
+- **Parallel-safe Sprint 4 buildables that can land any time after Day 38 fee-model decision:** Day 7-8 refund flow + manual disbursement (note: **the refund flow shape is coupled to the chosen fee-model option** per §6 Risk 4 — under Option 4 the refund-flow PR cannot be authored independently; under Options 1/2/3 it can); Day 9 marketing pages with two-fee-mode pricing calculator (pricing-calculator surface depends on chosen option); Day 10 launch readiness ceremony (multi-task; collapsed in critical path step [17]).
 
-## ⚠️ Today's deliverables (Day 37)
+## ⚠️ Today's deliverables (Day 37 EOD — 4 PRs)
 
-- **PR #222 (memory)** — Day 37 audit reconciliation + June 10 launch target. This commit.
-- **PR (Phase 3, V5 schema)** — `EpsTransactionId` + `PaymentReferance` (verbatim EPS typo) + `StoreAmount` (optional with fallback) added to V5 production VerifyResponseSchema. ~30 LOC + tests.
-- **Phase 4 fee-model decision surface** — captured in decisions.md as a structured Options 1/2/3/4 comparison for operator overnight review (NOT decided this session).
-- **No code touched in `apps/api/src/domain/payments/fee-calculator.ts`** — HARD STOP holds.
+- **PR #222 memory** `ef6dcee` — Day 37 audit reconciliation + June 10 launch target SET + 17-step critical-path adopted as tracking surface + four reconciliation gaps captured (Modes C+D Fail reframing / §29 #9 AIT drift / §29 #10 NBR-VAT external clock surfaced / prod-branch divergence). Merged.
+- **PR #223 feat(eps)** — V5 production additive-field schema tolerance (`EpsTransactionId` camelCase + `PaymentReferance` verbatim EPS typo + `StoreAmount` + `TotalAmount` all optional in V5 schema; V5 parseVerifyResponse surfaces both amount fields when present); 349 EPS tests; 5 new V5 test cases including the verbatim-typo regression guard (negative case pins that `PaymentReference` corrected spelling does NOT populate the typed field). No fee-calculator.ts touch. Production V5 schema now ready for the BDT-100 smoke per critical-path step [6].
+- **PR #224 docs(decisions)** — `docs/decisions/fee-model.md` (227 lines, 9 sections + decision-recording template). Structured Options 1/2/3/4 comparison surface for operator overnight review. Three operator sharpenings applied before commit: §6 Risk 2 stranded-investment naming, §6 Risk 4 refund-flow critical-path coupling, §8 hybrid Sprint-7-committed-deliverable framing. §7 decision matrix expanded to distinguish "Implementation effort (one-time)" from "Operational complexity (ongoing burden)" as named dimensions.
+- **PR #225 memory** (this commit) — Day 37 EOD closeout + tomorrow's-first-action sequencing + Phase 6/7 plan.
+
+**No code touched in `apps/api/src/domain/payments/fee-calculator.ts`** — HARD STOP holds until Day 38 AM operator decision recorded in decisions.md.
 
 ## ⚠️ The launch gate state — 1 active (today)
 
