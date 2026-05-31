@@ -90,4 +90,92 @@ describe('order-disputed-wrong-method email template', () => {
     expect(bn.templateId).toBe('order_disputed_wrong_method')
     expect(en.templateId).toBe(bn.templateId)
   })
+
+  // ─── XSS defence — interpolated user/tenant values are HTML-escaped ─
+
+  describe('HTML escaping (XSS defence)', () => {
+    it('escapes <script> in buyerName for HTML body; plain text left intact', () => {
+      const out = renderOrderDisputedWrongMethod({
+        ...baseVars,
+        buyerName: '<script>alert(1)</script> Real Name',
+        locale: 'en',
+      })
+      expect(out.html).not.toContain('<script>alert(1)</script>')
+      expect(out.html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;')
+      // text/plain has no HTML interpretation — raw values preserved (kyc-rejected.ts precedent)
+      expect(out.text).toContain('<script>alert(1)</script> Real Name')
+    })
+
+    it('escapes <img onerror> in eventTitle for HTML body', () => {
+      const out = renderOrderDisputedWrongMethod({
+        ...baseVars,
+        eventTitle: '<img src=x onerror=alert(1)>',
+        locale: 'en',
+      })
+      expect(out.html).not.toContain('<img src=x onerror=alert(1)>')
+      expect(out.html).toContain('&lt;img src=x onerror=alert(1)&gt;')
+    })
+
+    it('escapes ampersand + quote chars in buyerName + eventTitle', () => {
+      const out = renderOrderDisputedWrongMethod({
+        ...baseVars,
+        buyerName: `R&D's "Concert" Manager`,
+        eventTitle: `Friday's "Big" Show & After-Party`,
+        locale: 'en',
+      })
+      expect(out.html).toContain('R&amp;D&#39;s &quot;Concert&quot; Manager')
+      expect(out.html).toContain('Friday&#39;s &quot;Big&quot; Show &amp; After-Party')
+    })
+
+    it('rejects javascript: scheme in eventUrl — falls back to # (inert)', () => {
+      const out = renderOrderDisputedWrongMethod({
+        ...baseVars,
+        eventUrl: 'javascript:alert(1)',
+        locale: 'en',
+      })
+      expect(out.html).not.toContain('javascript:alert(1)')
+      expect(out.html).toContain('href="#"')
+    })
+
+    it('rejects data: scheme in eventUrl — falls back to # (inert)', () => {
+      const out = renderOrderDisputedWrongMethod({
+        ...baseVars,
+        eventUrl: 'data:text/html,<script>alert(1)</script>',
+        locale: 'en',
+      })
+      expect(out.html).not.toContain('data:text/html')
+      expect(out.html).toContain('href="#"')
+    })
+
+    it('rejects malformed URL — falls back to # (inert)', () => {
+      const out = renderOrderDisputedWrongMethod({
+        ...baseVars,
+        eventUrl: 'not a url at all',
+        locale: 'en',
+      })
+      expect(out.html).toContain('href="#"')
+    })
+
+    it('accepts https URL — passes through to href', () => {
+      const out = renderOrderDisputedWrongMethod({
+        ...baseVars,
+        eventUrl: 'https://acme.eventpulse.com.bd/summer-sounds-2026?from=email',
+        locale: 'en',
+      })
+      // URL constructor normalises; assert the canonical form appears
+      expect(out.html).toContain(
+        'href="https://acme.eventpulse.com.bd/summer-sounds-2026?from=email"',
+      )
+    })
+
+    it('escapes ampersand in query string of accepted URL', () => {
+      const out = renderOrderDisputedWrongMethod({
+        ...baseVars,
+        eventUrl: 'https://acme.eventpulse.com.bd/?a=1&b=2',
+        locale: 'en',
+      })
+      // URL.toString() round-trips & as &; the safeUrl HTML-escape converts to &amp;
+      expect(out.html).toContain('href="https://acme.eventpulse.com.bd/?a=1&amp;b=2"')
+    })
+  })
 })

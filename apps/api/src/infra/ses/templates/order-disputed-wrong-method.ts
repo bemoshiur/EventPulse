@@ -45,8 +45,46 @@ function formatBdt(paisa: bigint): string {
   return bdt.toLocaleString('en-BD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+/**
+ * Minimal HTML escape — defence-in-depth for interpolated values that
+ * originate from buyer-form input (buyerName) or tenant-controlled
+ * event metadata (eventTitle). Mirrors the kyc-rejected.ts pattern.
+ * Plain-text body is unaffected (no HTML interpretation in plain text).
+ */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+/**
+ * URL validator + escaper for the event-url CTA `href`. Rejects any
+ * scheme other than http/https (blocks `javascript:` + `data:` etc).
+ * On parse failure or disallowed scheme, returns `#` so the link is
+ * inert rather than malicious. Result is also HTML-escaped (for
+ * any oddly-encoded `&` or quote characters in the URL query string).
+ */
+function safeUrl(u: string): string {
+  try {
+    const p = new URL(u)
+    if (p.protocol !== 'http:' && p.protocol !== 'https:') return '#'
+    return escapeHtml(p.toString())
+  } catch {
+    return '#'
+  }
+}
+
 export function renderOrderDisputedWrongMethod(vars: OrderDisputedWrongMethodVars): RenderedEmail {
   const amount = formatBdt(vars.amountPaisa)
+  // HTML-safe values for all interpolations into the html string below.
+  // Plain-text body deliberately uses the unescaped raw values per the
+  // kyc-rejected.ts precedent (text/plain has no HTML interpretation).
+  const safeBuyerName = escapeHtml(vars.buyerName)
+  const safeEventTitle = escapeHtml(vars.eventTitle)
+  const safeEventUrl = safeUrl(vars.eventUrl)
 
   const subject =
     vars.locale === 'bn'
@@ -85,11 +123,11 @@ export function renderOrderDisputedWrongMethod(vars: OrderDisputedWrongMethodVar
         ].join('\n')
 
   const heading = vars.locale === 'bn' ? 'আপনার পেমেন্ট সম্পর্কে' : 'About your recent payment'
-  const greeting = vars.locale === 'bn' ? `নমস্কার ${vars.buyerName},` : `Hi ${vars.buyerName},`
+  const greeting = vars.locale === 'bn' ? `নমস্কার ${safeBuyerName},` : `Hi ${safeBuyerName},`
   const body1 =
     vars.locale === 'bn'
-      ? `আপনি সম্প্রতি Event Pulse-এর মাধ্যমে <strong>${vars.eventTitle}</strong>-এর জন্য নিবন্ধন করার চেষ্টা করেছিলেন। ইভেন্টটি লঞ্চে শুধুমাত্র <strong>bKash</strong> পেমেন্ট গ্রহণ করে; আপনার পেমেন্ট অন্য পদ্ধতিতে করা হয়েছিল, তাই আমরা টিকিটটি দিতে পারিনি।`
-      : `You recently attempted to register for <strong>${vars.eventTitle}</strong> via Event Pulse. The event accepts <strong>bKash</strong> payments only at launch; your payment was made via another method, so we couldn't honor the ticket.`
+      ? `আপনি সম্প্রতি Event Pulse-এর মাধ্যমে <strong>${safeEventTitle}</strong>-এর জন্য নিবন্ধন করার চেষ্টা করেছিলেন। ইভেন্টটি লঞ্চে শুধুমাত্র <strong>bKash</strong> পেমেন্ট গ্রহণ করে; আপনার পেমেন্ট অন্য পদ্ধতিতে করা হয়েছিল, তাই আমরা টিকিটটি দিতে পারিনি।`
+      : `You recently attempted to register for <strong>${safeEventTitle}</strong> via Event Pulse. The event accepts <strong>bKash</strong> payments only at launch; your payment was made via another method, so we couldn't honor the ticket.`
   const refundLabel = vars.locale === 'bn' ? 'রিফান্ড' : 'Refund'
   const refundLine =
     vars.locale === 'bn'
@@ -119,7 +157,7 @@ export function renderOrderDisputedWrongMethod(vars: OrderDisputedWrongMethodVar
         <p style="margin:0;line-height:1.6"><strong>${refundLabel}:</strong> ${refundLine}</p>
       </div>
       <p style="margin:24px 0 8px;line-height:1.6">${ctaHint}</p>
-      <p style="margin:0 0 24px"><a href="${vars.eventUrl}" style="display:inline-block;background:#6c4fe0;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600">${ctaLabel}</a></p>
+      <p style="margin:0 0 24px"><a href="${safeEventUrl}" style="display:inline-block;background:#6c4fe0;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600">${ctaLabel}</a></p>
       <p style="font-size:13px;color:#6b6b7a;margin:0 0 16px;line-height:1.6">${apology}</p>
       <p style="font-size:13px;color:#6b6b7a;margin:0;line-height:1.6">${footer}</p>
       <hr style="border:none;border-top:1px solid #e4e2ee;margin:24px 0">
