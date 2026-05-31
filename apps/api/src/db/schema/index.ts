@@ -934,3 +934,38 @@ export const refunds = pgTable(
     index('idx_refunds_order').on(t.orderId, t.createdAt),
   ],
 )
+
+// ─── email_suppression_list (Day 39 Phase 4) ────────────────────────────
+// Global suppression list per SNS bounce/complaint events. The
+// outbound-send guard consults this table on every SES SendEmail.
+// One row per suppressed email; ON CONFLICT (email) DO UPDATE keeps
+// the latest state per address.
+
+export const emailSuppressionList = pgTable(
+  'email_suppression_list',
+  {
+    email: citext().primaryKey(),
+    /** sha256(lower(email)) — for log/audit references where raw email shouldn't appear per §1.3 R5. */
+    emailHash: text('email_hash').notNull(),
+    /**
+     * AWS classification:
+     *   - 'hard_bounce' / 'complaint' / 'soft_bounce_promoted' = permanent (suppressed_until NULL)
+     *   - 'soft_bounce_temporary' = temporary (suppressed_until set to a future ts)
+     */
+    reason: text().notNull(),
+    /** SNS Message id for traceability back to the source notification. */
+    sourceMessageId: text('source_message_id'),
+    /** NULL for permanent suppressions; future ts for soft-bounce temporal. */
+    suppressedUntil: timestamp('suppressed_until', { withTimezone: true }),
+    notes: text(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'email_suppression_reason_chk',
+      sql`${t.reason} IN ('hard_bounce','complaint','soft_bounce_temporary','soft_bounce_promoted')`,
+    ),
+    index('idx_email_suppression_until').on(t.suppressedUntil),
+  ],
+)
