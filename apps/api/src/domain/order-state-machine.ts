@@ -163,7 +163,17 @@ export const orderStatusSchema = z.enum(ORDER_STATUSES)
  */
 const TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   pending: ['awaiting_payment', 'cancelled', 'failed'],
-  awaiting_payment: ['paid', 'cancelled', 'failed'],
+  // `awaiting_payment → disputed` is the v1.0 single-method-launch
+  // verify-guard path (decisions.md 2026-05-31 "EPS fee-model
+  // structural decision — Option 3 CHOSEN" + Day 38 Phase 2 mechanism
+  // (d)). When EPS Verify returns Success but the buyer used a
+  // non-bKash payment method, the order skips the `paid` intermediate
+  // and goes straight to `disputed` — the platform refuses to honor
+  // the order because the payment method violates the launch's
+  // single-method constraint. The state-machine permits the direct
+  // transition because semantically the order was never honored; it
+  // was disputed at the verify boundary.
+  awaiting_payment: ['paid', 'cancelled', 'failed', 'disputed'],
   paid: ['completed', 'refund_requested', 'disputed'],
   completed: [], // terminal
   cancelled: [], // terminal

@@ -82,6 +82,13 @@ type ReturnPagePath =
   | '/orders/return/cancel'
   | '/orders/return/pending'
   | '/orders/return/error'
+  // v1.0 single-method launch Verify-guard outcome (Day 38 Phase 2
+  // (d), per decisions.md 2026-05-31 Option 3). Buyer paid on EPS's
+  // hosted page using a non-bKash method; platform refused to honor;
+  // refund will be issued manually via EPS merchant dashboard. The
+  // frontend page (Day 28+ scope; ships separately) explains the
+  // bKash-only constraint + the refund timeline.
+  | '/orders/return/wrong-method'
 
 function pageForResult(result: SettlementResult): { path: ReturnPagePath; orderId?: string } {
   switch (result.kind) {
@@ -93,10 +100,14 @@ function pageForResult(result: SettlementResult): { path: ReturnPagePath; orderI
           return { path: '/orders/return/cancel', orderId: result.orderId }
         case 'failed':
           return { path: '/orders/return/fail', orderId: result.orderId }
+        case 'disputed':
+          // v1.0 Verify-guard discovery (non-bKash method). Buyer
+          // sees the bKash-only explanation page + refund timeline.
+          return { path: '/orders/return/wrong-method', orderId: result.orderId }
         default:
-          // Non-settlement transitions (refund, dispute etc.) can't
-          // arise on this code path because settleOrderFromEps maps
-          // EPS status → paid/failed/cancelled only. Defence in depth.
+          // Non-settlement transitions (refund etc.) can't arise on
+          // this code path because settleOrderFromEps maps EPS status
+          // → paid/failed/cancelled/disputed only. Defence in depth.
           return { path: '/orders/return/error' }
       }
     case 'idempotent_noop':
@@ -108,6 +119,12 @@ function pageForResult(result: SettlementResult): { path: ReturnPagePath; orderI
           return { path: '/orders/return/cancel', orderId: result.orderId }
         case 'failed':
           return { path: '/orders/return/fail', orderId: result.orderId }
+        case 'disputed':
+          // Already-disputed order — buyer back-button or re-delivered
+          // webhook. Same page as the freshly-settled dispute path so
+          // the buyer sees a consistent message regardless of which
+          // path got them here.
+          return { path: '/orders/return/wrong-method', orderId: result.orderId }
         case 'refunded':
         case 'reversed':
           // Settled-then-reversed states: treat as fail-shaped page

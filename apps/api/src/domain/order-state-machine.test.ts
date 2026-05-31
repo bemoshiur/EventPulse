@@ -78,6 +78,10 @@ describe('legal transitions per §2.5 + §11.1', () => {
     ['awaiting_payment', 'paid'],
     ['awaiting_payment', 'cancelled'],
     ['awaiting_payment', 'failed'],
+    // v1.0 single-method launch Verify-guard: EPS returned Success but
+    // buyer used non-bKash method → divert to disputed without ever
+    // marking paid. decisions.md 2026-05-31 Option 3 + Day 38 Phase 2 (d).
+    ['awaiting_payment', 'disputed'],
 
     // Post-payment phase
     ['paid', 'completed'],
@@ -201,7 +205,11 @@ describe('TransitionResult shape', () => {
   it('valid result carries allowedNext (no reason needed)', () => {
     const r = validateTransition('awaiting_payment', 'paid')
     expect(r.valid).toBe(true)
-    expect(r.allowedNext).toEqual(['paid', 'cancelled', 'failed'])
+    // `disputed` joined the allowed-next list with the v1.0 single-method
+    // launch Verify-guard (decisions.md 2026-05-31 Option 3 + Day 38
+    // Phase 2 (d)); list ordering matches the source-of-truth in
+    // order-state-machine.ts.
+    expect(r.allowedNext).toEqual(['paid', 'cancelled', 'failed', 'disputed'])
     // `reason` is undefined on success (allowed)
     expect(r.reason).toBeUndefined()
   })

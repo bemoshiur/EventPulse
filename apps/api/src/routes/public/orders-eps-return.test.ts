@@ -165,6 +165,21 @@ describe('happy-path: settlement and inbound path agree', () => {
     expectRedirect(res, '/orders/return/cancel?orderId=ord-happy-cancel')
   })
 
+  it('/success + verified disputed (non-bKash method) → /orders/return/wrong-method', async () => {
+    // v1.0 single-method launch Verify-guard outcome (Day 38 Phase 2 (d)
+    // per decisions.md 2026-05-31 Option 3). Buyer paid via non-bKash
+    // method on EPS's hosted page; platform refused to honor; redirect
+    // to the bKash-only explanation page.
+    vi.mocked(settleOrderFromEps).mockResolvedValueOnce({
+      kind: 'settled',
+      orderId: 'ord-disputed-wrong-method',
+      previousStatus: 'awaiting_payment',
+      newStatus: 'disputed',
+    })
+    const res = await hitReturn('success')
+    expectRedirect(res, '/orders/return/wrong-method?orderId=ord-disputed-wrong-method')
+  })
+
   it('source label flows correctly: /success → settleOrderFromEps called with source=redirect_success', async () => {
     vi.mocked(settleOrderFromEps).mockResolvedValueOnce({
       kind: 'settled',
@@ -191,6 +206,19 @@ describe('already-settled idempotent paths', () => {
     })
     const res = await hitReturn('success')
     expectRedirect(res, '/orders/return/success?orderId=ord-already-paid')
+  })
+
+  it('already disputed (idempotent_noop) → /orders/return/wrong-method (consistent with fresh-dispute path)', async () => {
+    // Re-delivered webhook or buyer back-button for an already-disputed
+    // order — same explanation page as the fresh-dispute path so the
+    // buyer sees a consistent message regardless of arrival path.
+    vi.mocked(settleOrderFromEps).mockResolvedValueOnce({
+      kind: 'idempotent_noop',
+      orderId: 'ord-already-disputed',
+      currentStatus: 'disputed',
+    })
+    const res = await hitReturn('success')
+    expectRedirect(res, '/orders/return/wrong-method?orderId=ord-already-disputed')
   })
 
   it('already failed (idempotent_noop) → /orders/return/fail', async () => {
