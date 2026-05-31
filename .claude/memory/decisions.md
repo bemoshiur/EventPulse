@@ -4,6 +4,51 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-31 · SES production access GRANTED (AWS Support case 177899559700777, ap-southeast-1) — launch-gate blocker RESOLVED with pre-launch commitment to AWS
+
+**Resolves:** the SES out-of-sandbox launch-gate blocker carried since Day 35 Phase 0.5 (`decisions.md` 2026-05-26 "Build-track owns gate-track drafts" — the `docs/ops/ses-out-of-sandbox-request.md` case body draft was the first build-track move on the launch gate).
+
+### Context
+
+AWS Support case **177899559700777** approved 2026-05-31 in region **ap-southeast-1 (Singapore)** — matching the platform's primary region (per CLAUDE.md §1.2). Send-to-full-audience capability is now available; daily sending quota + per-second send rate raised from sandbox defaults.
+
+### Decision
+
+**SES production access is live for ap-southeast-1.** Send-to-any-email-address (not just verified identities) is now permitted from the platform's SES configuration in Singapore. The notification catalogue (§16.3) becomes deliverable end-to-end for real recipients once `MAIL_DRY_RUN=0` flips.
+
+### Consequences
+
+- **Launch gate: 2 → 1 blocker.** Remaining (post-2026-05-30 truth-gate run):
+  1. ~~EPS sandbox credentials~~ ✅ RESOLVED 2026-05-26 + truth-gate run COMPLETE 2026-05-30.
+  2. ~~SES out-of-sandbox approval~~ ✅ **RESOLVED 2026-05-31 (this entry).**
+  3. **EPS fee-model structural decision + production smoke** — the active launch-gate item now (decisions.md 2026-05-30 entry; Options 1/2/3/4 pending operator).
+- **Loose ends (low priority, NOT gating launch):** Counsel docs 4-8 bodies — Buyer Terms remains the load-bearing one for unblocking buyer-form checkout-consent UI per the Day-34 link-footer pattern; rest of counsel follow-ups are forward-progress not gating.
+
+### NEW PRE-LAUNCH COMMITMENT (required before `MAIL_DRY_RUN=0`)
+
+**SNS bounce/complaint → suppression-list wiring MUST exist BEFORE flipping `MAIL_DRY_RUN=0`.** Promised verbatim to AWS in the case reply ("will be fully active before we begin production sending"). This is **a commitment to AWS Support that gates the env flip — not the SES blocker itself**. The SES blocker is resolved; the env flip has a separate gate of our own making.
+
+**Implementation scope (the work that must land before flip):**
+
+- SES bounce + complaint notifications routed via SNS topic(s) — separate topics for bounce vs complaint vs delivery, per AWS-recommended pattern.
+- Webhook handler at `apps/api/src/routes/webhooks/ses-bounce.ts` + `ses-complaint.ts` (CLAUDE.md §10.5 already lists these endpoints as planned). Both endpoints verify SNS signature; enqueue to SQS; worker does the actual processing per R9.
+- Worker writes to a suppression list (Postgres table — schema decision: per-tenant vs global? **Pin: global suppression list at the platform layer.** A bounced/complained address never receives platform email from any tenant; bounce-back-to-tenant is via in-app notification, not by attempting another email. Avoids the cross-tenant reputation-damage risk where one tenant's bad list poisons another tenant's sending.).
+- Outbound email service checks suppression list BEFORE attempting send; if address suppressed → noop + audit log (no SES API call).
+- Hard bounces + complaints suppress permanently; soft bounces use exponential-backoff retry up to a cap before promoting to hard suppression.
+- Notification log (CLAUDE.md §9.10 `notification_log`) status transitions: `bounced` / `failed` per AWS-classified reason.
+
+**Why "before the flip" is non-negotiable:** AWS's published guidance (and our case-reply commitment) treats production sending without bounce/complaint handling as a sending-reputation-management failure. Bounce rates >5% or complaint rates >0.1% can result in SES access being revoked. We promised a working pipeline before producing real send volume; the env flip without this is a credibility breach with AWS and a real reputation risk.
+
+### Cross-references
+
+- `progress.md` "Day 35 SHIPPED 2026-05-26" — the case body draft (PR #196) that enabled the submission.
+- `decisions.md` "Build-track owns gate-track drafts" (2026-05-26) — the pattern that produced the draft; this entry validates the pattern (the gate moved because the build track produced the artefact).
+- CLAUDE.md §10.5 — webhook endpoints `/webhooks/ses/bounce` + `/webhooks/ses/complaint` already documented as planned.
+- CLAUDE.md §9.10 — `notification_log` table for bounce/complaint status persistence.
+- CLAUDE.md §16.1 — SES integration spec (domain identity verified for `eventpulse.com.bd`; bounce/complaint webhooks already in the spec).
+
+---
+
 ## 2026-05-30 · Phase 1.4 EPS sandbox truth-gate — RUN COMPLETE; pure eps_fee observed per mode; fee-model structural decision PENDING
 
 **Resolves (partially):** the Decision N truth-gate execution carried since Day 24-25 (`decisions.md` 2026-05-19 "Decision N — Fee calculator EPS-base rule locked + mandatory Day 24-25 EPS sandbox truth gate"). Resolution is **partial** — the empirical data is captured; the structural fee-model decision the data demands is deliberately deferred to next session per operator direction.

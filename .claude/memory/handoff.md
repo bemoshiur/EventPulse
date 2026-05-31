@@ -1,11 +1,31 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-05-30 — Sprint 4 Day 36; **Phase 1.4 EPS sandbox truth-gate run COMPLETE; fee-model structural decision PENDING for next session.**
+**Last update:** 2026-05-31 — Sprint 4 Day 37; **SES production access GRANTED (AWS case 177899559700777, ap-southeast-1) — launch gate now 1 active blocker (EPS fee-model decision + production smoke).**
 **Driver:** Claude Code (Opus 4.7).
 
-## ⚠️ TL;DR — read first
+## 🆕 LAUNCH-GATE MOVE TODAY (2026-05-31)
 
-- **The truth-gate work that has been carried since Day 24-25 is essentially DONE on the sandbox side.** All 4 §14.2 scenarios paid on EPS sandbox; pure eps_fee derived per mode via the StoreAmount-based mode-agnostic rule; §14.10 Invariant-1 PASS across all 4. Full empirical table is in `decisions.md` 2026-05-30 entry (top).
+**SES out-of-sandbox APPROVED in ap-southeast-1.** AWS Support case **177899559700777**. Send-to-full-audience capability now available. **The launch gate dropped 2 → 1.** Full entry in `decisions.md` 2026-05-31 (top).
+
+- ~~SES out-of-sandbox approval~~ ✅ **RESOLVED 2026-05-31** (this move).
+- **EPS fee-model structural decision + production smoke** — the active launch-gate item now (Options 1/2/3/4 in decisions.md 2026-05-30; operator-only decision).
+
+**Loose ends (low priority, NOT gating launch):** Counsel docs 4-8 bodies — Buyer Terms remains the load-bearing one for unblocking the buyer-form checkout-consent UI per the Day-34 link-footer pattern; rest of counsel follow-ups are forward-progress not gating.
+
+## 🚨 NEW PRE-LAUNCH COMMITMENT (gates the env flip, NOT the SES blocker)
+
+**SNS bounce/complaint → suppression-list wiring MUST exist BEFORE flipping `MAIL_DRY_RUN=0`.** Promised verbatim to AWS in the case reply ("will be fully active before we begin production sending"). The SES blocker is resolved; **the env flip has a separate gate of our own making**. Required scope before flip:
+
+1. SES bounce + complaint SNS topics (separate per type, per AWS pattern).
+2. Webhook handlers at `apps/api/src/routes/webhooks/ses-bounce.ts` + `ses-complaint.ts` (CLAUDE.md §10.5 already lists these as planned). Signature-verify → SQS enqueue → worker process (per R9).
+3. Global suppression list (Postgres) — bounce/complaint → permanent suppression for hard bounces + complaints; exponential-backoff retry cap → promotion to hard for soft bounces.
+4. Outbound email service checks suppression list BEFORE attempting send. Suppressed → noop + audit log (no SES API call). Notification log status: `bounced`/`failed` per AWS-classified reason.
+
+**Why non-negotiable:** AWS revokes SES access on bounce rate >5% or complaint rate >0.1%; we promised a working pipeline before producing real volume.
+
+## ⚠️ TL;DR — Phase 1.4 truth-gate context (carries from 2026-05-30)
+
+- **The truth-gate work that has been carried since Day 24-25 is essentially DONE on the sandbox side.** All 4 §14.2 scenarios paid on EPS sandbox; pure eps_fee derived per mode via the StoreAmount-based mode-agnostic rule; §14.10 Invariant-1 PASS across all 4. Full empirical table is in `decisions.md` 2026-05-30 entry.
 - **Fee-model structural decision PENDING.** EPS empirically charges ≈1.7000% on TotalAmount across both MFS providers tested (bKash + Nagad). Calculator models 2.5% (card-rate). The mismatch is real — Options 1/2/3/4 in decisions.md await operator decision NEXT SESSION. Do NOT touch `apps/api/src/domain/payments/fee-calculator.ts` until that decision lands.
 - **One small follow-up PR ready to ship** (offered, awaiting approval): V5 production response schema extension for the 3 additive fields per EPS V5 integration guide — `EpsTransactionId` (string, optional), `PaymentReferance` (string, optional; NOTE the EPS typo — verbatim spelling), `StoreAmount` (string, optional with fallback to `TotalAmount − subtotal` derivation + clear runtime log line indicating which path is active). This is the final wire-shape work before production smoke; it does not touch fee-calculator.ts.
 
@@ -19,6 +39,7 @@ Single unresolved empirical question for V5 production: **whether V5 publishes `
 
 1. **Fee-model structural decision** (per decisions.md 2026-05-30 entry — Options 1/2/3/4). Operator-only decision; the data is in memory; no auto-derivation. Surface the options + the empirical table at session start; wait for choice; then execute whatever the choice implies (no code action until then).
 2. **Offer the V5-tolerant additive-field follow-up PR** (3 fields, schema-only, ~30 lines + tests). Worth shipping BEFORE the production smoke regardless of which fee-model option lands. Standalone — doesn't depend on the fee-model decision.
+3. **Surface the SNS bounce/complaint suppression-list scope as a buildable Sprint 4 work-item** (decisions.md 2026-05-31). Gates the eventual `MAIL_DRY_RUN=0` flip, not the SES blocker itself. Sequenceable in parallel with #1/#2.
 
 ## ⚠️ Today's deliverables
 
@@ -27,12 +48,15 @@ Single unresolved empirical question for V5 production: **whether V5 publishes `
 - **Phase 1.4 truth-gate Init + Verify run** end-to-end on staging via SSM. Full table archived in decisions.md. mtids: `TXN-TG-A-1780147032693-l18j`, `TXN-TG-B-1780147033108-br29`, `TXN-TG-C-1780147033200-gyng`, `TXN-TG-D-1780147033288-to6r`. SSM invocation IDs for Init: `0bd273b1-e8de-4b97-ab45-513e36a6177f`; Verify: `ffcfacd0-581b-4db5-b17e-d4345c72273a`.
 - **Memory commit** — this commit + decisions.md (Phase 1.4 truth-gate entry, V5 confirmation, fee-model options 1-4) + gotchas.md (null Error fields + StoreAmount-publishing + PaymentReferance-typo) + progress.md (Day 36 SHIPPED).
 
-## ⚠️ The launch gate state — UNCHANGED (still 2 blockers)
+## ⚠️ The launch gate state — 2 → 1 (resolved 2026-05-31)
 
-1. **EPS sandbox credentials** — ✓ PROVISIONED 2026-05-26; truth-gate now executed end-to-end. **Sub-task resolved 2026-05-30; this gate item now wholly about production credentials for cutover, not sandbox.**
-2. **SES out-of-sandbox approval** — ⚠️ DRAFT READY at `docs/ops/ses-out-of-sandbox-request.md` (PR #196). Awaiting Moshiur review + submission. UNCHANGED.
+1. ~~EPS sandbox credentials~~ ✅ RESOLVED 2026-05-26 + truth-gate run COMPLETE 2026-05-30. **Sub-task remaining:** production credentials for cutover, not sandbox.
+2. ~~SES out-of-sandbox approval~~ ✅ **RESOLVED 2026-05-31** (AWS case 177899559700777, ap-southeast-1).
+3. **EPS fee-model structural decision + production smoke** — the **ACTIVE LAUNCH-GATE ITEM** (decisions.md 2026-05-30 Options 1/2/3/4; operator-only).
 
-**No new gate items from today's work.** The fee-model structural decision is a Decision-N closeout sub-item, not a separate gate.
+**Pre-launch commitments (gates env flips, not launch itself):**
+
+- **SNS bounce/complaint suppression-list wiring** (decisions.md 2026-05-31) — gates `MAIL_DRY_RUN=0`. AWS commitment.
 
 ## ⚠️ Empirical findings table — quick recall
 
