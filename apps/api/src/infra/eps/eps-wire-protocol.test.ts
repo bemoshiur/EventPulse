@@ -96,12 +96,101 @@ describe('V5_PRODUCTION_PROTOCOL — response parsing', () => {
     expect(V5_PRODUCTION_PROTOCOL.parseInitResponse(null).kind).toBe('schema-fail')
   })
 
-  it('parseVerifyResponse accepts any object (permissive passthrough); both amount fields null for V5', () => {
+  it('parseVerifyResponse accepts any object (permissive passthrough); both amount fields null when V5 omits them', () => {
+    // Minimal V5 response — Status only, no TotalAmount/StoreAmount.
+    // Parser must surface both as null so callers can fall back to
+    // (TotalAmount − subtotal) derivation rather than crashing.
     const r = V5_PRODUCTION_PROTOCOL.parseVerifyResponse({ Status: 'SUCCESS' })
     expect(r.kind).toBe('success')
     if (r.kind === 'success') {
       expect(r.totalAmountBdt).toBeNull()
       expect(r.storeAmountBdt).toBeNull()
+    }
+  })
+
+  it('parseVerifyResponse surfaces TotalAmount + StoreAmount when V5 publishes them (post-smoke confirmation path)', () => {
+    // Post-production-smoke: if V5 publishes the V4-shaped split fields
+    // (per the V5 integration guide's near-V4 wire shape), parser must
+    // surface them so callers can derive pure eps_fee mode-agnostically
+    // per (TotalAmount − StoreAmount).
+    const r = V5_PRODUCTION_PROTOCOL.parseVerifyResponse({
+      Status: 'SUCCESS',
+      TotalAmount: '1027.56',
+      StoreAmount: '1010.09',
+    })
+    expect(r.kind).toBe('success')
+    if (r.kind === 'success') {
+      expect(r.totalAmountBdt).toBe('1027.56')
+      expect(r.storeAmountBdt).toBe('1010.09')
+    }
+  })
+
+  it('parseVerifyResponse accepts EpsTransactionId (camelCase per V5 guide; distinct from V4 sandbox EPSTransactionId)', () => {
+    // V5 production uses `EpsTransactionId`; V4 sandbox uses
+    // `EPSTransactionId` (different casing — empirically observed in the
+    // Day 36 truth-gate verify response). Schema must accept the V5
+    // spelling explicitly; raw passthrough keeps the field intact for
+    // future reconciliation lookups (Verify accepts either as hash param
+    // per the V5 guide).
+    const r = V5_PRODUCTION_PROTOCOL.parseVerifyResponse({
+      Status: 'SUCCESS',
+      EpsTransactionId: 'EPS-TXN-V5-001',
+    })
+    expect(r.kind).toBe('success')
+    if (r.kind === 'success') {
+      expect((r.raw as Record<string, unknown>)['EpsTransactionId']).toBe('EPS-TXN-V5-001')
+    }
+  })
+
+  it('parseVerifyResponse accepts PaymentReferance — VERBATIM EPS V5 typo (NOT PaymentReference)', () => {
+    // EPS V5 integration guide spells the field `PaymentReferance` (with
+    // two A's). Schema MUST preserve the typo character-for-character;
+    // any future "spelling fix" PR breaks the matcher silently. Pinning
+    // both the accepted spelling AND that the corrected spelling does
+    // NOT populate the schema-typed field.
+    const accepted = V5_PRODUCTION_PROTOCOL.parseVerifyResponse({
+      Status: 'SUCCESS',
+      PaymentReferance: 'REF-V5-001',
+    })
+    expect(accepted.kind).toBe('success')
+    if (accepted.kind === 'success') {
+      expect((accepted.raw as Record<string, unknown>)['PaymentReferance']).toBe('REF-V5-001')
+    }
+    // If EPS ever switched to PaymentReference (correct spelling), it
+    // would land in the passthrough cloud but NOT match the explicit
+    // schema field. This pin protects against a future-maintainer
+    // silently autocorrecting to match the misspelling.
+    const wrongSpelling = V5_PRODUCTION_PROTOCOL.parseVerifyResponse({
+      Status: 'SUCCESS',
+      PaymentReference: 'REF-V5-002',
+    })
+    expect(wrongSpelling.kind).toBe('success')
+    if (wrongSpelling.kind === 'success') {
+      // Raw retains the field as-sent (passthrough), but it is NOT
+      // PaymentReferance.
+      expect((wrongSpelling.raw as Record<string, unknown>)['PaymentReferance']).toBeUndefined()
+    }
+  })
+
+  it('parseVerifyResponse handles a fully-populated V5 envelope with all 3 additive fields + amount split', () => {
+    // The expected V5 production-smoke shape if the wire is V4-like:
+    // TotalAmount + StoreAmount split visible; EpsTransactionId +
+    // PaymentReferance populated. Parser surfaces all amount fields and
+    // raw retains the additive fields for downstream reconciliation.
+    const r = V5_PRODUCTION_PROTOCOL.parseVerifyResponse({
+      Status: 'SUCCESS',
+      TotalAmount: '1027.56',
+      StoreAmount: '1010.09',
+      EpsTransactionId: 'EPS-TXN-V5-FULL',
+      PaymentReferance: 'REF-V5-FULL',
+    })
+    expect(r.kind).toBe('success')
+    if (r.kind === 'success') {
+      expect(r.totalAmountBdt).toBe('1027.56')
+      expect(r.storeAmountBdt).toBe('1010.09')
+      const raw = r.raw as Record<string, unknown>
+      expect(raw['EpsTransactionId']).toBe('EPS-TXN-V5-FULL')
+      expect(raw['PaymentReferance']).toBe('REF-V5-FULL')
     }
   })
 })
