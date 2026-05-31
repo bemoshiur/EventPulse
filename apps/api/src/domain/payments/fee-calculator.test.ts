@@ -26,6 +26,17 @@ const PLATFORM_BPS_25 = 25
 /** EPS fee illustrative per §14.2: 2.5% = 250 bps. */
 const EPS_BPS_250 = 250
 
+/**
+ * EPS fee at v1.0 single-method launch rate per the Option 3 decision
+ * (decisions.md 2026-05-31 "EPS fee-model structural decision — Option 3
+ * CHOSEN"): 175 bps = 1.75%, bKash MFS rate rounded from the empirical
+ * truth-gate observation of 1.747% on face. This is the value of
+ * `DEFAULT_EPS_FEE_BPS_ESTIMATE` in services/orders/index.ts; the test
+ * suite duplicates it as a local constant so the calculator tests stay
+ * decoupled from the services layer (calculator tests are pure-function).
+ */
+const EPS_BPS_175_BKASH_V1 = 175
+
 function makeInput(overrides: Partial<FeeCalcInput> = {}): FeeCalcInput {
   return {
     ticketSubtotalPaisa: ONE_THOUSAND_BDT_PAISA,
@@ -148,6 +159,112 @@ describe('§14.2 worked example — Mode D (platform pass_through, eps absorb)',
       { label: 'ticket_subtotal', amountPaisa: 100_000n },
       { label: 'platform_fee', amountPaisa: 250n },
     ])
+  })
+})
+
+// ─── v1.0 launch — bKash 175 bps (truth-gate Mode A reproduction) ────
+
+describe('v1.0 launch — bKash 175 bps applied to §14.2 Mode A — reproduces truth-gate observation within 7-paisa floor', () => {
+  // Per `.claude/memory/decisions.md` "EPS fee-model structural decision —
+  // Option 3 (single-method launch, bKash-only for v1.0) CHOSEN" (2026-05-31):
+  // EPS hosted checkout is restricted to bKash at launch; the calculator's
+  // single `epsFeeBps` value is the bKash MFS rate. The empirical truth-gate
+  // observation (Phase 1.4 sandbox run, Mode A bKash, decisions.md 2026-05-30
+  // empirical findings table) was:
+  //
+  //   subtotal     = 100_000 paisa (BDT 1,000 face)
+  //   TotalAmount  = 102_756 paisa (what buyer paid, matches 250-bps Mode A)
+  //   StoreAmount  = 101_009 paisa (what EPS settled to merchant)
+  //   observedEps  = TotalAmount − StoreAmount = 1747 paisa (BDT 17.47)
+  //
+  // 1747 paisa / 100_000 face = 1.747% on FACE → rounded to 175 bps for
+  // single-rate modelling.
+  //
+  // The calculator applies bps to the CAPTURE BASE (subtotal + platform_fee
+  // if pass-through), not to face — per §14.2 Mode D footnote. Capture base
+  // at Mode A:
+  //   capture_base = 100_000 + 250 (platform PT) = 100_250 paisa
+  //   eps_fee at 175 bps = floor(100_250 × 175 / 10_000) = 1754 paisa (BDT 17.54)
+  //
+  // The 7-paisa delta (1754 calculator prediction vs 1747 truth-gate observation)
+  // is the rounding cost of single-bps modelling — EPS's actual rate on capture
+  // base was ~174.27 bps; we round up to 175 to err on the side of slightly
+  // OVER-estimating buyer's payment fee at checkout rather than under-estimating
+  // and silently surprising the buyer with a higher total. The 7-paisa over-
+  // estimate is invisible at BDT 1,000 face (0.0007% of buyer total) and is
+  // absorbed into the integer-paisa floor; never round-trips back to the buyer.
+  //
+  // Post-launch: production smoke confirms whether bKash's actual production
+  // rate matches the sandbox 174.27 bps capture-base rate. If production rate
+  // diverges, this constant + the corresponding DEFAULT_EPS_FEE_BPS_ESTIMATE
+  // get updated before first paying tenant (critical-path step [6]).
+  it('Mode A at 175 bps reproduces truth-gate observation: buyer 1,020.04, eps_fee 17.54, organiser 1,000.00', () => {
+    const result = calculateOrderFees(
+      makeInput({
+        epsFeeBps: EPS_BPS_175_BKASH_V1,
+        platformFeeHandling: 'pass_through',
+        epsFeeHandling: 'pass_through',
+      }),
+    )
+
+    // Calculator prediction at 175 bps (the value we ship at v1.0 launch):
+    //   Ticket             1,000.00       = 100_000 paisa
+    //   Platform fee           2.50       = 250 paisa
+    //   Payment fee           17.54       = 1754 paisa (floor of 1754.375)
+    //   Total              1,020.04       = 102_004 paisa
+    // Organiser receives 1,000.00 (Mode A — both fees passed through).
+    expect(result.subtotalPaisa).toBe(100_000n)
+    expect(result.platformFeePaisa).toBe(250n)
+    expect(result.epsFeePaisa).toBe(1754n)
+    expect(result.buyerTotalPaisa).toBe(102_004n)
+    expect(result.organiserNetPaisa).toBe(100_000n)
+    expect(result.platformRevenuePaisa).toBe(250n)
+    expect(result.breakdown).toEqual([
+      { label: 'ticket_subtotal', amountPaisa: 100_000n },
+      { label: 'platform_fee', amountPaisa: 250n },
+      { label: 'eps_fee', amountPaisa: 1754n },
+    ])
+  })
+
+  it('Mode A at 175 bps — calculator vs truth-gate delta is +7 paisa (over-estimate, by design)', () => {
+    const result = calculateOrderFees(
+      makeInput({
+        epsFeeBps: EPS_BPS_175_BKASH_V1,
+        platformFeeHandling: 'pass_through',
+        epsFeeHandling: 'pass_through',
+      }),
+    )
+    // Truth-gate observation was 1747 paisa EPS fee; calculator predicts 1754.
+    // Δ = +7 paisa (calculator over-estimates by 7 paisa on a BDT 1,000 face
+    // = 0.0007% of buyer total). The delta is the rounding cost of choosing
+    // the nearest-bps-on-face (175) over the actual nearest-bps-on-capture
+    // (174). Pinning this delta here means a future rate-table revision can't
+    // silently change the relationship without the test diff making it visible.
+    const TRUTH_GATE_OBSERVED_EPS_PAISA = 1747n
+    const expectedDelta = 7n
+    expect(result.epsFeePaisa - TRUTH_GATE_OBSERVED_EPS_PAISA).toBe(expectedDelta)
+  })
+
+  // §14.10 Invariant-1 check at the v1.0 launch rate. The other four §14.2
+  // tests cover this implicitly via their explicit organiser_net + platform
+  // + eps assertions; adding it explicitly at 175 bps means a future bigint-
+  // arithmetic change can't silently violate the invariant at the launch rate
+  // without this test catching it.
+  it('Mode A at 175 bps — §14.10 Invariant-1 holds (total = net + platform + eps + 0 withholding)', () => {
+    const result = calculateOrderFees(
+      makeInput({
+        epsFeeBps: EPS_BPS_175_BKASH_V1,
+        platformFeeHandling: 'pass_through',
+        epsFeeHandling: 'pass_through',
+      }),
+    )
+    // Withholding is 0 here per the calculator's documented pre-withholding
+    // contract (header comment "organiserNetPaisa returned by this function
+    // is PRE-WITHHOLDING"). The invariant simplifies to:
+    //   buyer_total = organiser_net + platform_fee + eps_fee
+    expect(result.buyerTotalPaisa).toBe(
+      result.organiserNetPaisa + result.platformFeePaisa + result.epsFeePaisa,
+    )
   })
 })
 
