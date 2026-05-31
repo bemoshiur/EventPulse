@@ -23,12 +23,12 @@ This is a **structural** decision because no single-value `epsFeeBps` parameter 
 
 ### Data we HAVE (truth-gate run, 2026-05-30)
 
-| Mode | EPS Status | FinancialEntity | TotalAmount paisa | StoreAmount paisa | observed eps_fee | EPS rate on Total | Data trust |
-|:---:|:---:|:---:|---:|---:|---:|:---:|:---:|
-| A (PT, PT) | **Success** | bKash | 102 756 | 101 009 | 1 747 | 1.6997% | **CLEAN** |
-| B (AB, AB) | Success | bKash | 100 000 | 98 300 | 1 700 | 1.7000% | clean (AB mode — buyer pays only face; least informative) |
-| C (AB, PT) | **Fail** | bKash | 102 500 | 100 757 | 1 743 | 1.7005% | **PARTIAL** — EPS populated fee fields but txn marked Fail |
-| D (PT, AB) | **Fail** | Nagad | 100 250 | 98 546 | 1 704 | 1.7000% | **PARTIAL** — same caveat |
+|    Mode    | EPS Status  | FinancialEntity | TotalAmount paisa | StoreAmount paisa | observed eps_fee | EPS rate on Total |                         Data trust                         |
+| :--------: | :---------: | :-------------: | ----------------: | ----------------: | ---------------: | :---------------: | :--------------------------------------------------------: |
+| A (PT, PT) | **Success** |      bKash      |           102 756 |           101 009 |            1 747 |      1.6997%      |                         **CLEAN**                          |
+| B (AB, AB) |   Success   |      bKash      |           100 000 |            98 300 |            1 700 |      1.7000%      | clean (AB mode — buyer pays only face; least informative)  |
+| C (AB, PT) |  **Fail**   |      bKash      |           102 500 |           100 757 |            1 743 |      1.7005%      | **PARTIAL** — EPS populated fee fields but txn marked Fail |
+| D (PT, AB) |  **Fail**   |      Nagad      |           100 250 |            98 546 |            1 704 |      1.7000%      |                 **PARTIAL** — same caveat                  |
 
 §14.10 Invariant-1 PASS across all 4. **The only fully clean fee-rate data point is Mode A bKash at 1.747% MFS rate** (Mode A is the most informative — pass-through-both means the buyer sees the EPS fee line directly).
 
@@ -36,7 +36,7 @@ This is a **structural** decision because no single-value `epsFeeBps` parameter 
 
 - **No card-rate observation** (no buyer paid via card in the truth-gate run). The 2.5% the calculator models is the documented card rate but is not empirically confirmed.
 - **No bank-transfer (BEFTN-inbound) observation** — if EPS supports any such path.
-- **No Rocket / Upay observation** — both MFS methods listed in `tenant_payout_accounts.account_type` enum but neither has run as a *payment* method through EPS in the truth-gate.
+- **No Rocket / Upay observation** — both MFS methods listed in `tenant_payout_accounts.account_type` enum but neither has run as a _payment_ method through EPS in the truth-gate.
 - **No multi-transaction rate-consistency observation** — single-transaction-per-method sample size means we don't know if EPS's rate varies by amount tier, transaction velocity, time-of-day, or merchant volume.
 - **No production-environment observation** — sandbox vs production rate cards could differ (rare but possible; production smoke per critical-path step [6] confirms).
 
@@ -105,7 +105,7 @@ Keep the calculator's `epsFeeBps` as a single number. **Tune it conservatively**
 
 ### Mechanism
 
-Restrict the EPS payment-method options offered to buyers to a single method for the launch period. Calculator's single `epsFeeBps` is then *exactly* that method's rate (empirically confirmed for bKash via the truth-gate; for card the rate is unconfirmed and a card-only launch requires its own truth-gate). All buyers transact via the chosen method; rate prediction matches reality exactly.
+Restrict the EPS payment-method options offered to buyers to a single method for the launch period. Calculator's single `epsFeeBps` is then _exactly_ that method's rate (empirically confirmed for bKash via the truth-gate; for card the rate is unconfirmed and a card-only launch requires its own truth-gate). All buyers transact via the chosen method; rate prediction matches reality exactly.
 
 ### What changes
 
@@ -141,11 +141,11 @@ This sidesteps having to model per-method rate cards entirely. It matches realit
 - `apps/api/src/domain/payments/fee-calculator.ts`: minor — calculator output for `epsFeePaisa` is explicitly labelled "estimate" in the function's contract. The single-rate value is kept as the estimate basis. The unit tests retain their existing assertions but the function's responsibility narrows from "this is the EPS fee" to "this is the EPS fee estimate for display."
 - `apps/api/src/domain/payments/verify-order-callback.ts` (or wherever Verify-response handling lives): new step that reads `StoreAmount` from the V4/V5 response (per PR #219 + #223 schema support) and computes `actual_eps_fee_paisa = TotalAmount − StoreAmount`. **Updates the `orders` row** with this actual value, preserving the snapshotted estimate alongside for audit.
 - New column required on `orders`: `eps_fee_estimated_paisa bigint NOT NULL` (snapshotted at order creation, what calculator predicted) + `eps_fee_actual_paisa bigint NULL` (filled in post-Verify; null until Verify completes). Migration adds the column; `eps_fee_paisa` either stays as a settlement-time computed view OR becomes the actual value.
-- §14.10 Invariant-1 enforcement is per-row using the *actual* fee post-Verify; the *estimated* fee value is for display/audit only.
+- §14.10 Invariant-1 enforcement is per-row using the _actual_ fee post-Verify; the _estimated_ fee value is for display/audit only.
 - Buyer-facing checkout: shows the estimate up-front ("Estimated payment fee: BDT 17.47") with a small disclosure ("actual fee determined by your payment method"). On the post-payment confirmation page, shows the actual fee.
 - Organiser-facing fee display: real-money columns read from `eps_fee_actual_paisa`; the estimate is shown as a reconciliation column or in a tooltip explaining the variance.
 - Settlement engine (Phase 2 Sprint 7) is materially simpler — no variance reconciliation step needed; the actual EPS fee was already recorded at Verify time.
-- V5 production fallback path matters here: if V5 production *does not* publish StoreAmount, the estimate becomes the actual (or a Day-N production-smoke surfaces a different reconciliation strategy). Per PR #223, the V5 schema accepts StoreAmount optionally with documented fallback to `(TotalAmount − subtotal)` derivation; the post-Verify update step must handle both cases gracefully.
+- V5 production fallback path matters here: if V5 production _does not_ publish StoreAmount, the estimate becomes the actual (or a Day-N production-smoke surfaces a different reconciliation strategy). Per PR #223, the V5 schema accepts StoreAmount optionally with documented fallback to `(TotalAmount − subtotal)` derivation; the post-Verify update step must handle both cases gracefully.
 
 ### Risks
 
@@ -163,17 +163,17 @@ This sidesteps having to model per-method rate cards entirely. It matches realit
 
 ## 7. Decision matrix — at-a-glance
 
-| Dimension | Option 1 Per-method | Option 2 Single-rate-absorb | Option 3 Single-method | Option 4 StoreAmount-source |
-|---|:---:|:---:|:---:|:---:|
-| Matches EPS reality | ✅ | ❌ (variance absorbed) | ✅ for chosen method | ✅ |
-| Honest with buyer | ✅ | ⚠️ (variance hidden) | ✅ | ✅ |
-| Robust to EPS rate changes | ❌ (catalogue stale) | ⚠️ (must retune) | ⚠️ (per method) | ✅ |
-| Robust to data scarcity | ❌ (needs catalogue data) | ✅ | ⚠️ (single method confirmed) | ✅ |
-| Implementation effort (one-time) | High (~1 week) | Trivial (~30 min) | Low (~half day) | Medium (~2-3 days) |
+| Dimension                               |                                           Option 1 Per-method                                           |                                        Option 2 Single-rate-absorb                                        |                                                                Option 3 Single-method                                                                |                                          Option 4 StoreAmount-source                                          |
+| --------------------------------------- | :-----------------------------------------------------------------------------------------------------: | :-------------------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------------------------------------------------------------: | :-----------------------------------------------------------------------------------------------------------: |
+| Matches EPS reality                     |                                                   ✅                                                    |                                          ❌ (variance absorbed)                                           |                                                                 ✅ for chosen method                                                                 |                                                      ✅                                                       |
+| Honest with buyer                       |                                                   ✅                                                    |                                           ⚠️ (variance hidden)                                            |                                                                          ✅                                                                          |                                                      ✅                                                       |
+| Robust to EPS rate changes              |                                          ❌ (catalogue stale)                                           |                                             ⚠️ (must retune)                                              |                                                                   ⚠️ (per method)                                                                    |                                                      ✅                                                       |
+| Robust to data scarcity                 |                                        ❌ (needs catalogue data)                                        |                                                    ✅                                                     |                                                             ⚠️ (single method confirmed)                                                             |                                                      ✅                                                       |
+| Implementation effort (one-time)        |                                             High (~1 week)                                              |                                             Trivial (~30 min)                                             |                                                                   Low (~half day)                                                                    |                                              Medium (~2-3 days)                                               |
 | Operational complexity (ongoing burden) | HIGH — catalogue freshness; every new EPS method/rate change = catalogue update or platform mis-charges | MEDIUM — settlement-batch variance reconciliation each cycle; platform absorbs/captures variance silently | MEDIUM — single-method monitoring; lift-pressure as commercial profile widens; commercial-restriction trade-off lives forever until Option 1/4 lands | LOW — post-Verify update path is fully automated; EPS rate shifts reflect automatically with zero code change |
-| Suits June 10 launch | ❌ Low | ✅ High | ⚠️ Depends on tenant | ✅ Medium-High (subject to smoke) |
-| Carries to Phase 2 | ✅ | ⚠️ (likely replaces) | ❌ (must lift) | ✅ |
-| §14.10 invariant complexity | High | Low | Low | Medium |
+| Suits June 10 launch                    |                                                 ❌ Low                                                  |                                                  ✅ High                                                  |                                                                 ⚠️ Depends on tenant                                                                 |                                       ✅ Medium-High (subject to smoke)                                       |
+| Carries to Phase 2                      |                                                   ✅                                                    |                                           ⚠️ (likely replaces)                                            |                                                                    ❌ (must lift)                                                                    |                                                      ✅                                                       |
+| §14.10 invariant complexity             |                                                  High                                                   |                                                    Low                                                    |                                                                         Low                                                                          |                                                    Medium                                                     |
 
 ---
 
@@ -210,11 +210,13 @@ When the operator decides, append a new top entry to `.claude/memory/decisions.m
 **Decision:** [Option N — short label]. [3-5 sentence rationale citing this document's section.]
 
 **Consequences:**
+
 - HARD STOP on `apps/api/src/domain/payments/fee-calculator.ts` lifts. Implementation goes through Phase 6 (small focused PR; STOP-ASK before money-math PR lands).
 - [Specific implementation steps per the chosen option's "What changes" section.]
 - [Risk mitigations adopted from the chosen option's "Risks" section.]
 
 **Cross-references:**
+
 - `docs/decisions/fee-model.md` (this document).
 - `decisions.md` 2026-05-30 (Phase 1.4 truth-gate empirical findings).
 - `decisions.md` 2026-05-31 Day 37 (audit reconciliation + June 10 target).
@@ -224,4 +226,4 @@ Then trigger the next session with the operator decision recorded, and Claude Co
 
 ---
 
-*Generated 2026-05-31 EOD (Day 37) per Day 37 prompt Phase 4. No decision made in this generation; surface only. STAGING_PAYMENT_BLOCK=1 enforcing throughout.*
+_Generated 2026-05-31 EOD (Day 37) per Day 37 prompt Phase 4. No decision made in this generation; surface only. STAGING_PAYMENT_BLOCK=1 enforcing throughout._
