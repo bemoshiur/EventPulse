@@ -21,11 +21,25 @@
 
 import { Hono } from 'hono'
 
-import { verifySnsSignature, type SnsMessage } from '../../infra/sns/verify-signature.js'
+import {
+  isSafeSnsActionUrl,
+  verifySnsSignature,
+  type SnsMessage,
+} from '../../infra/sns/verify-signature.js'
 import { logger } from '../../lib/logger.js'
 import { hashEmail, upsertSuppression } from '../../services/notifications/suppression-list.js'
 
 export const sesComplaintRoutes = new Hono()
+
+/** Mirror of allowedBounceTopicArns from ses-bounce.ts; env var is the complaint-topic variant. */
+function allowedComplaintTopicArns(): string[] {
+  const raw = process.env['SES_COMPLAINT_TOPIC_ARNS']
+  if (!raw) return []
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+}
 
 interface SesComplaintMessage {
   notificationType: 'Complaint'
@@ -50,7 +64,9 @@ sesComplaintRoutes.post('/', async (c) => {
     return c.json({ ok: true, ignored: 'malformed' })
   }
 
-  const verify = await verifySnsSignature(body)
+  const verify = await verifySnsSignature(body, undefined, {
+    allowedTopicArns: allowedComplaintTopicArns(),
+  })
   if (verify.kind !== 'verified') {
     logger.warn(
       { webhook: 'ses-complaint', verify: verify.kind, messageId: body.MessageId },
@@ -60,6 +76,13 @@ sesComplaintRoutes.post('/', async (c) => {
   }
 
   if (body.Type === 'SubscriptionConfirmation' && body.SubscribeURL) {
+    if (!isSafeSnsActionUrl(body.SubscribeURL)) {
+      logger.warn(
+        { webhook: 'ses-complaint', subscribeUrl: body.SubscribeURL },
+        'webhook.sns.subscribe_url_unsafe',
+      )
+      return c.json({ ok: true, ignored: 'subscribe_url_unsafe' })
+    }
     logger.info(
       { webhook: 'ses-complaint', topicArn: body.TopicArn },
       'webhook.sns.subscription_confirm',
@@ -73,6 +96,13 @@ sesComplaintRoutes.post('/', async (c) => {
   }
 
   if (body.Type === 'UnsubscribeConfirmation' && body.UnsubscribeURL) {
+    if (!isSafeSnsActionUrl(body.UnsubscribeURL)) {
+      logger.warn(
+        { webhook: 'ses-complaint', unsubscribeUrl: body.UnsubscribeURL },
+        'webhook.sns.unsubscribe_url_unsafe',
+      )
+      return c.json({ ok: true, ignored: 'unsubscribe_url_unsafe' })
+    }
     logger.info(
       { webhook: 'ses-complaint', topicArn: body.TopicArn },
       'webhook.sns.unsubscribe_confirm',

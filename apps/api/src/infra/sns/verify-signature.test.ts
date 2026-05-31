@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   _resetSnsCertCache,
+  isSafeSnsActionUrl,
   verifySnsSignature,
   type SnsMessage,
   type VerifyDeps,
@@ -75,7 +76,10 @@ function baseNotification(overrides: Partial<SnsMessage> = {}): SnsMessage {
     MessageId: 'msg-123',
     TopicArn: 'arn:aws:sns:ap-southeast-1:123:test',
     Message: '{}',
-    Timestamp: '2026-05-31T12:00:00.000Z',
+    // Default Timestamp is "now"-ish at fixture-build time so the
+    // freshness check passes; tests that exercise the freshness check
+    // explicitly override.
+    Timestamp: new Date().toISOString(),
     SignatureVersion: '2',
     Signature: 'AAAA',
     SigningCertURL: 'https://sns.ap-southeast-1.amazonaws.com/SimpleNotificationService.pem',
@@ -86,6 +90,8 @@ function baseNotification(overrides: Partial<SnsMessage> = {}): SnsMessage {
 const stubFetchText: VerifyDeps['fetchText'] = async (url: string): Promise<string> => {
   throw new Error(`unexpected fetch: ${url}`)
 }
+
+const allowAnyTopic = (msg: SnsMessage) => [msg.TopicArn]
 
 describe('verifySnsSignature — security boundary checks', () => {
   afterEach(() => _resetSnsCertCache())
@@ -280,6 +286,120 @@ b8DCEAvuG6dwL2cYBkbU
     expect(parseOk || out.kind === 'cert_fetch_failed').toBe(true)
   })
 
+  // ─── Trust-source check (TopicArn allowlist) ────────────────────
+
+  describe('TopicArn allowlist (trust-source check)', () => {
+    it('rejects messages from any topic when allowedTopicArns is empty (fail-closed)', async () => {
+      const out = await verifySnsSignature(
+        baseNotification(),
+        { fetchText: stubFetchText },
+        {
+          allowedTopicArns: [],
+        },
+      )
+      expect(out.kind).toBe('topic_not_allowed')
+      if (out.kind === 'topic_not_allowed') {
+        expect(out.got).toBe('arn:aws:sns:ap-southeast-1:123:test')
+      }
+    })
+
+    it('rejects messages from a topic NOT in the allowlist', async () => {
+      const out = await verifySnsSignature(
+        baseNotification(),
+        { fetchText: stubFetchText },
+        { allowedTopicArns: ['arn:aws:sns:ap-southeast-1:999:other'] },
+      )
+      expect(out.kind).toBe('topic_not_allowed')
+    })
+
+    it('CRITICAL: SubscriptionConfirmation from a non-allowlisted topic is rejected (auto-confirm onboarding-vector blocked)', async () => {
+      // Without this check, an attacker creates a topic in their own
+      // AWS account + sends a legitimately-signed SubscriptionConfirmation
+      // to our endpoint. Without TopicArn allowlist, auto-confirm
+      // would onboard their topic + then they could spray suppression
+      // entries. The allowlist runs BEFORE SubscriptionConfirmation
+      // handling so this vector is closed.
+      const out = await verifySnsSignature(
+        baseNotification({
+          Type: 'SubscriptionConfirmation',
+          Token: 'tok',
+          SubscribeURL: 'https://sns.ap-southeast-1.amazonaws.com/sub/123',
+          TopicArn: 'arn:aws:sns:ap-southeast-1:999:attacker-topic',
+        }),
+        { fetchText: stubFetchText },
+        { allowedTopicArns: ['arn:aws:sns:ap-southeast-1:123:test'] },
+      )
+      expect(out.kind).toBe('topic_not_allowed')
+    })
+
+    it('allows messages from a topic IN the allowlist (verifier proceeds past trust check)', async () => {
+      const out = await verifySnsSignature(
+        baseNotification(),
+        { fetchText: stubFetchText },
+        { allowedTopicArns: allowAnyTopic(baseNotification()) },
+      )
+      // Proceeds → eventually fails at cert fetch (stub throws); the
+      // important thing: it gets past the topic check.
+      expect(out.kind).not.toBe('topic_not_allowed')
+    })
+
+    it('skips the trust-source check when allowedTopicArns is undefined (back-compat)', async () => {
+      const out = await verifySnsSignature(baseNotification(), { fetchText: stubFetchText })
+      // No topic check → proceeds; later fails at cert fetch.
+      expect(out.kind).not.toBe('topic_not_allowed')
+    })
+  })
+
+  // ─── Timestamp freshness ────────────────────────────────────────
+
+  describe('Timestamp freshness (replay defence)', () => {
+    it('rejects a Timestamp older than 1 hour (replay)', async () => {
+      // Use a Timestamp from 2 hours ago + a stubbed nowMs anchored
+      // to "now" for deterministic skew assertion.
+      const now = Date.now()
+      const twoHoursAgo = new Date(now - 2 * 60 * 60 * 1000).toISOString()
+      const out = await verifySnsSignature(baseNotification({ Timestamp: twoHoursAgo }), {
+        fetchText: stubFetchText,
+        nowMs: () => now,
+      })
+      expect(out.kind).toBe('bad_timestamp')
+      if (out.kind === 'bad_timestamp') {
+        expect(out.skewSeconds).toBeGreaterThanOrEqual(60 * 60)
+      }
+    })
+
+    it('rejects a Timestamp more than 1 hour in the future (clock-skew defence)', async () => {
+      const now = Date.now()
+      const twoHoursAhead = new Date(now + 2 * 60 * 60 * 1000).toISOString()
+      const out = await verifySnsSignature(baseNotification({ Timestamp: twoHoursAhead }), {
+        fetchText: stubFetchText,
+        nowMs: () => now,
+      })
+      expect(out.kind).toBe('bad_timestamp')
+    })
+
+    it('accepts a Timestamp within 1 hour of now', async () => {
+      const now = Date.now()
+      const tenMinutesAgo = new Date(now - 10 * 60 * 1000).toISOString()
+      const out = await verifySnsSignature(baseNotification({ Timestamp: tenMinutesAgo }), {
+        fetchText: stubFetchText,
+        nowMs: () => now,
+      })
+      expect(out.kind).not.toBe('bad_timestamp')
+    })
+
+    it('rejects a malformed Timestamp', async () => {
+      const out = await verifySnsSignature(
+        baseNotification({ Timestamp: 'not a real timestamp' }),
+        { fetchText: stubFetchText },
+      )
+      expect(out.kind).toBe('malformed_message')
+      if (out.kind === 'malformed_message') {
+        expect(out.reason).toContain('unparseable Timestamp')
+      }
+    })
+  })
+
   it('positively verifies a self-signed valid PEM (cert parses; signature mismatched is expected)', async () => {
     // Sanity check that fetchCert path with a parseable PEM reaches
     // the verify step. The base64 'AAAA' signature is invalid so
@@ -326,3 +446,42 @@ djQXR/iBy9qN4xKBOdONHe0pjQbiSjEzG0nZZ1d3lE5/CPMogQ==
 }
 
 void createSign // unused export marker (kept for future signed-canonical-string test)
+
+// ─── isSafeSnsActionUrl ─────────────────────────────────────────────
+// Defence-in-depth URL validation for SubscribeURL / UnsubscribeURL.
+// Same allowlist semantics as the SigningCertURL host check; exported
+// for use by the webhook handlers before fetching those URLs.
+
+describe('isSafeSnsActionUrl', () => {
+  it('accepts canonical sns.<region>.amazonaws.com https URL', () => {
+    expect(
+      isSafeSnsActionUrl(
+        'https://sns.ap-southeast-1.amazonaws.com/?Action=ConfirmSubscription&TopicArn=...',
+      ),
+    ).toBe(true)
+  })
+
+  it('rejects http (non-https)', () => {
+    expect(isSafeSnsActionUrl('http://sns.ap-southeast-1.amazonaws.com/?Action=...')).toBe(false)
+  })
+
+  it('rejects attacker-domain lookalike', () => {
+    expect(isSafeSnsActionUrl('https://sns.evil.amazonaws.com.attacker.com/')).toBe(false)
+  })
+
+  it('rejects subdomain-prefix-attack (sns-evil.region.amazonaws.com)', () => {
+    expect(isSafeSnsActionUrl('https://sns-evil.ap-southeast-1.amazonaws.com/')).toBe(false)
+  })
+
+  it('rejects amazonaws.com.attacker.com suffix attack', () => {
+    expect(isSafeSnsActionUrl('https://sns.amazonaws.com.attacker.com/')).toBe(false)
+  })
+
+  it('rejects malformed URL', () => {
+    expect(isSafeSnsActionUrl('not a url at all')).toBe(false)
+  })
+
+  it('rejects file:// scheme', () => {
+    expect(isSafeSnsActionUrl('file:///etc/passwd')).toBe(false)
+  })
+})

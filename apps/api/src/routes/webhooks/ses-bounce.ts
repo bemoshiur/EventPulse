@@ -42,7 +42,11 @@
 
 import { Hono } from 'hono'
 
-import { verifySnsSignature, type SnsMessage } from '../../infra/sns/verify-signature.js'
+import {
+  isSafeSnsActionUrl,
+  verifySnsSignature,
+  type SnsMessage,
+} from '../../infra/sns/verify-signature.js'
 import { logger } from '../../lib/logger.js'
 import {
   hashEmail,
@@ -51,6 +55,22 @@ import {
 } from '../../services/notifications/suppression-list.js'
 
 export const sesBounceRoutes = new Hono()
+
+/**
+ * Allowlist of expected bounce-topic ARNs sourced from env. The env
+ * var is comma-separated to support multiple environments (staging +
+ * prod) sharing the same code path while pointing at distinct topics.
+ * When unset, returns an empty array — verifySnsSignature then rejects
+ * ALL messages (fail-closed before AWS-side wiring lands).
+ */
+function allowedBounceTopicArns(): string[] {
+  const raw = process.env['SES_BOUNCE_TOPIC_ARNS']
+  if (!raw) return []
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+}
 
 interface SesBounceMessage {
   notificationType: 'Bounce'
@@ -90,8 +110,12 @@ sesBounceRoutes.post('/', async (c) => {
     return c.json({ ok: true, ignored: 'malformed' })
   }
 
-  // Signature verification — the entire auth boundary.
-  const verify = await verifySnsSignature(body)
+  // Signature verification + topic-allowlist + freshness — the entire
+  // auth boundary. TopicArn allowlist runs BEFORE SubscriptionConfirmation
+  // auto-confirm so attacker topics can't onboard via this endpoint.
+  const verify = await verifySnsSignature(body, undefined, {
+    allowedTopicArns: allowedBounceTopicArns(),
+  })
   if (verify.kind !== 'verified') {
     logger.warn(
       { webhook: 'ses-bounce', verify: verify.kind, messageId: body.MessageId },
@@ -100,8 +124,18 @@ sesBounceRoutes.post('/', async (c) => {
     return c.json({ ok: true, ignored: 'signature_failed' })
   }
 
-  // SubscriptionConfirmation — confirm.
+  // SubscriptionConfirmation — confirm. Defence-in-depth: validate
+  // SubscribeURL is an sns.<region>.amazonaws.com URL before fetching.
+  // The TopicArn check above is the load-bearing gate; this is the
+  // belt-and-suspenders against SSRF.
   if (body.Type === 'SubscriptionConfirmation' && body.SubscribeURL) {
+    if (!isSafeSnsActionUrl(body.SubscribeURL)) {
+      logger.warn(
+        { webhook: 'ses-bounce', subscribeUrl: body.SubscribeURL },
+        'webhook.sns.subscribe_url_unsafe',
+      )
+      return c.json({ ok: true, ignored: 'subscribe_url_unsafe' })
+    }
     logger.info(
       { webhook: 'ses-bounce', topicArn: body.TopicArn },
       'webhook.sns.subscription_confirm',
@@ -115,6 +149,13 @@ sesBounceRoutes.post('/', async (c) => {
   }
 
   if (body.Type === 'UnsubscribeConfirmation' && body.UnsubscribeURL) {
+    if (!isSafeSnsActionUrl(body.UnsubscribeURL)) {
+      logger.warn(
+        { webhook: 'ses-bounce', unsubscribeUrl: body.UnsubscribeURL },
+        'webhook.sns.unsubscribe_url_unsafe',
+      )
+      return c.json({ ok: true, ignored: 'unsubscribe_url_unsafe' })
+    }
     logger.info(
       { webhook: 'ses-bounce', topicArn: body.TopicArn },
       'webhook.sns.unsubscribe_confirm',
