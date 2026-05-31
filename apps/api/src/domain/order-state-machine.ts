@@ -180,7 +180,26 @@ const TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   failed: [], // terminal
   refund_requested: ['refunded'],
   refunded: [], // terminal
-  disputed: ['chargeback'],
+  // Two valid forward paths from `disputed`, each tied to a distinct
+  // dispute reason captured in audit trail / order_events payload:
+  //
+  //   1. `disputed → chargeback → reversed` — EPS-initiated dispute path
+  //      per §2.5 lifecycle. Engaged when EPS issues a chargeback against
+  //      a previously-paid order. Day 30+ chargeback handler scope.
+  //
+  //   2. `disputed → refunded` — Day 39 Phase 2b platform-initiated
+  //      dispute resolution for the v1.0 non-bKash Verify-guard path
+  //      (decisions.md 2026-05-31 Day 39 Phase 2b). When the Verify-
+  //      guard diverts an order to `disputed` (Day 38 Phase 2a / PR #228)
+  //      and the super-admin manually completes the refund via the EPS
+  //      merchant dashboard (V5 has no public refund API per §11.4), the
+  //      super-admin marks the order refunded via the Phase 2b admin
+  //      endpoint. No chargeback intermediate because the dispute was
+  //      our call, not EPS's.
+  //
+  // §2.5 lifecycle narrative reflects only path 1; v2.4 playbook bump
+  // backlog includes updating §2.5 to document path 2.
+  disputed: ['chargeback', 'refunded'],
   chargeback: ['reversed'],
   reversed: [], // terminal
 }

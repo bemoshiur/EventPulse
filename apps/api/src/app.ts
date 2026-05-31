@@ -13,6 +13,7 @@ import { epsWebhookRoutes } from './routes/webhooks/eps.js'
 import { feeConfigRoutes } from './routes/super-admin/fee-config.js'
 import { adminKycRoutes } from './routes/super-admin/kyc.js'
 import { adminLegalRoutes } from './routes/super-admin/legal.js'
+import { adminOrdersRoutes } from './routes/super-admin/orders.js'
 import { adminRevenueRoutes } from './routes/super-admin/revenue.js'
 import { adminTicketTiersRoutes } from './routes/super-admin/ticket-tiers.js'
 import { accountTypeRoutes } from './routes/tenant/account-type.js'
@@ -183,6 +184,16 @@ export function createApp() {
   // withSuperAdmin() (BYPASSRLS). The route-layer tests assert that
   // tenant-audience tokens receive 403, not 200-with-leaked-data.
   app.route('/api/v1/admin/revenue', adminRevenueRoutes)
+
+  // Disputed-orders super-admin queue + manual-refund execution —
+  // Day 39 Phase 2b. Companion to PR #228's Verify-guard: surfaces
+  // disputed orders (non-bKash Verify-guard divert) for the super-
+  // admin queue + provides the mark-refunded action used after the
+  // super-admin manually completes the refund via the EPS merchant
+  // dashboard (V5 has no public refund API per §11.4). v1.0 launch
+  // posture: lightweight endpoint only; React UI follow-up deferred
+  // per Day 38 Phase 2 sub-decision A.
+  app.route('/api/v1/admin/orders', adminOrdersRoutes)
 
   return app
 }
