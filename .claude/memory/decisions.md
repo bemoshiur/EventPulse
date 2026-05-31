@@ -4,6 +4,65 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-31 · EPS fee-model structural decision — Option 3 (single-method launch, bKash-only for v1.0) CHOSEN
+
+**Resolves:** the active launch-gate item per `decisions.md` 2026-05-30 (Phase 1.4 truth-gate empirical findings + Options 1/2/3/4 framing) and the audit's critical-path step [1] (`handoff.md` 2026-05-31 Day 37). This is the sole remaining launch-gate blocker before June 10.
+
+### Context
+
+The Day 37 surface document (`docs/decisions/fee-model.md`, shipped via PR #224) laid out four structural options for how the fee-calculator handles per-method EPS rate variance:
+
+- **Option 1** — Per-method rate catalogue (calculator stores a `Record<PaymentMethod, bps>`; init-time method selection picks the rate)
+- **Option 2** — Single-rate calculator with platform absorbing per-method variance silently
+- **Option 3** — Single-method launch (restrict EPS init to one method; calculator's single rate is exact for that method)
+- **Option 4** — StoreAmount-as-source-of-truth (calculator's rate is a checkout-display estimate; post-Verify `TotalAmount − StoreAmount` is the actual EPS fee; settlement reads the corrected value)
+
+Operator slept on the surface document overnight (per Day 37 Phase 4 sequencing) and made the call.
+
+### Decision
+
+**Option 3 — Single-method launch, bKash-only for v1.0.** The fee-calculator's single `epsFeeBps` value is set to the empirically-observed bKash rate (175 bps = 1.747% truth-gate observation, subject to production smoke confirmation). EPS hosted-checkout is restricted to bKash for the launch window. Calculator architecture remains single-rate — which under single-method launch is correct, not a compromise.
+
+**Rationale — operator product principle: buyers see the exact fee at checkout, no "estimate."**
+
+- **Option 4 violates this principle.** Option 4's mechanism explicitly treats the buyer-facing fee line as a display estimate that gets corrected post-Verify. Buyer sees "Payment fee: ~17.47 BDT" → settles for a different number. Operator rejected this framing as incompatible with the platform's transparency promise.
+- **Option 1 also violates this principle at the June 10 timeline.** A per-method catalogue can only be honest if every method's rate is empirically populated. Truth-gate data state (Day 37 reconciliation Gap 1) is **one clean data point: Mode A bKash at 1.747%**. Card rate is unconfirmed; Nagad clean success absent; Rocket / Upay / bank-transfer un-observed. Shipping Option 1 with three of four methods' rates set to "best guess from EPS's published schedule" would surface those guesses as exact fee displays to the buyer — same product-principle violation as Option 4, just with the lie distributed across method choices instead of in the time dimension.
+- **Option 2 violates this principle by absorbing variance silently.** Buyer sees a fee that the platform knows is wrong on every non-bKash method; the wrongness is paid for out of platform margin rather than displayed honestly.
+- **Option 3 is the only path that delivers exact-fee honestly on the June 10 timeline.** Single method → single rate → calculator prediction matches reality on every transaction.
+
+### Empirical basis
+
+Single sandbox observation, Mode A bKash, 1.747% on face (Phase 1.4 truth-gate run, `decisions.md` 2026-05-30):
+
+- `TotalAmount` 1027.56 BDT − `StoreAmount` 1010.09 BDT = 17.47 BDT EPS fee on 1000 BDT face → 17.47 / 1000 = 1.747% (175 bps).
+- §14.10 Invariant-1 PASS on Mode A.
+
+**Production parity to be confirmed in the BDT-100 production smoke** (critical-path step [6]). The smoke's purpose is now load-bearing in a new way: it confirms whether production charges bKash at the same rate as sandbox. If production rate ≠ 175 bps, the calculator's `epsFeeBps` value is updated before first paying tenant onboards; no launch until rate is confirmed.
+
+### Implications recorded
+
+- **(a) Buyer payment options restricted to bKash at launch.** EPS hosted-checkout init must pass a payment-method restriction (mechanism investigation deferred to Phase 6 — Day 38 Phase 2 of the implementation prompt — three plausible mechanisms (a) EPS supports init-time method allow-list / (b) EPS exposes method-availability check / (c) UI-side enforcement only, in that preference order).
+- **(b) Tenant-fit constraint.** First paying tenant's event must work for a bKash-paying audience. Operator-action #4 (candidate first paying tenant identification, queued today per handoff.md Day 37) now has an explicit fit-criterion: the audience must be bKash-suitable. Card-heavy audiences (corporate conferences, diaspora-targeted premium tickets) are not first-paying-tenant material under v1.0.
+- **(c) Marketing / UI copy honest about single-method launch.** Public marketing pages (`/features`, `/pricing`), tenant-onboarding flow, and buyer-facing event pages all state explicitly: "Currently accepting bKash. More payment methods coming soon." No copy implies multi-method support at v1.0. Tenant must see the bKash-only constraint BEFORE signing the Organiser Agreement (so the audience-fit decision is theirs to make consciously). Bilingual per R12 (Bengali first, English alongside).
+- **(d) Post-launch roadmap explicit.** Card-method addition is the immediate next addition (week 1 post-launch target). **Each new method requires its own production rate-confirmation smoke before going live** — same discipline as v1.0's bKash smoke. Catalogue-driven Option 1 evolution remains a future option once 2+ methods are empirically populated; Option 4 remains a future option for rate-change robustness; neither is committed at this decision — the v1.0 architecture is forward-compatible with both.
+
+### What stays unchanged
+
+- **The fee-calculator architecture stays single-rate.** Under single-method launch this is correct, not a workaround. The calculator's contract — one `epsFeeBps` value, applied per §14.3 to compute `eps_fee_paisa` for each order — remains intact.
+- **§14.10 Invariant-1 (`order.total = net + platform + eps + withholding`) works as-is.** No settlement-engine surgery required.
+- **R2 paisa-discipline + bigint arithmetic** unchanged.
+- **`fee-calculator.ts` HARD STOP lifts** for the focused PR that updates the single rate (Phase 6 Day 38). STOP-ASK before that money-math PR lands — operator reviews the diff (old bps → new bps + §14.2 worked-example updates + unit-test updates) before merge.
+
+### Cross-references
+
+- `docs/decisions/fee-model.md` (the structured Options 1/2/3/4 comparison surface, PR #224, 2026-05-31).
+- `decisions.md` 2026-05-30 (Phase 1.4 truth-gate empirical findings — Mode A bKash 1.747% data point).
+- `decisions.md` 2026-05-31 Day 37 (audit reconciliation + June 10 target + Gap 1 single-data-point framing that shaped this decision).
+- `handoff.md` (overwritten this session to mark fee-model decision RESOLVED; step [6] BDT-100 smoke now carries bKash rate-confirmation purpose; post-launch card roadmap captured).
+- §14 settlement engine specification — unchanged at code level; §14.2 worked examples to be re-verified against the 175 bps rate during Phase 6 implementation.
+
+---
+
 ## 2026-05-31 · Day 37 — Operator launch target SET to June 10, 2026; audit critical-path adopted as tracking surface; four reconciliation gaps captured
 
 **Context:** Day 37 operator (Moshiur) set the **official Phase 1 MVP launch target as 2026-06-10** (10 calendar days from today). A 137-finding multi-agent audit ran today (see "Pending Work to Ship EventPulse" audit dated 2026-05-31). It identifies 1 active launch-gate item (EPS fee-model decision + production smoke), 3 pre-launch commitments, ~9 Sprint 4 remaining buildables + the prod-cutover surface (Secrets Manager prod entries, KMS prod CMKs, prod EC2 Ansible bootstrap, Route 53 records, wildcard cert, OIDC role, CloudWatch alarm catalogue) + the §17.11 alarm catalogue beyond the single memory alarm. Critic verdict: good-with-minor-gaps; 12 missing items reconciled into the report; honest critical path is ~5-7 buildable workdays + the externals (NBR/VAT opinion, Buyer Terms body, EPS prod-credential procurement).
