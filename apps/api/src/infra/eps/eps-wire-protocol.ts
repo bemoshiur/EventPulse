@@ -147,7 +147,42 @@ const V5InitResponseSchema = z
   })
   .passthrough()
 
-const V5VerifyResponseSchema = z.object({}).passthrough()
+/**
+ * V5 production CheckMerchantTransactionStatus response.
+ *
+ * Per the EPS V5 production integration guide (received 2026-05-30), V5's
+ * response shape is near-identical to V4 sandbox. The schema explicitly
+ * enumerates 3 additive V5 fields the guide documents:
+ *
+ *   - `EpsTransactionId` — V5 production publishes this where V4 sandbox
+ *     uses `EPSTransactionId` (different spelling; V4 schema accepts that
+ *     via passthrough). Either field may be used as an alternative
+ *     Verify-lookup key + hash param per the V5 guide; current wrapper
+ *     keeps `merchantTransactionId` as the primary path and exposes
+ *     `EpsTransactionId` on the parse result for future reconciliation.
+ *   - `PaymentReferance` — **VERBATIM SPELLING per EPS V5 guide. Do NOT
+ *     autocorrect to "PaymentReference".** EPS's server emits exactly
+ *     `PaymentReferance`; a `PaymentReference` field name would never
+ *     match. Future schema-tighten PRs must preserve the typo.
+ *   - `StoreAmount` + `TotalAmount` — V5 doc example is minimal (also
+ *     omits the documented `EpsTransactionId`) so doc-absence is not
+ *     determinative. Make both optional in V5; if present at runtime,
+ *     parseVerifyResponse surfaces them; if absent, callers fall back to
+ *     `(TotalAmount − subtotal)` derivation. Production smoke
+ *     (BDT 100, single transaction; decisions.md 2026-05-30) will
+ *     empirically confirm V5 StoreAmount publishing behaviour.
+ *
+ * `.passthrough()` keeps all other V5 envelope fields intact so any
+ * future additive fields land without a schema-fail.
+ */
+const V5VerifyResponseSchema = z
+  .object({
+    TotalAmount: z.string().optional(),
+    StoreAmount: z.string().optional(),
+    EpsTransactionId: z.string().optional(),
+    PaymentReferance: z.string().optional(),
+  })
+  .passthrough()
 
 /**
  * V5 production protocol. Byte-identical to the wrapper's pre-refactor
@@ -203,11 +238,17 @@ export const V5_PRODUCTION_PROTOCOL: EpsWireProtocol = Object.freeze({
     if (!parsed.success) {
       return { kind: 'schema-fail', issues: parsed.error.issues, raw: data }
     }
+    // V5 production may or may not publish TotalAmount/StoreAmount per the
+    // V5 integration guide example (minimal; not determinative). If
+    // present, surface them so callers can derive pure eps_fee mode-
+    // agnostically per (TotalAmount − StoreAmount); if absent, surface
+    // null and callers fall back to (TotalAmount − subtotal). The
+    // production smoke confirms which path is active in V5.
     return {
       kind: 'success',
       status: normaliseStatus(parsed.data),
-      totalAmountBdt: null,
-      storeAmountBdt: null,
+      totalAmountBdt: parsed.data.TotalAmount ?? null,
+      storeAmountBdt: parsed.data.StoreAmount ?? null,
       raw: data,
     }
   },
