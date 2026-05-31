@@ -1,9 +1,9 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-05-31 EOD (late) — Day 37 of 47-day Phase 1 MVP runway, fee-model decision **RESOLVED**.
-**LAUNCH TARGET: 2026-06-10** (10 calendar days from today; operator set 2026-05-31).
+**Last update:** 2026-05-31 EOD — **Day 38** of 47-day Phase 1 MVP runway. Option 3 implementation SHIPPED end-to-end (4 PRs: calculator + Verify-guard + UI copy + smoke runbook).
+**LAUNCH TARGET: 2026-06-10** (9 calendar days from today after Day 38).
 **Driver:** Claude Code (Opus 4.7).
-**Fee-model decision (this commit):** **Option 3 — single-method launch, bKash-only for v1.0** chosen tonight. Operator product principle: buyers see the exact fee at checkout, no "estimate." See `decisions.md` 2026-05-31 "EPS fee-model structural decision — Option 3 CHOSEN" entry (top of file). HARD STOP on `fee-calculator.ts` lifts for Phase 6 (Day 38) money-math PR.
+**Today's headline (Day 38):** Option 3 fee-model decision (locked Day 37 EOD) implemented end-to-end. `DEFAULT_EPS_FEE_BPS_ESTIMATE` = 175 bps (PR #227). Server-side Verify-guard rejects non-bKash payments → `disputed` status (PR #228). Buyer-facing UI copy honest about bKash-only + bilingual + tested (PR #229). Production BDT-100 smoke runbook with 7 preconditions + 9-step procedure + decision rules matrix (PR #230). HARD STOP on `fee-calculator.ts` LIFTED per Option 3 entry's "What stays unchanged" section. STAGING_PAYMENT_BLOCK=1 re-verified live this session and stays enforcing through remaining 9-day runway.
 **Audit:** "Pending Work to Ship EventPulse" — 137 findings across 5 lenses + completeness critic; verdict good-with-minor-gaps; the 17-step critical path is the tracking surface.
 
 ## 🎯 The 17-step critical path (audit-derived; replaces §26.1 day-by-day plan)
@@ -13,33 +13,31 @@
      │                                                      → Option 3 chosen
      ├──────────┬──────────┬──────────┐                     (single-method launch,
      │          │          │          │                      bKash-only for v1.0)
-[2] Update    [3] V5-     [7] Refund  [8] SNS bounce/         Day 38 AM
-    fee-calc      tolerant     flow +     complaint           STOP-ASK before
-    per Option    schema PR    manual     suppression         money-math PR.
-    3 — bKash     (Day 37)     disburse-  pipeline            Set epsFeeBps to
-    @175 bps      ✅ shipped   ment       (gates step 9       bKash 175 bps per
-    + buyer-      PR #223      (note:     MAIL_DRY_RUN=0)     truth-gate Mode A.
-    method                     Option 3
-    restriction +              decouples
-    honest copy.               refund-flow
-                               from fee-
-                               model — was
-                               §6 Risk 4
-                               concern;
-                               no longer.)
+[2] Update    [3] V5-     [7] Refund  [8] SNS bounce/         ✅ DONE Day 38:
+    fee-calc      tolerant     flow +     complaint           PR #227 calculator
+    per Option    schema PR    manual     suppression         bKash 175 bps;
+    3 — bKash     (Day 37)     disburse-  pipeline            PR #228 Verify-guard
+    @175 bps      ✅ shipped   ment       (gates step 9       rejects non-bKash →
+    + buyer-      PR #223      (Phase     MAIL_DRY_RUN=0)     disputed; PR #229
+    method        ✅ Day 38    2b queued                       buyer-form bKash-only
+    restriction +    PR #228   for Day                         copy + forward-looking
+    honest copy.     PR #229   39+. Now                        copy plan; PR #230
+                               decoupled                       BDT-100 smoke
+                               from fee-                       runbook.
+                               model.)
      │                            │
-[4] Operator + EPS: prod
-    credential procurement        │      ← Operator-action #1 today
-     │                            │
+[4] Operator + EPS: prod                  ← Operator-action #1 still un-started
+    credential procurement                  (gate for [5][6]; STOP-ASK at Day 38
+     │                            │         Phase 5)
 [5] STAGING_PAYMENT_BLOCK
     lift (decisions.md entry)     │
      │                            │
 [6] BDT-100 prod smoke ←──────────┘      ← Its own gated session;
     via bKash specifically                 STAGING_PAYMENT_BLOCK=1 every
     — confirms bKash rate                  other session.
-    matches 175 bps. If                    NEW purpose: rate-confirmation
-    rate ≠ 175 bps → STOP,                 load-bearing.
-    adjust calculator,
+    matches 175 bps. If                    Runbook: docs/runbooks/
+    rate ≠ 175 bps → STOP,                 production-smoke.md (PR #230,
+    adjust calculator,                     Day 38).
     re-smoke. Then
     re-enable block.
      │                                     
@@ -84,36 +82,44 @@ These are 5-minute emails/messages the operator sends today so external clocks s
 
 ## ⚠️ TL;DR for next session
 
-- **First-thing-tomorrow (Day 38 AM) is now Phase 6 — Option 3 implementation:**
-  - **Phase 1** — Fee-calculator: set `epsFeeBps = 175` (bKash rate, truth-gate Mode A). Update §14.2 worked examples + unit tests. **STOP-ASK before the money-math diff merges** — operator reviews old → new bps + §14.2 deltas + test updates.
-  - **Phase 2** — Buyer-facing payment-method restriction. Investigate EPS V5 InitializeEPS support for method allow-list (e.g. `RestrictedFinancialEntities` or similar). Three plausible mechanisms in preference order: (a) EPS init-time method restriction; (b) availability check + UI guidance; (c) UI-side enforcement only. STOP-ASK after investigation to confirm chosen mechanism.
-  - **Phase 3** — Honest UI copy: marketing `/features` + `/pricing` ("Currently accepting bKash. More payment methods coming soon."), tenant-onboarding flow (visible BEFORE Organiser Agreement signing), buyer-facing event page + checkout, email templates. Bilingual per R12 (Bengali first). **STOP-ASK on any copy touching Organiser Agreement language** — counsel-owned (Salehin); flag for follow-up if current draft implies multi-method support.
-  - **Phase 4** — Production smoke prompt rewritten for rate-confirmation purpose. The smoke is its own gated session — document only, don't run.
-- **Then Phase 7 (Day 39-40):** SNS bounce/complaint suppression-list wiring per the scope captured in `decisions.md` 2026-05-31 SES entry (2 SNS topics + sig-verified webhook handlers + global Postgres suppression list + outbound-send guard). Gates `MAIL_DRY_RUN=0` per the AWS commitment in case 177899559700777 reply.
-- **Then (Day 39+, subject to EPS prod-credential arrival):** BDT-100 production bKash smoke per critical-path step [6] — **rate-confirmation purpose load-bearing now** (confirms production charges bKash at the same 175 bps observed in sandbox; if rate differs → STOP, adjust calculator, re-smoke, no launch until confirmed). Own gated session with the staging-only STAGING_PAYMENT_BLOCK lift recorded in decisions.md per §11.0; **re-enable block immediately after.**
-- **Sprint 4 buildables — refund-flow coupling SIMPLIFIED by Option 3 choice:** Day 7-8 refund flow + manual disbursement can now be authored INDEPENDENTLY of the fee-model decision. The §6 Risk 4 concern (refund = actual EPS fee not estimate) applied to Option 4 only; under Option 3 the calculator's predicted fee IS the actual fee (single method → exact match), so refund-flow returns the calculator-predicted EPS fee cleanly. Day 9 marketing pages with **single-method honest pricing display** (no two-mode calculator surface — single method has a single fee composition). Day 10 launch readiness ceremony (multi-task; critical-path step [17]).
-- **Post-launch roadmap explicit (per decisions.md 2026-05-31 Option 3 entry):** **Card-method addition is the immediate next addition** — target **week 1 post-launch**. Production smoke against card → populate per-method rate → ship. Each new method requires its own production rate-confirmation smoke before going live (same discipline as v1.0 bKash). Catalogue-driven Option 1 evolution becomes a future option once 2+ methods are empirically populated; Option 4 remains a future option for rate-change robustness; neither committed at v1.0.
+- **First-thing-tomorrow (Day 39):** Phase 2b — buyer-notification SES template + admin disputed-orders queue endpoint. Phase 2a (PR #228) shipped the server-side enforcement (non-bKash → `disputed`); Phase 2b ships the operational surface around it. Specifically:
+  - **`order_disputed_wrong_method` SES template (EN + BN)** — full copy already drafted in `docs/copy/bkash-only-launch.md` (PR #229); pull-into-template work is mechanical
+  - **Admin endpoint `GET /admin/orders/disputed`** + manual `POST /admin/orders/:id/mark-refunded` action — lightweight; full React UI deferred to a Phase 2b-follow-up. v1.0 launch posture is acceptable without the React UI (ops queries `audit_logs WHERE action = 'order.disputed'` directly) but the endpoint + mark-refunded action are still useful for log-driven ops
+- **Then (Day 39-40):** SNS bounce/complaint suppression-list wiring per the scope in `decisions.md` 2026-05-31 SES entry (2 SNS topics + sig-verified webhook handlers + global Postgres suppression list + outbound-send guard). Gates `MAIL_DRY_RUN=0` per the AWS commitment in case 177899559700777 reply. Sequenceable parallel with Phase 2b.
+- **Then (Day 39+, subject to EPS prod-credential arrival):** BDT-100 production bKash smoke per critical-path step [6] using the runbook shipped today (`docs/runbooks/production-smoke.md`, PR #230). Own gated session; 9-step procedure; CONFIRMED case clears first paying tenant onboarding. STAGING_PAYMENT_BLOCK lift recorded in decisions.md per §11.0; re-enable immediately after.
+- **Sprint 4 buildables — refund-flow coupling SIMPLIFIED by Option 3 choice (confirmed shipped today):** Day 7-8 refund flow + manual disbursement can be authored INDEPENDENTLY of the fee-model decision. Under Option 3 the calculator's predicted fee IS the actual fee (single method → exact match within the floor-rounding ±7 paisa); refund-flow returns the calculator-predicted EPS fee cleanly. Day 9 marketing pages with single-method honest pricing display (no two-mode calculator surface). Day 10 launch readiness ceremony (multi-task; critical-path step [17]).
+- **Post-launch roadmap explicit (per decisions.md 2026-05-31 Option 3 entry):** Card-method addition is the immediate next addition — target week 1 post-launch. Each new method requires its own production rate-confirmation smoke before going live (same discipline as v1.0 bKash; runbook generalises). Copy plan at `docs/copy/bkash-only-launch.md` captures the multi-method copy strings for when methods join.
 
-## ⚠️ Today's deliverables (Day 37 EOD — 5 PRs)
+## ⚠️ Operator-action external clocks — STILL UN-STARTED at Day 38 EOD
 
-- **PR #222 memory** `ef6dcee` — Day 37 audit reconciliation + June 10 launch target SET + 17-step critical-path adopted as tracking surface + four reconciliation gaps captured (Modes C+D Fail reframing / §29 #9 AIT drift / §29 #10 NBR-VAT external clock surfaced / prod-branch divergence). Merged.
-- **PR #223 feat(eps)** `f3d2a30` — V5 production additive-field schema tolerance (`EpsTransactionId` camelCase + `PaymentReferance` verbatim EPS typo + `StoreAmount` + `TotalAmount` all optional in V5 schema; V5 parseVerifyResponse surfaces both amount fields when present); 349 EPS tests; 5 new V5 test cases including the verbatim-typo regression guard (negative case pins that `PaymentReference` corrected spelling does NOT populate the typed field). No fee-calculator.ts touch. Production V5 schema now ready for the BDT-100 smoke per critical-path step [6]. Merged (CI re-ran after a 109→89-char title fix to clear the conventional-commits 100-char-subject check — see gotchas.md).
-- **PR #224 docs(decisions)** `3c36abb` — `docs/decisions/fee-model.md` (227 lines, 9 sections + decision-recording template). Structured Options 1/2/3/4 comparison surface for operator overnight review. Three operator sharpenings applied before commit: §6 Risk 2 stranded-investment naming, §6 Risk 4 refund-flow critical-path coupling, §8 hybrid Sprint-7-committed-deliverable framing. §7 decision matrix expanded to distinguish "Implementation effort (one-time)" from "Operational complexity (ongoing burden)" as named dimensions. Merged.
-- **PR #225 memory** `8568dea` — Day 37 EOD closeout (Phase 5) + tomorrow's-first-action sequencing + Phase 6/7 plan. Merged.
-- **PR #_pending_ memory (this commit)** — **Option 3 (bKash-only single-method launch) DECISION LOCKED** + handoff updated (fee-model RESOLVED, step [6] carries rate-confirmation purpose, post-launch card-method roadmap explicit) + 100-char PR-title gotcha logged. **Operator decided EOD-late (after PR #225 closeout) — overrode the "decide tomorrow with a fresh head" sequence because the operator product principle (exact-fee-not-estimate) made the call clean.**
+Per the Day 37 handoff, four operator-actions were queued; **NONE ticked off during Day 38 because all four are operator-side (emails / conversations), not Claude Code's job.** Phase 5 STOP-ASK surfaces these for operator overnight reflection — these gate June 10 launch and clocks should start ASAP:
 
-**No code touched in `apps/api/src/domain/payments/fee-calculator.ts` in this session** — Phase 6 implementation happens tomorrow (Day 38). HARD STOP lifts for that focused PR per the decision entry's "What stays unchanged" section; STOP-ASK before the money-math diff merges.
+1. **EPS production credentials request** — gates critical-path step [4]→[5]→[6] (Production smoke). Without EPS prod credentials, no smoke; without smoke, no first paying tenant. **Most urgent external clock.** Day 39 production-smoke session cannot open until this arrives.
+2. **NBR/VAT opinion request** to the CA who handled AIT — gates §29 #10 still-open question (VAT registration model). Per CLAUDE.md §29, "MUST resolve with NBR before MVP launch." External clock; legal-opinion turn-around is 3-7 days in operator's prior experience.
+3. **Counsel follow-up (Salehin)** — (a) Buyer Terms body for `consent_records` UI; (b) Pvt Ltd incorporation question pre-June-10. Both gate operational surface; Buyer Terms gates the buyer-form's real consent-record capture.
+4. **Candidate first paying tenant** — identify the actual organiser ready to sign + KYC + ticket an event. Operator-action #4. Without this, "platform ready" ≠ "earning real money on launch day." For Option 3 single-method launch, the candidate's audience must be bKash-suitable (decisions.md 2026-05-31 Option 3 implication (b)).
 
-## ⚠️ The launch gate state — 0 active blockers (decision resolved this commit)
+## ⚠️ Today's deliverables (Day 38 EOD — 4 PRs + this closeout commit)
+
+- **PR #227 `fix(fees)`** `8afb079` — Phase 1 calculator: `DEFAULT_EPS_FEE_BPS_ESTIMATE` 250 → 175 (bKash MFS rate per truth-gate Mode A 1.747%, rounded). JSDoc cites Option 3 decision + observed 1.747% + capture-base arithmetic (+7-paisa floor delta). New `EPS_BPS_175_BKASH_V1` test constant + 3 new tests pin Mode A reproduction + truth-gate delta + §14.10 Invariant-1 at the launch rate. Existing §14.2 worked-example tests at 250 bps UNCHANGED (spec archaeology). Truth-gate `scenarios.ts:49` LEFT at 250 (§14.2-narrative-bound historical artifact). Prettier drive-by fix on yesterday's `fee-model.md`. Merged (CI re-ran after the prettier fix). v2.4 backlog: scenarios.ts rewire + CLAUDE.md §14.2 worked-example doc update.
+- **PR #228 `feat(checkout)`** `8fefa41` — Phase 2a Verify-guard rejection (operator chose mechanism (d)). NEW `bkash-financial-entity.ts` predicate (case-insensitive trimmed exact match; fails closed on null/missing/non-string) + 15 predicate tests. State machine extended: `awaiting_payment → disputed` newly legal. NEW `writeOrderDisputed` audit helper captures `dispute_reason` + verbatim `FinancialEntity`. settle.ts integrates the guard; `/orders/return/wrong-method` redirect added. 8 new integration tests covering happy-bKash + card-disputed + Nagad-disputed + missing-FE-fail-closed + EPS-failed-not-success + audit + events + no-delivery. Two pre-existing settle.test.ts mocks updated to include `FinancialEntity: 'bKash'` (CI caught this on first push; fix-up commit landed). Merged with all 8 checks green.
+- **PR #229 `feat(copy)`** `79177d7` — Phase 3 honest UI copy. buyer-form.tsx: bilingual bKash-only notice below subtotal + submit-button label `Continue to payment` → `Continue with bKash` (paid tier only). 4 new tests pin notice + button across paid/free/bilingual/isFreeEvent-gating. NEW `docs/copy/bkash-only-launch.md` living document with canonical EN+BN strings for surfaces that don't yet exist (marketing pages, Day 28+ buyer-return frontend pages incl. `/orders/return/wrong-method`, tenant pre-Organiser-Agreement disclosure, Phase 2b dispute-notice email template). Counsel-owned legal docs surveyed: NONE imply multi-method support; no follow-up flag needed. Email templates surveyed: method-agnostic; no change. KYC step-3-financial.tsx is organiser PAYOUT options (distinct from buyer); no change. Merged.
+- **PR #230 `docs(runbook)`** — Phase 4 BDT-100 production bKash smoke runbook. 7 hard preconditions + smoke transaction parameters + expected Verify response shape + derived rate calculation + decision rules matrix + 9-step procedure + post-smoke gates + post-launch evolution. Documented but NOT run this session. (Pending CI / merge at EOD memory-PR-author time; expected to land cleanly as docs-only PR.)
+- **THIS memory PR** — Day 38 EOD closeout per Phase 5 prompt. decisions.md captures the 4-PR sweep + 5 operator decisions (Phase 1 bps + Phase 1 scenarios + Phase 2 mechanism + Phase 2a sub-decision A admin queue UI + Phase 2a sub-decision B match semantics). handoff.md overwritten to Day 38 EOD state: critical-path steps [2][3] now ✅ DONE; standing invariants updated to reflect HARD STOP lift on fee-calculator.ts; operator-action external clocks #1-#4 surfaced as STILL UN-STARTED.
+
+**Code touched in `apps/api/src/domain/payments/fee-calculator.ts` this session: NONE** — the file itself stayed untouched per the method-agnostic design (Day 21 author's foresight); the rate change lived in services/orders/index.ts caller default. HARD STOP carried through the entire Phase 1 PR + lifted at merge per Option 3 entry's "What stays unchanged" section.
+
+## ⚠️ The launch gate state — 0 active blockers (Option 3 implementation shipped end-to-end Day 38)
 
 1. ~~EPS sandbox credentials~~ ✅ RESOLVED 2026-05-26.
 2. ~~SES out-of-sandbox~~ ✅ RESOLVED 2026-05-31 (case 177899559700777, ap-southeast-1).
-3. ~~EPS fee-model structural decision~~ ✅ **RESOLVED 2026-05-31 EOD — Option 3 (single-method launch, bKash-only)** chosen tonight (decisions.md entry top). **Production bKash smoke remains** — now load-bearing for rate confirmation, not a structural-decision gate.
+3. ~~EPS fee-model structural decision~~ ✅ RESOLVED 2026-05-31 EOD — Option 3 chosen + implementation SHIPPED Day 38 across PRs #227 / #228 / #229 / #230. Production bKash smoke remains — runbook ships today (PR #230); smoke session itself opens Day 39+ subject to EPS prod-credential arrival.
 
 **Pre-launch commitments (gate env flips, not launch itself):**
-- **SNS bounce/complaint suppression-list wiring** (decisions.md 2026-05-31) — gates `MAIL_DRY_RUN=0`. AWS commitment (case 177899559700777 reply). Sequenceable parallel with fee-model + V5 schema.
-- **STAGING_PAYMENT_BLOCK lift for prod smoke** — own gated session; re-enable immediately after.
-- **Buyer Terms body** — gates real `consent_records` capture on buyer-form (replaces Day-34 link-footer pattern).
+- **SNS bounce/complaint suppression-list wiring** (decisions.md 2026-05-31) — gates `MAIL_DRY_RUN=0`. AWS commitment (case 177899559700777 reply). Sequenceable parallel with Phase 2b.
+- **STAGING_PAYMENT_BLOCK lift for prod smoke** — own gated session per runbook; re-enable immediately after.
+- **Buyer Terms body** — gates real `consent_records` capture on buyer-form (replaces Day-34 link-footer pattern). Operator-action #2.
+- **Phase 2b — buyer-notification SES template + admin disputed-orders queue endpoint** (Day 38 deferred) — operational surface for the Phase 2a Verify-guard mechanism. v1.0 launch posture acceptable without React UI (ops uses `audit_logs` queries directly) but template + endpoint are still useful.
 
 ## ⚠️ Empirical findings table — quick recall (decision-grade context for Day 38)
 
@@ -145,10 +151,11 @@ All amounts paisa. §14.10 Invariant-1 PASS across all 4. **The only fully-clean
 - **V5 schema PR (this session):** `apps/api/src/infra/eps/eps-wire-protocol.ts` V5VerifyResponseSchema extension.
 - **Audit document:** "Pending Work to Ship EventPulse" — workflow `wq9vfxuf4`, output at `/private/tmp/claude-501/.../tasks/wq9vfxuf4.output` (local-only; transcript dir).
 
-## Standing invariants (still enforcing — 10-day runway protection)
+## Standing invariants (still enforcing — 9-day runway protection)
 
-- **`STAGING_PAYMENT_BLOCK=1`** in `.env.staging` + pm2 env id=1. Truth-gate three-lock bypass remains harness-scoped; operator-app traffic still blocked. **Only authorized lift: BDT-100 production smoke on its own gated session per decisions.md §11.0; re-enable immediately after.** Non-negotiable through June 10.
-- **HARD STOP on `apps/api/src/domain/payments/fee-calculator.ts`** — holds until operator decides fee-model option (Day 38 AM).
+- **`STAGING_PAYMENT_BLOCK=1`** in `.env.staging` + pm2 env id=1. Truth-gate three-lock bypass remains harness-scoped; operator-app traffic still blocked. Re-verified live Day 38 Phase 0 invariants check. **Only authorized lift: BDT-100 production smoke on its own gated session per `docs/runbooks/production-smoke.md` (PR #230) + decisions.md §11.0; re-enable immediately after.** Non-negotiable through June 10.
+- **v1.0 single-method launch — bKash-only enforcement (NEW Day 38):** Server-side via Phase 2a Verify-guard in settle.ts (PR #228): non-bKash `FinancialEntity` → `disputed` status, no QR/delivery, redirect to `/orders/return/wrong-method`. UI-side via Phase 3 honest copy (PR #229): pre-checkout notice + button label `Continue with bKash`. v1.0 launch posture is server-side-enforced, not honour-system; deviation cohort goes through manual refund queue. Post-launch evolution: each new method requires its own production rate-confirmation smoke per `docs/runbooks/production-smoke.md`.
+- **HARD STOP on `apps/api/src/domain/payments/fee-calculator.ts`** — LIFTED Day 38 per Option 3 decision entry's "What stays unchanged" section + Phase 1 PR #227 shipping with operator approval. The calculator architecture itself remained untouched this session (no code changes inside fee-calculator.ts); only the caller's default constant in services/orders/index.ts changed. Future fee-math changes are still STOP-ASK gates per CLAUDE.md §1.4; the HARD STOP carries forward as single-PR-at-a-time discipline rather than a blanket lock.
 - Branch protection: pre-push hook + workflow_dispatch gates on `main`; memory commits go through PRs.
 - Memory protocol: decisions → decisions.md the turn they're made; gotchas → gotchas.md the moment learned.
 - Money math single source: `fee-calculator.ts`. No fee arithmetic elsewhere.
@@ -156,4 +163,5 @@ All amounts paisa. §14.10 Invariant-1 PASS across all 4. **The only fully-clean
 - Auth-gate-is-the-entire-security-model for `/api/v1/admin/*` (Day-35).
 - Build-track owns surfacing what's draftable for the launch gate (Day-35).
 - Wire-protocol diagnostic logging (PR #217) — keep ON permanently.
-- **Prod branch tracking discipline (new today):** track `origin/prod` SHA every session; if it diverges from `main` by more than a sprint, document as pre-cutover requirement (current: `21dad2cc` vs `ad0f5fe9`).
+- **Prod branch tracking discipline (Day 37):** track `origin/prod` SHA every session; if it diverges from `main` by more than a sprint, document as pre-cutover requirement (current: `origin/prod` at `21dad2c`; `main` at `79177d7` post-PR-#229; divergence now ~85 commits; ff-merge or cherry-pick onto `prod` required before any production deploy — critical-path step [14] sub-task).
+- **Method-agnostic-calculator discipline (Day 38 codified):** Day 21 author's decision to make `epsFeeBps` a calculator input (not a hardcoded constant) is what made Phase 1's Option 3 implementation a 1-line caller-default change instead of a calculator surgery. Future per-method work should respect the same architecture: the method-to-bps mapping lives in the CALLER, not in fee-calculator.ts.
