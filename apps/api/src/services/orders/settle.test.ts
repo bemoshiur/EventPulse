@@ -237,9 +237,12 @@ describeIfDb('settleOrderFromEps — verify-by-callback authority + idempotency'
       const order = await seedOrder('awaiting_payment', 'spoof-real-paid')
 
       await defaultTokenCache().set(_accessTokenCacheKey, 'cached-jwt', 60)
+      // FinancialEntity='bKash' required for success → paid transition
+      // under Day 38 Phase 2 (d) Verify-guard. Without it the guard
+      // diverts to disputed (fail-closed).
       nock(PROD_BASE)
         .post('/api/v1/CheckMerchantTransactionStatus')
-        .reply(200, { Status: 'SUCCESS', EPSTransactionId: 'EPS-9999' })
+        .reply(200, { Status: 'SUCCESS', EPSTransactionId: 'EPS-9999', FinancialEntity: 'bKash' })
 
       const result = await settleOrderFromEps({
         merchantTransactionId: order.merchantTransactionId,
@@ -357,9 +360,12 @@ describeIfDb('settleOrderFromEps — verify-by-callback authority + idempotency'
     it('successful settlement writes order_events + audit_logs rows', async () => {
       const order = await seedOrder('awaiting_payment', 'audit-success')
       await defaultTokenCache().set(_accessTokenCacheKey, 'cached-jwt', 60)
+      // FinancialEntity='bKash' required for success → paid transition
+      // under Day 38 Phase 2 (d) Verify-guard. Without it the guard
+      // diverts to disputed (fail-closed).
       nock(PROD_BASE)
         .post('/api/v1/CheckMerchantTransactionStatus')
-        .reply(200, { Status: 'SUCCESS' })
+        .reply(200, { Status: 'SUCCESS', FinancialEntity: 'bKash' })
 
       await settleOrderFromEps({
         merchantTransactionId: order.merchantTransactionId,
