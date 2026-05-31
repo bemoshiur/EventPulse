@@ -1,9 +1,10 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-05-31 EOD — **Day 38** of 47-day Phase 1 MVP runway. Option 3 implementation SHIPPED end-to-end (4 PRs: calculator + Verify-guard + UI copy + smoke runbook).
-**LAUNCH TARGET: 2026-06-10** (9 calendar days from today after Day 38).
+**Last update:** 2026-05-31 — **Day 39** of 47-day Phase 1 MVP runway. Memory reconciliation to overnight legal replies + Buyer-Terms-Lite surfaced as NEW pre-launch deliverable + Path B incorporation LOCKED + §29 #10 NBR/VAT RESOLVED.
+**LAUNCH TARGET: 2026-06-10** (calendar countdown continues; runway materially de-risked today by §29 #10 resolution).
 **Driver:** Claude Code (Opus 4.7).
-**Today's headline (Day 38):** Option 3 fee-model decision (locked Day 37 EOD) implemented end-to-end. `DEFAULT_EPS_FEE_BPS_ESTIMATE` = 175 bps (PR #227). Server-side Verify-guard rejects non-bKash payments → `disputed` status (PR #228). Buyer-facing UI copy honest about bKash-only + bilingual + tested (PR #229). Production BDT-100 smoke runbook with 7 preconditions + 9-step procedure + decision rules matrix (PR #230). HARD STOP on `fee-calculator.ts` LIFTED per Option 3 entry's "What stays unchanged" section. STAGING_PAYMENT_BLOCK=1 re-verified live this session and stays enforcing through remaining 9-day runway.
+**Today's headline (Day 39 AM):** Both overnight legal replies captured verbatim in `decisions.md`. **§29 #10 NBR/VAT RESOLVED with written record** (CA confirmed disclosed-agency interpretations (a)(b)(c) in writing; commission falls under existing PPA BIN 009043032-0102; Mushak-9.1 nil-return cadence continues; revisit only on operational-model change / commission-structure revision / turnover-approaching-VAT-threshold). **Both §29 launch-blocking legal questions now RESOLVED** (#9 AIT resolved 2026-05-26; #10 NBR/VAT today). **Path B incorporation LOCKED:** soft-launch June 10 on existing sole proprietorship + Pvt Ltd 4–6 weeks post-launch per Salehin's recommendation; novation clause in Organiser Agreement is the load-bearing transfer mechanism; carry items dated 2026-06-24 (incorporation paperwork start) and 2026-07-08 → 2026-07-22 (novation execution window). **Buyer Terms reading (a) confirmed** by Salehin as primary with practical qualification: NO full parallel Buyer Terms needed; lightweight Buyer-Terms-Lite at checkout required, covering 4 topics (platform usage / Event Pulse's limited role disclaimer / data processing consent / basic liability carve-outs). Buyer-Terms-Lite drafted today (Phase 2); operator emails to Salehin for review-this-week offer once approved. HARD STOP on `fee-calculator.ts` LIFTED yesterday per Option 3 entry. STAGING_PAYMENT_BLOCK=1 re-verified live this session and stays enforcing through remaining runway.
+**Day 38 EOD shipped (carryover):** Option 3 fee-model decision implemented end-to-end. `DEFAULT_EPS_FEE_BPS_ESTIMATE` = 175 bps (PR #227). Server-side Verify-guard rejects non-bKash payments → `disputed` status (PR #228). Buyer-facing UI copy honest about bKash-only + bilingual + tested (PR #229). Production BDT-100 smoke runbook with 7 preconditions + 9-step procedure + decision rules matrix (PR #230).
 **Audit:** "Pending Work to Ship EventPulse" — 137 findings across 5 lenses + completeness critic; verdict good-with-minor-gaps; the 17-step critical path is the tracking surface.
 
 ## 🎯 The 17-step critical path (audit-derived; replaces §26.1 day-by-day plan)
@@ -90,18 +91,37 @@ These are 5-minute emails/messages the operator sends today so external clocks s
 - **Sprint 4 buildables — refund-flow coupling SIMPLIFIED by Option 3 choice (confirmed shipped today):** Day 7-8 refund flow + manual disbursement can be authored INDEPENDENTLY of the fee-model decision. Under Option 3 the calculator's predicted fee IS the actual fee (single method → exact match within the floor-rounding ±7 paisa); refund-flow returns the calculator-predicted EPS fee cleanly. Day 9 marketing pages with single-method honest pricing display (no two-mode calculator surface). Day 10 launch readiness ceremony (multi-task; critical-path step [17]).
 - **Post-launch roadmap explicit (per decisions.md 2026-05-31 Option 3 entry):** Card-method addition is the immediate next addition — target week 1 post-launch. Each new method requires its own production rate-confirmation smoke before going live (same discipline as v1.0 bKash; runbook generalises). Copy plan at `docs/copy/bkash-only-launch.md` captures the multi-method copy strings for when methods join.
 
-## ✅ Operator-action external clocks — ALL FOUR STARTED before Day 38 (corrected at Phase 5 STOP-ASK)
+## ✅ Operator-action external clocks — TWO RESOLVED at Day 39 AM; remaining clocks still healthy
 
-Per the Day 37 handoff, four operator-actions were queued. **Day 38 Phase 5 STOP-ASK confirmed all four were already in motion before Day 38; the Day 37 handoff captured them as queued-but-not-confirmed.** The actual status at Day 38 EOD is materially healthier than the prior handoff implied — clocks are running, not pending start:
+**Day 39 update:** two of the four overnight legal replies arrived; both captured verbatim in today's `decisions.md` entries. Status table below reflects the materially improved state:
 
-1. **EPS production credentials request** — sent before Day 38; awaiting EPS reply. Gates critical-path step [4]→[5]→[6] (Production smoke). Once received, Day 39+ session can open the production smoke per `docs/runbooks/production-smoke.md`. **Status: clock running.**
-2. **NBR/VAT opinion request** to the AIT CA — sent before Day 38; awaiting reply. Gates §29 #10 (VAT registration model). The CA's prior AIT turn-around was excellent and fast; reply expected on similar timeline. **Status: clock running.**
-3. **Counsel follow-up (Salehin)** — sent before Day 38; awaiting reply on Buyer Terms body (gates real `consent_records` capture on buyer-form) + Pvt Ltd incorporation question. Salehin's turn-around varies; can be 1-2 weeks. **Status: clock running.**
-4. **Candidate first paying tenant** — **IDENTIFIED at Day 38 EOD; bKash-audience-suitable for v1.0 single-method launch shape** per Option 3 implication (b). The candidate's audience fits the Option 3 bKash-only constraint. **Status: identified; onboarding ready to proceed once Phase 2b + production smoke + counsel docs land.**
+1. **EPS production credentials request** — sent before Day 38; awaiting EPS reply. Gates critical-path step [4]→[5]→[6] (Production smoke). Once received, the next-available session can open the production smoke per `docs/runbooks/production-smoke.md` + the Day-38-EOD-late confirmation that runbook precondition #2 (`eventpulse/prod/eps`) is SATISFIED. **Status: clock still running.**
+2. **NBR/VAT opinion (§29 #10)** — ✅ **RESOLVED 2026-05-31 Day 39 AM with written record** (see `decisions.md` 2026-05-31 Day 39 "CA written opinion received on NBR/VAT" top entry). All three interpretations (a)(b)(c) confirmed in writing; commission within existing PPA BIN 009043032-0102; Mushak-9.1 nil-return cadence continues; revisit only on (operational-model change / commission-structure revision / turnover-approaching-VAT-threshold). **Both §29 launch-blocking legal questions now RESOLVED** (#9 AIT 2026-05-26; #10 NBR/VAT today).
+3. **Counsel follow-up (Salehin)** — ✅ **PARTIALLY RESOLVED 2026-05-31 Day 39 AM with two written replies** (see `decisions.md` 2026-05-31 Day 39 "Salehin written opinion received on Buyer Terms" + "...on incorporation" entries). Buyer Terms reading (a) primarily confirmed with practical qualification → NEW pre-launch deliverable Buyer-Terms-Lite (4 topics: platform usage / limited role / data consent / liability carve-outs); Phase 2 produces first draft today. Incorporation: Path B LOCKED (soft-launch + post-launch Pvt Ltd 4–6 weeks). **Remaining Salehin item:** review Buyer-Terms-Lite draft (operator emails him this week per his review-this-week offer).
+4. **Candidate first paying tenant** — IDENTIFIED at Day 38 EOD; bKash-audience-suitable for v1.0 single-method launch shape per Option 3 implication (b). **Status: identified; onboarding ready to proceed once Phase 2b + production smoke + Buyer-Terms-Lite-into-checkout-wire land.**
 
-**Implication for June 10 launch math:** all four blockers have running clocks; none are pending start. The remaining work is build-track + waiting on external replies, both of which can run in parallel. Phase 2b (Day 39) + SNS suppression-list (Day 39-40) + production smoke (Day 39+ contingent on EPS reply) + first-paying-tenant onboarding ceremony (Day 17 critical-path step) is sequenceable inside the 9-day remaining runway.
+**Implication for June 10 launch math:** §29 #10 RESOLVED materially de-risks the runway. Only one external-clock blocker remains (EPS prod credentials for the smoke session). Remaining work is build-track (Phase 2b + SNS suppression + Buyer-Terms-Lite wire-into-checkout) + the one external clock (EPS) + the operational ceremony (first-tenant onboarding) — sequenceable inside the remaining runway with healthy slack now.
 
-## ⚠️ Today's deliverables (Day 38 EOD — 4 PRs + this closeout commit)
+## 📅 Path B incorporation — DATED CARRY ITEMS (per Day 39 operator instruction)
+
+Path B chosen 2026-05-31 (see `decisions.md` 2026-05-31 Day 39 "Salehin written opinion received on incorporation; Path B LOCKED" entry). Carry items below have **dated calendar markers** (not vague "post-launch"):
+
+| Item | Target date / window | Status |
+|---|---|---|
+| Begin Pvt Ltd incorporation paperwork (RJSC name-clearance + draft memorandum/articles + bank-account-opening initiation) | **Week of 2026-06-24** | PENDING — starts after launch stabilises |
+| Novation execution window (transfer (a) Organiser Agreements + (b) AWS account + Secrets Manager ownership + (c) EPS merchant account ownership + (d) BIN/VAT registration transition) | **2026-07-08 → 2026-07-22** | PENDING — gated on RJSC certificate of incorporation |
+| Pvt Ltd target completion (RJSC certificate issued; new Organiser Agreements sign against Pvt Ltd directly) | **2026-07-22** (outer boundary of Salehin's 4–6 weeks recommended window) | PENDING |
+| Update CLAUDE.md §29 #9 + #10 + Path B + Buyer-Terms-Lite to v2.4 playbook bump backlog | Pre-launch nice-to-have; post-launch firm | TRACKED |
+
+## ⚠️ Day 39 AM deliverables (this session's first batch)
+
+- **THIS memory PR** — Phase 1 reconciliation to overnight Salehin + CA written replies. Three new `decisions.md` top entries (CA NBR/VAT — §29 #10 RESOLVED + Salehin incorporation — Path B LOCKED + Salehin Buyer Terms — reading (a) primary + Buyer-Terms-Lite surfaced). `handoff.md` overwritten to Day 39 state: §29 #10 marked RESOLVED in operator-action table; Path B dated carry items added (2026-06-24 incorporation paperwork start; 2026-07-08 → 2026-07-22 novation execution window); Buyer-Terms-Lite added to pre-launch commitments.
+- **(Phase 2)** `docs/legal/buyer-terms-lite-draft.md` first draft — 4 sections per Salehin's framing (platform usage / limited role disclaimer / data processing consent / liability carve-outs); BN-first bilingual per R12. Operator review + edits before any send to Salehin. (STOP-ASK after draft per Day 39 prompt.)
+- **(Phase 3)** Phase 2b technical follow-up to PR #228: SES bilingual dispute-notification template (`order_disputed_wrong_method`) + admin endpoint `GET /admin/orders/disputed` + manual-refund execution flow (status `disputed → refunded`).
+- **(Phase 4)** SNS bounce/complaint suppression-list scaffolding: schema + webhook handlers + outbound-send guard. Code-only PR; AWS-side SNS topic creation + IAM changes STOP-ASK for separate operator-authorised session.
+- **(Phase 5)** Day 39 EOD memory + handoff closeout.
+
+## ⚠️ Day 38 EOD shipped (yesterday — carryover record)
 
 - **PR #227 `fix(fees)`** `8afb079` — Phase 1 calculator: `DEFAULT_EPS_FEE_BPS_ESTIMATE` 250 → 175 (bKash MFS rate per truth-gate Mode A 1.747%, rounded). JSDoc cites Option 3 decision + observed 1.747% + capture-base arithmetic (+7-paisa floor delta). New `EPS_BPS_175_BKASH_V1` test constant + 3 new tests pin Mode A reproduction + truth-gate delta + §14.10 Invariant-1 at the launch rate. Existing §14.2 worked-example tests at 250 bps UNCHANGED (spec archaeology). Truth-gate `scenarios.ts:49` LEFT at 250 (§14.2-narrative-bound historical artifact). Prettier drive-by fix on yesterday's `fee-model.md`. Merged (CI re-ran after the prettier fix). v2.4 backlog: scenarios.ts rewire + CLAUDE.md §14.2 worked-example doc update.
 - **PR #228 `feat(checkout)`** `8fefa41` — Phase 2a Verify-guard rejection (operator chose mechanism (d)). NEW `bkash-financial-entity.ts` predicate (case-insensitive trimmed exact match; fails closed on null/missing/non-string) + 15 predicate tests. State machine extended: `awaiting_payment → disputed` newly legal. NEW `writeOrderDisputed` audit helper captures `dispute_reason` + verbatim `FinancialEntity`. settle.ts integrates the guard; `/orders/return/wrong-method` redirect added. 8 new integration tests covering happy-bKash + card-disputed + Nagad-disputed + missing-FE-fail-closed + EPS-failed-not-success + audit + events + no-delivery. Two pre-existing settle.test.ts mocks updated to include `FinancialEntity: 'bKash'` (CI caught this on first push; fix-up commit landed). Merged with all 8 checks green.
@@ -111,17 +131,23 @@ Per the Day 37 handoff, four operator-actions were queued. **Day 38 Phase 5 STOP
 
 **Code touched in `apps/api/src/domain/payments/fee-calculator.ts` this session: NONE** — the file itself stayed untouched per the method-agnostic design (Day 21 author's foresight); the rate change lived in services/orders/index.ts caller default. HARD STOP carried through the entire Phase 1 PR + lifted at merge per Option 3 entry's "What stays unchanged" section.
 
-## ⚠️ The launch gate state — 0 active blockers (Option 3 implementation shipped end-to-end Day 38)
+## ⚠️ The launch gate state — 0 active blockers; both §29 legal questions RESOLVED at Day 39 AM
 
 1. ~~EPS sandbox credentials~~ ✅ RESOLVED 2026-05-26.
 2. ~~SES out-of-sandbox~~ ✅ RESOLVED 2026-05-31 (case 177899559700777, ap-southeast-1).
-3. ~~EPS fee-model structural decision~~ ✅ RESOLVED 2026-05-31 EOD — Option 3 chosen + implementation SHIPPED Day 38 across PRs #227 / #228 / #229 / #230. Production bKash smoke remains — runbook ships today (PR #230); smoke session itself opens Day 39+ subject to EPS prod-credential arrival.
+3. ~~EPS fee-model structural decision~~ ✅ RESOLVED 2026-05-31 Day 37 EOD — Option 3 chosen + implementation SHIPPED Day 38 across PRs #227 / #228 / #229 / #230.
+4. ~~§29 #9 AIT classification~~ ✅ RESOLVED 2026-05-26 (CA written opinion).
+5. ~~§29 #10 NBR/VAT registration model~~ ✅ **RESOLVED 2026-05-31 Day 39 AM** (CA written opinion; entry above). Both §29 launch-blocking legal questions now RESOLVED with written records.
+6. ~~Salehin: Buyer Terms framing~~ ✅ RESOLVED 2026-05-31 Day 39 AM — reading (a) primary; full Buyer Terms NOT needed; Buyer-Terms-Lite required (NEW pre-launch deliverable).
+7. ~~Salehin: Incorporation path~~ ✅ RESOLVED 2026-05-31 Day 39 AM — Path B LOCKED; soft-launch + post-launch Pvt Ltd 4–6 weeks.
 
 **Pre-launch commitments (gate env flips, not launch itself):**
-- **SNS bounce/complaint suppression-list wiring** (decisions.md 2026-05-31) — gates `MAIL_DRY_RUN=0`. AWS commitment (case 177899559700777 reply). Sequenceable parallel with Phase 2b.
-- **STAGING_PAYMENT_BLOCK lift for prod smoke** — own gated session per runbook; re-enable immediately after.
-- **Buyer Terms body** — gates real `consent_records` capture on buyer-form (replaces Day-34 link-footer pattern). Operator-action #2.
-- **Phase 2b — buyer-notification SES template + admin disputed-orders queue endpoint** (Day 38 deferred) — operational surface for the Phase 2a Verify-guard mechanism. v1.0 launch posture acceptable without React UI (ops uses `audit_logs` queries directly) but template + endpoint are still useful.
+
+- **Buyer-Terms-Lite document at checkout (NEW at Day 39 AM)** — Salehin's required 4-topic lightweight terms (platform usage / Event Pulse's limited role / data processing consent / basic liability carve-outs). Phase 2 produces first draft today; operator emails to Salehin via his review-this-week offer; once Salehin signs off and operator approves final version, wired into checkout's `consent_records` capture. **Replaces the obsolete "Buyer Terms body" line from the Day 38 handoff** — Salehin clarified full Buyer Terms NOT needed; Buyer-Terms-Lite is the correct framing.
+- **SNS bounce/complaint suppression-list wiring** (decisions.md 2026-05-31 SES entry) — gates `MAIL_DRY_RUN=0`. AWS commitment (case 177899559700777 reply). Phase 4 ships code-only PR today; AWS-side SNS topic creation + IAM changes STOP-ASK for separate operator-authorised session.
+- **STAGING_PAYMENT_BLOCK lift for prod smoke** — own gated session per `docs/runbooks/production-smoke.md`; re-enable immediately after. Precondition #2 (`eventpulse/prod/eps`) SATISFIED per Day-38-EOD-late verification (PR #231 once merged); remaining preconditions still gate the smoke.
+- **Phase 2b — buyer-notification SES template + admin disputed-orders queue endpoint** (Day 38 deferred) — Phase 3 today ships these. Operational surface for the Phase 2a Verify-guard mechanism (PR #228). v1.0 launch posture acceptable without React UI (ops uses `audit_logs` queries directly) but template + endpoint are still useful.
+- **Production bKash smoke** — runbook in `docs/runbooks/production-smoke.md` (PR #230); smoke session itself opens once EPS prod-credentials arrive (operator-action #1 still pending).
 
 ## ⚠️ Empirical findings table — quick recall (decision-grade context for Day 38)
 
