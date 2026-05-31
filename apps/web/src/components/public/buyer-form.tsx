@@ -414,9 +414,30 @@ export function BuyerForm({ event, tiers }: BuyerFormProps) {
                 {previewSubtotalPaisa === 0n ? 'Free' : `৳ ${formatBdt(previewSubtotalPaisa)}`}
               </p>
               {!isFreeEvent && (
-                <p className="text-ep-graphite/70 mt-1 text-xs">
-                  Final total including fees shown at checkout.
-                </p>
+                <>
+                  <p className="text-ep-graphite/70 mt-1 text-xs">
+                    Final total including fees shown at checkout.
+                  </p>
+                  {/*
+                    v1.0 single-method launch honest framing per decisions.md
+                    2026-05-31 "EPS fee-model structural decision — Option 3
+                    CHOSEN" + Day 38 Phase 3. The buyer learns BEFORE the
+                    EPS handoff that bKash is the launch's accepted method;
+                    a buyer who needs a different method can step away rather
+                    than landing in the server-side Verify-guard dispute path.
+                    Bilingual per R12 (Bengali alongside English at the
+                    buyer-facing surface).
+                  */}
+                  <p className="text-ep-graphite/70 mt-2 text-xs" data-testid="bkash-only-notice">
+                    Currently accepting <strong>bKash</strong> payments only. More methods coming
+                    soon.
+                    <br />
+                    <span lang="bn">
+                      বর্তমানে শুধুমাত্র <strong>bKash</strong> পেমেন্ট গ্রহণ করা হচ্ছে। অন্যান্য
+                      পদ্ধতি শীঘ্রই আসছে।
+                    </span>
+                  </p>
+                </>
               )}
             </div>
           )}
@@ -595,7 +616,12 @@ export function BuyerForm({ event, tiers }: BuyerFormProps) {
                 ? 'Submitting…'
                 : isFreeEvent
                   ? 'Confirm registration · নিশ্চিত করুন'
-                  : 'Continue to payment · পেমেন্টে যান'}
+                  : // v1.0 single-method launch: explicit bKash framing per
+                    // decisions.md 2026-05-31 Option 3 + Day 38 Phase 3.
+                    // 'Continue with bKash' replaces the generic 'Continue
+                    // to payment' so the buyer's expectation is set before
+                    // EPS hands them off to bKash's confirmation page.
+                    'Continue with bKash · bKash দিয়ে চালিয়ে যান'}
             </button>
           </div>
         </form>

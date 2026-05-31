@@ -115,6 +115,67 @@ describe('<BuyerForm>', () => {
     expect(screen.getByText('· আপনার তথ্য')).toBeInTheDocument()
   })
 
+  // v1.0 single-method launch honest framing per decisions.md 2026-05-31
+  // "EPS fee-model structural decision — Option 3 CHOSEN" + Day 38 Phase 3.
+  // Pin both the bKash-only notice AND the submit button label so a future
+  // edit that silently regresses to multi-method-implying copy surfaces in
+  // the test diff (which is the operator review surface).
+  describe('v1.0 single-method launch — bKash-only honest framing', () => {
+    it('paid tier renders the bKash-only notice (bilingual) below subtotal', async () => {
+      const user = userEvent.setup()
+      render(<BuyerForm event={baseEvent} tiers={[paidTier]} />)
+      const qty = screen.getByTestId('qty-input-tier-paid') as HTMLInputElement
+      await user.clear(qty)
+      await user.type(qty, '1')
+      // The notice is gated on `!isFreeEvent && hasAnyTier` — paid tier
+      // selected → notice visible.
+      const notice = screen.getByTestId('bkash-only-notice')
+      expect(notice).toBeInTheDocument()
+      expect(notice.textContent).toMatch(/bKash/)
+      expect(notice.textContent).toMatch(/More methods coming soon/)
+      // Bilingual per R12: Bengali line present alongside English.
+      expect(notice.textContent).toMatch(/বর্তমানে শুধুমাত্র/)
+    })
+
+    it('paid-tier submit button reads "Continue with bKash · bKash দিয়ে চালিয়ে যান"', async () => {
+      const user = userEvent.setup()
+      render(<BuyerForm event={baseEvent} tiers={[paidTier]} />)
+      const qty = screen.getByTestId('qty-input-tier-paid') as HTMLInputElement
+      await user.clear(qty)
+      await user.type(qty, '1')
+      const btn = screen.getByTestId('buyer-form-submit')
+      // The label is the whole-string match — guards against a future
+      // edit dropping the bKash brand to a generic "Continue to payment".
+      expect(btn.textContent).toBe('Continue with bKash · bKash দিয়ে চালিয়ে যান')
+    })
+
+    it('free-event keeps the registration-confirmation label (NOT a bKash label)', async () => {
+      // Free events do NOT route through EPS / bKash — the calculator
+      // returns all zeros and the order is born paid. The label must
+      // stay neutral; bumping it to a bKash label would mislead. Note
+      // `isFreeEvent` requires a tier qty > 0 (hasAnyTier branch); the
+      // button defaults to the paid-tier label when nothing's selected.
+      const user = userEvent.setup()
+      render(<BuyerForm event={baseEvent} tiers={[freeTier]} />)
+      const qty = screen.getByTestId('qty-input-tier-free') as HTMLInputElement
+      await user.clear(qty)
+      await user.type(qty, '1')
+      const btn = screen.getByTestId('buyer-form-submit')
+      expect(btn.textContent).toBe('Confirm registration · নিশ্চিত করুন')
+    })
+
+    it('free-event does NOT render the bKash-only notice', async () => {
+      const user = userEvent.setup()
+      render(<BuyerForm event={baseEvent} tiers={[freeTier]} />)
+      const qty = screen.getByTestId('qty-input-tier-free') as HTMLInputElement
+      await user.clear(qty)
+      await user.type(qty, '1')
+      // The notice is gated on `!isFreeEvent && hasAnyTier`; with a
+      // free-tier qty > 0, `isFreeEvent` is true → notice is suppressed.
+      expect(screen.queryByTestId('bkash-only-notice')).not.toBeInTheDocument()
+    })
+  })
+
   it('disables submit when no tier quantity selected', () => {
     render(<BuyerForm event={baseEvent} tiers={[paidTier]} />)
     expect(screen.getByTestId('buyer-form-submit')).toBeDisabled()
