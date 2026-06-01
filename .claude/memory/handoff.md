@@ -1,110 +1,55 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-05-31 — **Day 39** of 47-day Phase 1 MVP runway. Memory reconciliation to overnight legal replies + Buyer-Terms-Lite surfaced as NEW pre-launch deliverable + Path B incorporation LOCKED + §29 #10 NBR/VAT RESOLVED.
-**LAUNCH TARGET: 2026-06-10** (calendar countdown continues; runway materially de-risked today by §29 #10 resolution).
+**Last update:** 2026-05-31 — **Day 39 PM EOD** of 47-day Phase 1 MVP runway. **Buyer-Terms-Lite v1.0 SHIPPED end-to-end + legal track entirely closed.**
+**LAUNCH TARGET: 2026-06-10** (calendar countdown continues; runway de-risked further by Day 39's three legal RESOLVES + Phase 2 wire-in landing same-day).
 **Driver:** Claude Code (Opus 4.7).
-**Today's headline (Day 39 AM):** Both overnight legal replies captured verbatim in `decisions.md`. **§29 #10 NBR/VAT RESOLVED with written record** (CA confirmed disclosed-agency interpretations (a)(b)(c) in writing; commission falls under existing PPA BIN 009043032-0102; Mushak-9.1 nil-return cadence continues; revisit only on operational-model change / commission-structure revision / turnover-approaching-VAT-threshold). **Both §29 launch-blocking legal questions now RESOLVED** (#9 AIT resolved 2026-05-26; #10 NBR/VAT today). **Path B incorporation LOCKED:** soft-launch June 10 on existing sole proprietorship + Pvt Ltd 4–6 weeks post-launch per Salehin's recommendation; novation clause in Organiser Agreement is the load-bearing transfer mechanism; carry items dated 2026-06-24 (incorporation paperwork start) and 2026-07-08 → 2026-07-22 (novation execution window). **Buyer Terms reading (a) confirmed** by Salehin as primary with practical qualification: NO full parallel Buyer Terms needed; lightweight Buyer-Terms-Lite at checkout required, covering 4 topics (platform usage / Event Pulse's limited role disclaimer / data processing consent / basic liability carve-outs). Buyer-Terms-Lite drafted today (Phase 2); operator emails to Salehin for review-this-week offer once approved. HARD STOP on `fee-calculator.ts` LIFTED yesterday per Option 3 entry. STAGING_PAYMENT_BLOCK=1 re-verified live this session and stays enforcing through remaining runway.
-**Day 38 EOD shipped (carryover):** Option 3 fee-model decision implemented end-to-end. `DEFAULT_EPS_FEE_BPS_ESTIMATE` = 175 bps (PR #227). Server-side Verify-guard rejects non-bKash payments → `disputed` status (PR #228). Buyer-facing UI copy honest about bKash-only + bilingual + tested (PR #229). Production BDT-100 smoke runbook with 7 preconditions + 9-step procedure + decision rules matrix (PR #230).
-**Audit:** "Pending Work to Ship EventPulse" — 137 findings across 5 lenses + completeness critic; verdict good-with-minor-gaps; the 17-step critical path is the tracking surface.
+**Today's PM headline:** PR #237 (`feat(checkout): Buyer-Terms-Lite v1.0 consent_records wire-in`) merged → main `6e54f34` at 2026-06-01T10:31:02Z UTC → deploy SUCCESS → seed ran via SSM bootstrap-recovery (12104 bytes HTML cached on `legal_document_versions.body_html`; row effective 2026-06-01T10:32:57.174Z UTC) → smoke confirmed all four Salehin signature markers (`পরোক্ষ ক্ষতি`, `Clause 6.2`, `Continue with bKash`, `প্রতারণামূলক উপস্থাপনা`) present in production body_html → standing invariants intact (STAGING_PAYMENT_BLOCK=1 / EPS_MODE=production / MAIL_DRY_RUN=1 / /health db=ok / Phase 4 SNS topics still NOT created). **Sign-off chain Step 5 ✅ CLOSED in `docs/legal/buyer-terms.md`** — the chain is 5/5. **Salehin's Buyer-Terms-Lite engagement is end-to-end COMPLETE.** Day 39 shipped 4 PRs end-to-end (#232 disputed-orders + #233 memory + #236 SNS code-only + #237 Buyer-Terms-Lite v1.0 wire-in) on a single day.
 
-## 🎯 The 17-step critical path (audit-derived; replaces §26.1 day-by-day plan)
+**Today's AM headline (carryover):** Both overnight legal replies + the CA NBR/VAT reply captured verbatim. **§29 #10 NBR/VAT RESOLVED with written record** (CA confirmed disclosed-agency interpretations (a)(b)(c); commission within existing PPA BIN 009043032-0102; Mushak-9.1 nil-return cadence continues). **Path B incorporation LOCKED** (soft-launch 2026-06-10 on existing sole proprietorship + Pvt Ltd 4–6 weeks post-launch; novation clause is load-bearing; carry items dated 2026-06-24 + 2026-07-08 → 2026-07-22). **Buyer Terms reading (a) confirmed by Salehin** as primary; Buyer-Terms-Lite required at checkout — drafted Day 39 AM, signed off Day 39 PM, shipped Day 39 PM.
 
-```text
-[1] OPERATOR: EPS fee-model decision (Options 1/2/3/4)   ✅ RESOLVED 2026-05-31 EOD
-     │                                                      → Option 3 chosen
-     ├──────────┬──────────┬──────────┐                     (single-method launch,
-     │          │          │          │                      bKash-only for v1.0)
-[2] Update    [3] V5-     [7] Refund  [8] SNS bounce/         ✅ DONE Day 38:
-    fee-calc      tolerant     flow +     complaint           PR #227 calculator
-    per Option    schema PR    manual     suppression         bKash 175 bps;
-    3 — bKash     (Day 37)     disburse-  pipeline            PR #228 Verify-guard
-    @175 bps      ✅ shipped   ment       (gates step 9       rejects non-bKash →
-    + buyer-      PR #223      (Phase     MAIL_DRY_RUN=0)     disputed; PR #229
-    method        ✅ Day 38    2b queued                       buyer-form bKash-only
-    restriction +    PR #228   for Day                         copy + forward-looking
-    honest copy.     PR #229   39+. Now                        copy plan; PR #230
-                               decoupled                       BDT-100 smoke
-                               from fee-                       runbook.
-                               model.)
-     │                            │
-[4] Operator + EPS: prod                  ← Operator-action #1 still un-started
-    credential procurement                  (gate for [5][6]; STOP-ASK at Day 38
-     │                            │         Phase 5)
-[5] STAGING_PAYMENT_BLOCK
-    lift (decisions.md entry)     │
-     │                            │
-[6] BDT-100 prod smoke ←──────────┘      ← Its own gated session;
-    via bKash specifically                 STAGING_PAYMENT_BLOCK=1 every
-    — confirms bKash rate                  other session.
-    matches 175 bps. If                    Runbook: docs/runbooks/
-    rate ≠ 175 bps → STOP,                 production-smoke.md (PR #230,
-    adjust calculator,                     Day 38).
-    re-smoke. Then
-    re-enable block.
-     │                                     
-     ├──────────┬──────────┐
-     │          │          │
-[10] Marketing  [13] §29   [14] Prod EC2 + Route 53
-     pages w/        #10        + OIDC role + Ansible
-     fee-mode-       NBR        + Secrets Manager (11)
-     calc            VAT        + KMS CMKs (2) + wildcard
-                    opinion     cert + alarm catalogue
-                              + prod-branch ff-merge (21dad2cc → ad0f5fe9)
-     │                              │
-[11] Counsel returns Buyer Terms body  ← Operator-action #2 today
-     │
-[12] Wire real consent_records on buyer-form
-     │
-[15] t3.medium upgrade decision        ← Pre-cutover Moshiur decision
-     │
-[16] CloudWatch alarms wired           ← ASK-FIRST AWS-write
-     │
-[17] Sprint 4 Day 10 launch readiness:
-     AUP review + host-liability lawyer sign-off
-     + security checklist + prod cutover
-     + onboard first paying tenant     ← Operator-action #4 today
-```
+## 🎯 Legal track — entirely closed at Day 39 PM EOD
 
-## 🚨 Four reconciliation gaps captured today (see decisions.md 2026-05-31 Day 37 entry)
+All overnight + Day-39 legal items are now end-to-end RESOLVED with written records:
 
-1. **Modes C+D `Status: Fail` reframed** — Phase 1.4 truth-gate empirical state is **partial: only Mode A's bKash transaction (1.747% MFS rate) cleanly succeeded.** No card rate, no Nagad clean success, no other MFS, no bank-transfer observation. Fee-model decision (Options 1/2/3/4) is being made on a **single clean data point**. This shapes Option 4's "robust to data scarcity by design" framing.
-2. **§29 #9 AIT documentation drift** — resolved 2026-05-26 in memory, still "open" in CLAUDE.md §29. v2.4 bump backlog item.
-3. **§29 #10 NBR/VAT opinion** — was NOT tracked as external clock; **NOW IS** (this entry + operator-action #3 below).
-4. **prod branch SHA divergence** — `origin/prod` at `21dad2cc` (Sprint 1 era); `main` at `ad0f5fe`. Sprint 2-4 work (~80+ commits) NOT on prod. ff-merge or cherry-pick required before any production deploy. Critical-path step [14] sub-task.
+| Item | Day-38 EOD state | Day-39 PM EOD state |
+|---|---|---|
+| §29 #9 AIT classification | ✅ RESOLVED 2026-05-26 (CA) | unchanged |
+| §29 #10 NBR/VAT registration | ⏳ external clock | ✅ RESOLVED 2026-05-31 AM (CA written opinion) |
+| Salehin: Buyer Terms framing | ⏳ external clock | ✅ RESOLVED 2026-05-31 AM (reading (a) confirmed) |
+| Salehin: Buyer-Terms-Lite v1.0 doc draft | n/a (surfaced Day 39 AM) | ✅ SHIPPED 2026-05-31 PM (v0.3 → v1.0 → live in checkout) |
+| Salehin: Incorporation path | ⏳ external clock | ✅ RESOLVED 2026-05-31 AM (Path B LOCKED; dated carry items below) |
+| Candidate first paying tenant | ✅ identified 2026-05-30 | unchanged (ready for onboarding) |
 
-## 📨 Operator parallel actions QUEUED TODAY (not Claude Code's job)
+**Implication:** of the four operator-action external clocks at Day-38-EOD, three are RESOLVED and the fourth (first paying tenant) is identified and ready. **Only the EPS-credentials-procurement clock remains as a launch blocker**, and that is sequenceable inside the remaining 10-day runway.
 
-These are 5-minute emails/messages the operator sends today so external clocks start running:
+## ⚠️ Next pre-launch items — entirely AWS / infrastructure / ceremony track
 
-1. **EPS production credentials** — email EPS to request prod creds for `eventpulse.com.bd` live merchant account. Same contact who provided V5 docs + sandbox creds. Specify prod base URL (`pgapi.eps.com.bd`), confirm V5 integration guide received, request `merchant_id` / `store_id` / `username` / `password` / `hash_key` set. Critical-path step [4]; clock must start today.
-2. **Counsel follow-up (Salehin)** — (a) Buyer Terms body for buyer-form `consent_records` UI (critical-path step [11]); (b) Pvt Ltd incorporation question given June 10 launch with real money flow — is the recommendation to incorporate before first paying tenant?
-3. **NBR/VAT opinion (§29 #10)** — written opinion on the platform's VAT registration model. Fastest path: ask the CA who handled AIT (their opinion was excellent and fast). External clock; gates launch per playbook framing.
-4. **Candidate first paying tenant** — identify a real organiser ready to sign Organiser Agreement + complete KYC + have an event to ticket. Without this, "platform ready" ≠ "earning real money on launch day." Critical-path step [17].
+With the legal track closed, the remaining pre-launch work is operations + AWS-side. None of these are dependent on the legal track:
 
-## ⚠️ TL;DR for next session
+| # | Item | Gate | Owner |
+|---|---|---|---|
+| 1 | **Phase 4 AWS Console writes** — SNS topic creation (2 topics: `eventpulse-ses-bounce`, `eventpulse-ses-complaint`) + Configuration Set event destinations + IAM policy attachment | Own operator-authorised session per `docs/runbooks/sns-bounce-complaint-aws-wiring.md` (7-step procedure documented Day 39 PM in PR #236) | Operator |
+| 2 | **Production EPS smoke (BDT-100)** | Own gated session per `docs/runbooks/production-smoke.md` (PR #230, Day 38). Gates: EPS prod-credentials arrival (operator-action #1) + production EC2 cutover (item #3 below). Re-enable STAGING_PAYMENT_BLOCK immediately after. | Operator + Claude Code |
+| 3 | **Production EC2 cutover ceremony** (Day-37 audit's critical-path step [14] — 8 sub-items) | Own session; multiple gates per sub-item | Operator + Claude Code |
 
-- **First-thing-tomorrow (Day 39):** Phase 2b — buyer-notification SES template + admin disputed-orders queue endpoint. Phase 2a (PR #228) shipped the server-side enforcement (non-bKash → `disputed`); Phase 2b ships the operational surface around it. Specifically:
-  - **`order_disputed_wrong_method` SES template (EN + BN)** — full copy already drafted in `docs/copy/bkash-only-launch.md` (PR #229); pull-into-template work is mechanical
-  - **Admin endpoint `GET /admin/orders/disputed`** + manual `POST /admin/orders/:id/mark-refunded` action — lightweight; full React UI deferred to a Phase 2b-follow-up. v1.0 launch posture is acceptable without the React UI (ops queries `audit_logs WHERE action = 'order.disputed'` directly) but the endpoint + mark-refunded action are still useful for log-driven ops
-- **Then (Day 39-40):** SNS bounce/complaint suppression-list wiring per the scope in `decisions.md` 2026-05-31 SES entry (2 SNS topics + sig-verified webhook handlers + global Postgres suppression list + outbound-send guard). Gates `MAIL_DRY_RUN=0` per the AWS commitment in case 177899559700777 reply. Sequenceable parallel with Phase 2b.
-- **Then (Day 39+, subject to EPS prod-credential arrival):** BDT-100 production bKash smoke per critical-path step [6] using the runbook shipped today (`docs/runbooks/production-smoke.md`, PR #230). Own gated session; 9-step procedure; CONFIRMED case clears first paying tenant onboarding. STAGING_PAYMENT_BLOCK lift recorded in decisions.md per §11.0; re-enable immediately after. **Runbook precondition #2 ("Production credentials loaded into AWS Secrets Manager at `eventpulse/prod/eps`") is SATISFIED at Day 38 EOD-late** — operator authorised `eventpulse/prod/eps` (AWSCURRENT version `6754cc98-164d-4504-aa92-e82c2c446409`) as the canonical prod-cred holder; digest-verified to contain the same credentials currently in memory on staging api process (Day-20 directive: staging credentials are production-tier). Remaining preconditions (#1 EPS prod credentials received, #3 prod EC2 + Nginx + DNS + wildcard cert in place, #4 prod-branch ff-merge, #5 EPS_MODE=production on prod EC2 once provisioned, #6 operator on-call, #7 reversal path pre-arranged) all still gate the smoke session.
-- **Sprint 4 buildables — refund-flow coupling SIMPLIFIED by Option 3 choice (confirmed shipped today):** Day 7-8 refund flow + manual disbursement can be authored INDEPENDENTLY of the fee-model decision. Under Option 3 the calculator's predicted fee IS the actual fee (single method → exact match within the floor-rounding ±7 paisa); refund-flow returns the calculator-predicted EPS fee cleanly. Day 9 marketing pages with single-method honest pricing display (no two-mode calculator surface). Day 10 launch readiness ceremony (multi-task; critical-path step [17]).
-- **Post-launch roadmap explicit (per decisions.md 2026-05-31 Option 3 entry):** Card-method addition is the immediate next addition — target week 1 post-launch. Each new method requires its own production rate-confirmation smoke before going live (same discipline as v1.0 bKash; runbook generalises). Copy plan at `docs/copy/bkash-only-launch.md` captures the multi-method copy strings for when methods join.
+### Production EC2 cutover ceremony — 8 sub-items (audit-derived)
 
-## ✅ Operator-action external clocks — TWO RESOLVED at Day 39 AM; remaining clocks still healthy
+Per the Day-37 audit's critical-path step [14]:
 
-**Day 39 update:** two of the four overnight legal replies arrived; both captured verbatim in today's `decisions.md` entries. Status table below reflects the materially improved state:
+1. Prod EC2 provisioning + Ansible bootstrap
+2. Prod Route 53 records (8-record set: apex, www, api, app, admin, my, customers, wildcard)
+3. Prod wildcard cert via DNS-01 (Let's Encrypt with route53 plugin)
+4. `eventpulse-deploy-prod` GitHub-OIDC role (canonical three-claim trust pattern per CLAUDE.md §17.9.1)
+5. 11 `eventpulse/prod/*` Secrets Manager entries (database / eps — already authorised Day 38 EOD-late / cloudflare-saas / porichoy / ssl-wireless / ses / sentry / jwt / redis / oauth-google / oauth-apple)
+6. 2 prod KMS CMKs (`alias/eventpulse-prod` for general; `alias/eventpulse-kyc-prod` for per-purpose KYC bucket per §17.9)
+7. Prod-branch ff-merge (`origin/prod` at `21dad2cc` → current main `6e54f34`; ~90+ commits to bring forward)
+8. §17.11 alarm catalogue (CPU >85%/10min, mem >90%/5min, disk >80%, error rate >1%/5min, payment success <95%/15min, disbursement batch failure, reconciliation invariant violation)
 
-1. **EPS production credentials request** — sent before Day 38; awaiting EPS reply. Gates critical-path step [4]→[5]→[6] (Production smoke). Once received, the next-available session can open the production smoke per `docs/runbooks/production-smoke.md` + the Day-38-EOD-late confirmation that runbook precondition #2 (`eventpulse/prod/eps`) is SATISFIED. **Status: clock still running.**
-2. **NBR/VAT opinion (§29 #10)** — ✅ **RESOLVED 2026-05-31 Day 39 AM with written record** (see `decisions.md` 2026-05-31 Day 39 "CA written opinion received on NBR/VAT" top entry). All three interpretations (a)(b)(c) confirmed in writing; commission within existing PPA BIN 009043032-0102; Mushak-9.1 nil-return cadence continues; revisit only on (operational-model change / commission-structure revision / turnover-approaching-VAT-threshold). **Both §29 launch-blocking legal questions now RESOLVED** (#9 AIT 2026-05-26; #10 NBR/VAT today).
-3. **Counsel follow-up (Salehin)** — ✅ **PARTIALLY RESOLVED 2026-05-31 Day 39 AM with two written replies** (see `decisions.md` 2026-05-31 Day 39 "Salehin written opinion received on Buyer Terms" + "...on incorporation" entries). Buyer Terms reading (a) primarily confirmed with practical qualification → NEW pre-launch deliverable Buyer-Terms-Lite (4 topics: platform usage / limited role / data consent / liability carve-outs); Phase 2 produces first draft today. Incorporation: Path B LOCKED (soft-launch + post-launch Pvt Ltd 4–6 weeks). **Remaining Salehin item:** review Buyer-Terms-Lite draft (operator emails him this week per his review-this-week offer).
-4. **Candidate first paying tenant** — IDENTIFIED at Day 38 EOD; bKash-audience-suitable for v1.0 single-method launch shape per Option 3 implication (b). **Status: identified; onboarding ready to proceed once Phase 2b + production smoke + Buyer-Terms-Lite-into-checkout-wire land.**
+The CloudWatch >85% memory alarm is the smallest sub-task and a good first one (5-minute AWS-write task; ASK-FIRST).
 
-**Implication for June 10 launch math:** §29 #10 RESOLVED materially de-risks the runway. Only one external-clock blocker remains (EPS prod credentials for the smoke session). Remaining work is build-track (Phase 2b + SNS suppression + Buyer-Terms-Lite wire-into-checkout) + the one external clock (EPS) + the operational ceremony (first-tenant onboarding) — sequenceable inside the remaining runway with healthy slack now.
+## 📅 Path B incorporation — DATED CARRY ITEMS (unchanged from Day 39 AM)
 
-## 📅 Path B incorporation — DATED CARRY ITEMS (per Day 39 operator instruction)
-
-Path B chosen 2026-05-31 (see `decisions.md` 2026-05-31 Day 39 "Salehin written opinion received on incorporation; Path B LOCKED" entry). Carry items below have **dated calendar markers** (not vague "post-launch"):
+Path B chosen 2026-05-31 (`decisions.md` 2026-05-31 Day 39 "Salehin written opinion received on incorporation; Path B LOCKED" entry). Carry items below have **dated calendar markers** (not vague "post-launch"):
 
 | Item | Target date / window | Status |
 |---|---|---|
@@ -113,43 +58,56 @@ Path B chosen 2026-05-31 (see `decisions.md` 2026-05-31 Day 39 "Salehin written 
 | Pvt Ltd target completion (RJSC certificate issued; new Organiser Agreements sign against Pvt Ltd directly) | **2026-07-22** (outer boundary of Salehin's 4–6 weeks recommended window) | PENDING |
 | Update CLAUDE.md §29 #9 + #10 + Path B + Buyer-Terms-Lite to v2.4 playbook bump backlog | Pre-launch nice-to-have; post-launch firm | TRACKED |
 
-## ⚠️ Day 39 AM deliverables (this session's first batch)
+## ⚠️ TL;DR for next session (Day 40)
 
-- **THIS memory PR** — Phase 1 reconciliation to overnight Salehin + CA written replies. Three new `decisions.md` top entries (CA NBR/VAT — §29 #10 RESOLVED + Salehin incorporation — Path B LOCKED + Salehin Buyer Terms — reading (a) primary + Buyer-Terms-Lite surfaced). `handoff.md` overwritten to Day 39 state: §29 #10 marked RESOLVED in operator-action table; Path B dated carry items added (2026-06-24 incorporation paperwork start; 2026-07-08 → 2026-07-22 novation execution window); Buyer-Terms-Lite added to pre-launch commitments.
-- **(Phase 2)** `docs/legal/buyer-terms-lite-draft.md` first draft — 4 sections per Salehin's framing (platform usage / limited role disclaimer / data processing consent / liability carve-outs); BN-first bilingual per R12. Operator review + edits before any send to Salehin. (STOP-ASK after draft per Day 39 prompt.)
-- **(Phase 3)** Phase 2b technical follow-up to PR #228: SES bilingual dispute-notification template (`order_disputed_wrong_method`) + admin endpoint `GET /admin/orders/disputed` + manual-refund execution flow (status `disputed → refunded`).
-- **(Phase 4)** SNS bounce/complaint suppression-list scaffolding: schema + webhook handlers + outbound-send guard. Code-only PR; AWS-side SNS topic creation + IAM changes STOP-ASK for separate operator-authorised session.
-- **(Phase 5)** Day 39 EOD memory + handoff closeout.
+- **First-thing-tomorrow (Day 40):** Phase 4 AWS-side wiring is the cleanest immediate handle — own session per `docs/runbooks/sns-bounce-complaint-aws-wiring.md` (PR #236, Day 39 PM). Operator-authorised. STOP-ASK before any AWS Console write. Lands `MAIL_DRY_RUN=0` for staging once subscription confirms + first SES mailbox-simulator bounce/complaint round-trip succeeds.
+- **Then (Day 40 or 41+):** Production EC2 cutover ceremony — pick the lightest sub-item first (CloudWatch >85% memory alarm; 5-minute AWS-write task; ASK-FIRST), surface the larger ones (Route 53 record set; Ansible bootstrap; eventpulse-deploy-prod OIDC role; secrets manager entries) one by one. Each AWS write is its own STOP-ASK.
+- **Then (subject to EPS prod-credentials arrival):** BDT-100 production bKash smoke per `docs/runbooks/production-smoke.md` (PR #230, Day 38). Precondition #2 (`eventpulse/prod/eps` Secrets Manager entry SATISFIED). Own gated session; 9-step procedure; STAGING_PAYMENT_BLOCK lift recorded in decisions.md; re-enable immediately after.
+- **Post-launch roadmap explicit (carryover from Day 38):** Card-method addition is the immediate next addition — target week 1 post-launch. Each new method requires its own production rate-confirmation smoke before going live (same discipline as v1.0 bKash; runbook generalises). Copy plan at `docs/copy/bkash-only-launch.md` captures the multi-method copy strings for when methods join.
 
-## ⚠️ Day 38 EOD shipped (yesterday — carryover record)
+## ⚠️ Day 39 PM EOD deliverables (this session's PM batch)
 
-- **PR #227 `fix(fees)`** `8afb079` — Phase 1 calculator: `DEFAULT_EPS_FEE_BPS_ESTIMATE` 250 → 175 (bKash MFS rate per truth-gate Mode A 1.747%, rounded). JSDoc cites Option 3 decision + observed 1.747% + capture-base arithmetic (+7-paisa floor delta). New `EPS_BPS_175_BKASH_V1` test constant + 3 new tests pin Mode A reproduction + truth-gate delta + §14.10 Invariant-1 at the launch rate. Existing §14.2 worked-example tests at 250 bps UNCHANGED (spec archaeology). Truth-gate `scenarios.ts:49` LEFT at 250 (§14.2-narrative-bound historical artifact). Prettier drive-by fix on yesterday's `fee-model.md`. Merged (CI re-ran after the prettier fix). v2.4 backlog: scenarios.ts rewire + CLAUDE.md §14.2 worked-example doc update.
-- **PR #228 `feat(checkout)`** `8fefa41` — Phase 2a Verify-guard rejection (operator chose mechanism (d)). NEW `bkash-financial-entity.ts` predicate (case-insensitive trimmed exact match; fails closed on null/missing/non-string) + 15 predicate tests. State machine extended: `awaiting_payment → disputed` newly legal. NEW `writeOrderDisputed` audit helper captures `dispute_reason` + verbatim `FinancialEntity`. settle.ts integrates the guard; `/orders/return/wrong-method` redirect added. 8 new integration tests covering happy-bKash + card-disputed + Nagad-disputed + missing-FE-fail-closed + EPS-failed-not-success + audit + events + no-delivery. Two pre-existing settle.test.ts mocks updated to include `FinancialEntity: 'bKash'` (CI caught this on first push; fix-up commit landed). Merged with all 8 checks green.
-- **PR #229 `feat(copy)`** `79177d7` — Phase 3 honest UI copy. buyer-form.tsx: bilingual bKash-only notice below subtotal + submit-button label `Continue to payment` → `Continue with bKash` (paid tier only). 4 new tests pin notice + button across paid/free/bilingual/isFreeEvent-gating. NEW `docs/copy/bkash-only-launch.md` living document with canonical EN+BN strings for surfaces that don't yet exist (marketing pages, Day 28+ buyer-return frontend pages incl. `/orders/return/wrong-method`, tenant pre-Organiser-Agreement disclosure, Phase 2b dispute-notice email template). Counsel-owned legal docs surveyed: NONE imply multi-method support; no follow-up flag needed. Email templates surveyed: method-agnostic; no change. KYC step-3-financial.tsx is organiser PAYOUT options (distinct from buyer); no change. Merged.
-- **PR #230 `docs(runbook)`** — Phase 4 BDT-100 production bKash smoke runbook. 7 hard preconditions + smoke transaction parameters + expected Verify response shape + derived rate calculation + decision rules matrix + 9-step procedure + post-smoke gates + post-launch evolution. Documented but NOT run this session. (Pending CI / merge at EOD memory-PR-author time; expected to land cleanly as docs-only PR.)
-- **THIS memory PR** — Day 38 EOD closeout per Phase 5 prompt. decisions.md captures the 4-PR sweep + 5 operator decisions (Phase 1 bps + Phase 1 scenarios + Phase 2 mechanism + Phase 2a sub-decision A admin queue UI + Phase 2a sub-decision B match semantics). handoff.md overwritten to Day 38 EOD state: critical-path steps [2][3] now ✅ DONE; standing invariants updated to reflect HARD STOP lift on fee-calculator.ts; operator-action external clocks #1-#4 surfaced as STILL UN-STARTED.
+- **PR #232 `feat(admin)` `719967b`** — Phase 2b disputed-orders workflow. State machine `disputed → refunded`; `writeOrderRefunded` audit; `order-disputed-wrong-method` SES template (XSS-hardened with escapeHtml + safeUrl helpers); `manualRefundService`; super-admin `GET /admin/orders/disputed` (cursor-paginated) + `POST /admin/orders/:id/mark-refunded`. CI required a test-isolation fix (`Option A` patch: assert presence-of-our-seeded-rows + absence-of-our-seeded-paid via `body.data.find()`, instead of exact list length — the super-admin queue is global by design, so cross-suite leakage from settle.test.ts is expected).
+- **PR #236 `feat(notifications)` `ed03132`** — SNS bounce/complaint suppression-list (code-only Phase 4). Migration 0014 (`email_suppression_list` table); X.509 RSA-SHA256 SNS signature verification with TopicArn allowlist (load-bearing trust-source check) + ±1-hour timestamp freshness window; SES bounce + complaint webhook handlers; outbound-send guard in SES client. AWS-side wiring **STOP-ASK gated**; runbook documented but NOT executed; current env has `SES_BOUNCE_TOPIC_ARNS` + `SES_COMPLAINT_TOPIC_ARNS` unset → fail-closed. Three operator-required clarifications in PR description: anchored regex confirmation; replay-defense scope (MessageId-replay deferred with idempotency rationale; topic-allowlist-then-signature is the load-bearing pair); topicArn-in-log observability fix landed within PR scope (commit `65f428b`).
+- **PR #237 `feat(checkout)` `6e54f34`** — Buyer-Terms-Lite v1.0 consent_records wire-in. 6 commits (4 substantive + 2 CI-fix). Doc promotion v0.3 → v1.0 (Step 4 ✅ + Step 5 ✅ in `docs/legal/buyer-terms.md`); migration 0015 (`consent_records`); seed `db:seed:buyer-terms-v1`; `resolveBuyerTermsCurrentVersion` helper; service tx-seam INSERT inside `withSuperAdmin` order tx (precondition semantics — failure rolls back order → no EPS Initialize); buyer-form clickwrap line + body_html panel; Day-34 link-footer REMOVED. 2 service tests (happy path + precondition-failure with try/finally restore) + 5 buyer-form tests (clickwrap render + body render + fallback + Day-34 regression guard). CI-fix commit chain: unescaped `'` → `&apos;` (next-lint catches what api-side noop-lint misses); seed-legal-documents.test.ts cleanup needs `delete consentRecords` BEFORE the version delete (new FK from migration 0015); prettier-format on 2 files I missed re-running prettier on. All 8 CI checks SUCCESS on final ca564df.
 
-**Code touched in `apps/api/src/domain/payments/fee-calculator.ts` this session: NONE** — the file itself stayed untouched per the method-agnostic design (Day 21 author's foresight); the rate change lived in services/orders/index.ts caller default. HARD STOP carried through the entire Phase 1 PR + lifted at merge per Option 3 entry's "What stays unchanged" section.
+**Codebase state at Day 39 PM EOD:**
 
-## ⚠️ The launch gate state — 0 active blockers; both §29 legal questions RESOLVED at Day 39 AM
+```text
+main HEAD: 6e54f34 feat(checkout): Buyer-Terms-Lite v1.0 consent_records wire-in (#237)
+        │
+        └── ed03132 feat(notifications): SNS bounce/complaint suppression-list — code-only Phase 4 (#236)
+        └── 719967b feat(admin): Phase 2b disputed-orders workflow — SES template + admin queue + manual-refund (#232)
+        └── 48460a2 memory: Day 39 AM reconciliation — Salehin + CA written replies captured verbatim (#233)
+        └── 124c171 docs(runbook): BDT-100 production bKash smoke for v1.0 rate confirmation (#230)
+```
+
+## ⚠️ Day 38 EOD shipped (carryover record)
+
+- **PR #227 `fix(fees)`** `8afb079` — `DEFAULT_EPS_FEE_BPS_ESTIMATE` 250 → 175 bKash MFS rate per Option 3.
+- **PR #228 `feat(checkout)`** `8fefa41` — Phase 2a Verify-guard rejection mechanism (d): non-bKash `FinancialEntity` → `disputed`.
+- **PR #229 `feat(copy)`** `79177d7` — Phase 3 honest UI copy bilingual bKash-only notice + `Continue with bKash` button label.
+- **PR #230 `docs(runbook)`** `124c171` — Production BDT-100 smoke runbook (7 preconditions + 9-step procedure).
+- **Day 38 EOD memory PR** `feea4b8` (carried into PR #233 Day 39 AM rewrite).
+
+## ⚠️ The launch gate state — 0 legal blockers; only EPS credentials clock + infrastructure track remain
 
 1. ~~EPS sandbox credentials~~ ✅ RESOLVED 2026-05-26.
 2. ~~SES out-of-sandbox~~ ✅ RESOLVED 2026-05-31 (case 177899559700777, ap-southeast-1).
 3. ~~EPS fee-model structural decision~~ ✅ RESOLVED 2026-05-31 Day 37 EOD — Option 3 chosen + implementation SHIPPED Day 38 across PRs #227 / #228 / #229 / #230.
 4. ~~§29 #9 AIT classification~~ ✅ RESOLVED 2026-05-26 (CA written opinion).
-5. ~~§29 #10 NBR/VAT registration model~~ ✅ **RESOLVED 2026-05-31 Day 39 AM** (CA written opinion; entry above). Both §29 launch-blocking legal questions now RESOLVED with written records.
-6. ~~Salehin: Buyer Terms framing~~ ✅ RESOLVED 2026-05-31 Day 39 AM — reading (a) primary; full Buyer Terms NOT needed; Buyer-Terms-Lite required (NEW pre-launch deliverable).
+5. ~~§29 #10 NBR/VAT registration model~~ ✅ RESOLVED 2026-05-31 Day 39 AM (CA written opinion).
+6. ~~Salehin: Buyer Terms framing~~ ✅ RESOLVED 2026-05-31 Day 39 AM — reading (a) primary; Buyer-Terms-Lite required (NEW pre-launch deliverable).
 7. ~~Salehin: Incorporation path~~ ✅ RESOLVED 2026-05-31 Day 39 AM — Path B LOCKED; soft-launch + post-launch Pvt Ltd 4–6 weeks.
+8. ~~Buyer-Terms-Lite v1.0 wire-in (consent_records replaces Day-34 link-footer)~~ ✅ **RESOLVED 2026-05-31 Day 39 PM** (PR #237 merged + deployed + smoked; sign-off chain Step 5 ✅ CLOSED; legal-doc consent-capture pattern established for future Trust Center v1.0 docs).
 
-**Pre-launch commitments (gate env flips, not launch itself):**
+**Pre-launch commitments (gate env flips or ceremony, not legal):**
 
-- **Buyer-Terms-Lite document at checkout (NEW at Day 39 AM)** — Salehin's required 4-topic lightweight terms (platform usage / Event Pulse's limited role / data processing consent / basic liability carve-outs). Phase 2 produces first draft today; operator emails to Salehin via his review-this-week offer; once Salehin signs off and operator approves final version, wired into checkout's `consent_records` capture. **Replaces the obsolete "Buyer Terms body" line from the Day 38 handoff** — Salehin clarified full Buyer Terms NOT needed; Buyer-Terms-Lite is the correct framing.
-- **SNS bounce/complaint suppression-list wiring** (decisions.md 2026-05-31 SES entry) — gates `MAIL_DRY_RUN=0`. AWS commitment (case 177899559700777 reply). Phase 4 ships code-only PR today; AWS-side SNS topic creation + IAM changes STOP-ASK for separate operator-authorised session.
-- **STAGING_PAYMENT_BLOCK lift for prod smoke** — own gated session per `docs/runbooks/production-smoke.md`; re-enable immediately after. Precondition #2 (`eventpulse/prod/eps`) SATISFIED per Day-38-EOD-late verification (PR #231 once merged); remaining preconditions still gate the smoke.
-- **Phase 2b — buyer-notification SES template + admin disputed-orders queue endpoint** (Day 38 deferred) — Phase 3 today ships these. Operational surface for the Phase 2a Verify-guard mechanism (PR #228). v1.0 launch posture acceptable without React UI (ops uses `audit_logs` queries directly) but template + endpoint are still useful.
-- **Production bKash smoke** — runbook in `docs/runbooks/production-smoke.md` (PR #230); smoke session itself opens once EPS prod-credentials arrive (operator-action #1 still pending).
+- **Phase 4 SNS bounce/complaint AWS-side wiring** — own operator-authorised session per `docs/runbooks/sns-bounce-complaint-aws-wiring.md` (PR #236). Gates `MAIL_DRY_RUN=0` per AWS commitment in case 177899559700777 reply. Code shipped Day 39 PM; AWS side STOP-ASK pending.
+- **STAGING_PAYMENT_BLOCK lift for prod smoke** — own gated session per `docs/runbooks/production-smoke.md` (PR #230). Precondition #2 (`eventpulse/prod/eps`) SATISFIED at Day-38-EOD-late verification. Remaining preconditions still gate the smoke (EPS prod credentials, prod EC2 + Nginx + DNS + wildcard cert, prod-branch ff-merge, EPS_MODE=production on prod EC2 once provisioned, operator on-call, reversal path).
+- **Production EC2 cutover ceremony** — 8 sub-items from Day-37 audit's critical-path step [14] (see table above). Multiple STOP-ASK gates per sub-item.
 
-## ⚠️ Empirical findings table — quick recall (decision-grade context for Day 38)
+## ⚠️ Empirical findings table — quick recall (decision-grade context; carryover)
 
 | Mode | Status | FE | TotalAmount | StoreAmount | observedEps | predictedEps | Δ | Trust |
 |:---:|:---:|:---:|---:|---:|---:|---:|---:|:---:|
@@ -162,28 +120,31 @@ All amounts paisa. §14.10 Invariant-1 PASS across all 4. **The only fully-clean
 
 ## ⚠️ Build-track items still in play
 
-- ⏳ **CloudWatch >85% memory alarm — STILL OPEN.** 5-minute AWS-write task. ASK-FIRST.
+- ⏳ **CloudWatch >85% memory alarm — STILL OPEN.** 5-minute AWS-write task. ASK-FIRST. Lightest sub-item of the production cutover ceremony.
 - ⏳ **Full §17.11 alarm catalogue** beyond memory: CPU >85%/10min, mem >90%/5min, disk >80%, error rate >1%/5min, payment success <95%/15min, disbursement batch failure, reconciliation invariant violation. Required pre-prod-cutover.
 - ⏳ **t3.medium upgrade** (4 GB, ~+$15/mo) — pre-prod-cutover Moshiur decision.
 - ⏳ **k6/artillery load test budget** (§24.4 Sprint-4-close CI requirement) — NOT WIRED.
 - ⏳ **`pnpm audit` blocking on high+critical** (§24.4 Sprint-4-close CI requirement) — NOT WIRED.
-- ⏳ **Production cutover surface** — 11 `eventpulse/prod/*` Secrets Manager entries; 2 prod KMS CMKs (`alias/eventpulse-prod` + `alias/eventpulse-kyc-prod`); prod EC2 Ansible bootstrap; prod Route 53 records (8-record set); prod wildcard cert via DNS-01; `eventpulse-deploy-prod` OIDC role; prod-branch ff-merge (`21dad2cc` → `ad0f5fe9`).
-- ⏳ **v2.4 playbook bump backlog** — §14.2 Mode C narrative, §29 #9 AIT reclassification, §29 list housekeeping, prod-branch tracking discipline, Sprint 2-4 accumulated amendments, fee-model resolution once decided.
-- ⏳ **Sprint 4 remaining buildable** — Refund flow + manual disbursement + BEFTN file generator (§26.1 Day 7-8) + Marketing pages w/ two-fee-mode calculator (§26.1 Day 9) + Launch readiness (§26.1 Day 10).
-- ⏳ **Loose ends (low priority):** Counsel docs 4-8 bodies (Refund Policy, AUP, Cookies, DPA, EULA — Buyer Terms load-bearing); manual click-through of OAuth callback redirect (PR #149 carry); stale `magic-link-form.tsx:20` + `super-admin/kyc.ts:51` TODO audit.
+- ⏳ **Production cutover surface** — 11 `eventpulse/prod/*` Secrets Manager entries; 2 prod KMS CMKs (`alias/eventpulse-prod` + `alias/eventpulse-kyc-prod`); prod EC2 Ansible bootstrap; prod Route 53 records (8-record set); prod wildcard cert via DNS-01; `eventpulse-deploy-prod` OIDC role; prod-branch ff-merge (`21dad2cc` → `6e54f34`).
+- ⏳ **v2.4 playbook bump backlog** — §14.2 Mode C narrative, §29 #9 + #10 reclassification, §29 list housekeeping, Buyer-Terms-Lite v1.0 + Path B incorporation, prod-branch tracking discipline, Sprint 2-4 accumulated amendments, fee-model resolution Day 38 sweep, Day 39 PR sweep, consent_records §9.11 amendment.
+- ⏳ **Sprint 4 remaining buildable** — Refund flow + manual disbursement + BEFTN file generator (§26.1 Day 7-8) + Marketing pages w/ single-method honest pricing (§26.1 Day 9) + Launch readiness (§26.1 Day 10).
+- ⏳ **Loose ends (low priority):** Counsel docs 4-8 bodies (Refund Policy, AUP, Cookies, DPA, EULA — Buyer-Terms-Lite v1.0 already SHIPPED Day 39 PM); manual click-through of OAuth callback redirect (PR #149 carry); stale `magic-link-form.tsx:20` + `super-admin/kyc.ts:51` TODO audit.
 
-## Where things live (quick map — Day 37 additions)
+## Where things live (quick map — Day 39 PM additions)
 
-- **Decision surface:** `decisions.md` 2026-05-31 Day 37 entry (this commit) — operator overnight review.
-- **Critical path tracking surface:** this file's diagram at top.
-- **V5 schema PR (this session):** `apps/api/src/infra/eps/eps-wire-protocol.ts` V5VerifyResponseSchema extension.
-- **Audit document:** "Pending Work to Ship EventPulse" — workflow `wq9vfxuf4`, output at `/private/tmp/claude-501/.../tasks/wq9vfxuf4.output` (local-only; transcript dir).
+- **Decision surface:** `decisions.md` 2026-05-31 Day 39 PM EOD top entry — Buyer-Terms-Lite v1.0 SHIPPED end-to-end (this commit).
+- **Critical path tracking surface:** Day-37 audit critical-path diagram (unchanged shape; steps [1]-[3] + [7]-[12] now ✅ COMPLETE; remaining = [4]-[6] + [13]-[17]).
+- **Buyer Terms v1.0 doc (canonical):** `docs/legal/buyer-terms.md` (APPROVED v1.0; replaces obsolete `buyer-terms-lite-draft.md`).
+- **Buyer Terms v1.0 production timestamp:** deploy SHA `6e54f34` at 2026-06-01T10:31:02Z UTC; `legal_document_versions.effective_at` for the v1.0 row = 2026-06-01T10:32:57.174Z UTC (12104 bytes body_html cached).
+- **PR #237 commits:** `7d9bded` doc; `3a3dba8` schema + migration + seed + hooks; `94be645` service + frontend; `8aef922` tests; `082cd19` + `ca564df` CI fixes.
 
-## Standing invariants (still enforcing — 9-day runway protection)
+## Standing invariants (still enforcing through remaining runway)
 
-- **`STAGING_PAYMENT_BLOCK=1`** in `.env.staging` + pm2 env id=1. Truth-gate three-lock bypass remains harness-scoped; operator-app traffic still blocked. Re-verified live Day 38 Phase 0 invariants check. **Only authorized lift: BDT-100 production smoke on its own gated session per `docs/runbooks/production-smoke.md` (PR #230) + decisions.md §11.0; re-enable immediately after.** Non-negotiable through June 10.
-- **v1.0 single-method launch — bKash-only enforcement (NEW Day 38):** Server-side via Phase 2a Verify-guard in settle.ts (PR #228): non-bKash `FinancialEntity` → `disputed` status, no QR/delivery, redirect to `/orders/return/wrong-method`. UI-side via Phase 3 honest copy (PR #229): pre-checkout notice + button label `Continue with bKash`. v1.0 launch posture is server-side-enforced, not honour-system; deviation cohort goes through manual refund queue. Post-launch evolution: each new method requires its own production rate-confirmation smoke per `docs/runbooks/production-smoke.md`.
-- **HARD STOP on `apps/api/src/domain/payments/fee-calculator.ts`** — LIFTED Day 38 per Option 3 decision entry's "What stays unchanged" section + Phase 1 PR #227 shipping with operator approval. The calculator architecture itself remained untouched this session (no code changes inside fee-calculator.ts); only the caller's default constant in services/orders/index.ts changed. Future fee-math changes are still STOP-ASK gates per CLAUDE.md §1.4; the HARD STOP carries forward as single-PR-at-a-time discipline rather than a blanket lock.
+- **`STAGING_PAYMENT_BLOCK=1`** in `.env.staging` + pm2 env id=1. Re-verified live Day 39 PM EOD invariants check post-PR-#237-deploy. **Only authorized lift: BDT-100 production smoke on its own gated session per `docs/runbooks/production-smoke.md` + decisions.md §11.0; re-enable immediately after.** Non-negotiable through 2026-06-10.
+- **v1.0 single-method launch — bKash-only enforcement (Day 38):** Server-side via Phase 2a Verify-guard + Phase 2b dispute-flow surfaces (PR #228 + PR #232). UI-side via Phase 3 honest copy (PR #229) + Day-39-PM bilingual clickwrap line (PR #237). v1.0 launch posture is server-side-enforced, not honour-system.
+- **HARD STOP on `apps/api/src/domain/payments/fee-calculator.ts`** — LIFTED Day 38; carries forward as single-PR-at-a-time discipline rather than blanket lock.
+- **Buyer-Terms-Lite v1.0 consent capture precondition (Day 39 PM):** every paid + free order created via `createOrder` writes a `consent_records` row inside the same `withSuperAdmin` tx, anchored by `order_id`. INSERT failure rolls back the entire tx → no order persisted → no EPS Initialize call. This is the operator-spec'd precondition behavior ("consent capture is a precondition, not a side effect"). Future legal-doc consent surfaces follow the same wire-in shape.
+- **Phase 4 AWS-side STOP-ASK** (Day 39 PM): code shipped (PR #236) but AWS resources (SNS topics, Configuration Set event destinations, IAM policy) NOT created. `SES_BOUNCE_TOPIC_ARNS` + `SES_COMPLAINT_TOPIC_ARNS` env vars unset → webhooks fail-closed on every message. AWS-side wiring lands in own operator-authorised session per `docs/runbooks/sns-bounce-complaint-aws-wiring.md`.
 - Branch protection: pre-push hook + workflow_dispatch gates on `main`; memory commits go through PRs.
 - Memory protocol: decisions → decisions.md the turn they're made; gotchas → gotchas.md the moment learned.
 - Money math single source: `fee-calculator.ts`. No fee arithmetic elsewhere.
@@ -191,5 +152,6 @@ All amounts paisa. §14.10 Invariant-1 PASS across all 4. **The only fully-clean
 - Auth-gate-is-the-entire-security-model for `/api/v1/admin/*` (Day-35).
 - Build-track owns surfacing what's draftable for the launch gate (Day-35).
 - Wire-protocol diagnostic logging (PR #217) — keep ON permanently.
-- **Prod branch tracking discipline (Day 37):** track `origin/prod` SHA every session; if it diverges from `main` by more than a sprint, document as pre-cutover requirement (current: `origin/prod` at `21dad2c`; `main` at `79177d7` post-PR-#229; divergence now ~85 commits; ff-merge or cherry-pick onto `prod` required before any production deploy — critical-path step [14] sub-task).
-- **Method-agnostic-calculator discipline (Day 38 codified):** Day 21 author's decision to make `epsFeeBps` a calculator input (not a hardcoded constant) is what made Phase 1's Option 3 implementation a 1-line caller-default change instead of a calculator surgery. Future per-method work should respect the same architecture: the method-to-bps mapping lives in the CALLER, not in fee-calculator.ts.
+- **Prod branch tracking discipline (Day 37):** track `origin/prod` SHA every session; if it diverges from `main` by more than a sprint, document as pre-cutover requirement. Current: `origin/prod` at `21dad2cc`; `main` at `6e54f34` post-Day-39-PM sweep; divergence now ~90+ commits; ff-merge or cherry-pick onto `prod` required before any production deploy — critical-path step [14] sub-task.
+- **Method-agnostic-calculator discipline (Day 38 codified):** Day 21 author's decision to make `epsFeeBps` a calculator input made Phase 1's Option 3 implementation a 1-line caller-default change instead of a calculator surgery. Future per-method work respects the same architecture: the method-to-bps mapping lives in the CALLER, not in fee-calculator.ts.
+- **Bash-buffering deploy.sh discipline (Day 39 PM codified):** edits to `infra/deploy/deploy.sh` itself don't execute on the deploy that ships them — bash buffers the small script at process start; `git reset --hard` updates the on-disk file but the running process continues from the buffer. New steps in deploy.sh edits need either (a) a manual SSM one-shot for bootstrap recovery on the shipping deploy, or (b) the next deploy after to exercise them. See `gotchas.md` "deploy.sh edits don't execute on the deploy that ships them". Files INVOKED by deploy.sh (migrations, seed scripts, dist code) are picked up fresh because they're exec'd post-`git reset`.

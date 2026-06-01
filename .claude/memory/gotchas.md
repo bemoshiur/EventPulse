@@ -4,6 +4,41 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## `deploy.sh` edits don't execute on the deploy that ships them — bash buffers the script (2026-06-01 / Day 39 PM / PR #237)
+
+**Symptom.** PR #237 added a new "4.1) Idempotent seeds (post-migrate, pre-pm2-reload)" block to `infra/deploy/deploy.sh` invoking `db:seed:legal-documents` + `db:seed:buyer-terms-v1` between `db:migrate` and `pm2 reload`. After the squash-merge to main (`6e54f34`), deploy completed SUCCESS — `/health` returned 200, pm2 reloaded both api + web — but the smoke check `GET /api/v1/public/legal/by-url-path?path=/buyer-terms` returned `404 DOCUMENT_NOT_FOUND`. The deploy log showed `migrations complete: 1 applied, 14 already in place` jumping STRAIGHT to `no nginx vhost changes; skipping nginx reload`, **completely missing the seed-step output** (the seed's own `console.log('buyer-terms v1.0: seeded (X bytes HTML…)')` line was nowhere in the log).
+
+**Why it happens.** `deploy.sh` runs as a long-running bash process. Step 1 of the script does `git reset --hard origin/main` to fetch the merged code. This **updates `deploy.sh` on disk** to the new version (with the seed lines). But the **already-running bash process** has the OLD `deploy.sh` content loaded into its memory and continues executing from that buffer — bash reads short scripts as a single chunk at process start, and for chunks already loaded, the on-disk change has no effect on the running invocation. Result: the deploy.sh that EXECUTES on the deploy that SHIPS the change is the prior version — it has the same migrate + pm2 reload as before, NO seed step. The new seed step only executes starting from the **next** deploy, when bash loads the now-on-disk new `deploy.sh` from scratch.
+
+This is bash's expected (if surprising) behavior. POSIX shells permit (but don't require) re-reading scripts on disk-change; bash's optimization buffers small scripts entirely at start, large scripts in chunks. `deploy.sh` is small enough to land entirely in the first chunk.
+
+**Fix (one-shot recovery on the deploy that ships the change).** Run the new step manually via SSM. For PR #237:
+
+```bash
+aws ssm send-command \
+  --instance-ids i-02e4fddeb923c14f9 \
+  --document-name AWS-RunShellScript \
+  --comment "bootstrap-seed-buyer-terms-v1" \
+  --parameters 'commands=["cd /home/eventpulse/app && sudo -u eventpulse env PATH=/home/eventpulse/.local/share/pnpm:/home/eventpulse/.nvm/versions/node/v22.21.0/bin:/usr/bin:/bin DATABASE_URL=$(sudo -u eventpulse grep ^DATABASE_URL /home/eventpulse/.env.staging | cut -d= -f2-) pnpm --filter @eventpulse/api db:seed:buyer-terms-v1"]' \
+  --profile eventpulse --region ap-southeast-1
+```
+
+Then re-run the smoke check to confirm. PR #237 fix: seed ran cleanly via SSM, `12104 bytes HTML cached`, `GET /buyer-terms` returned `version=v1.0` with all four Salehin signature markers (`পরোক্ষ ক্ষতি`, `Clause 6.2`, `Continue with bKash`, `প্রতারণামূলক উপস্থাপনা`) present in body_html.
+
+**How to avoid.** When adding a critical post-migrate step to `deploy.sh` (e.g. a seed):
+
+1. Plan TWO deploys: the first deploy ships the new `deploy.sh` content (but doesn't run the new step); the second deploy exercises it naturally because bash loads the on-disk new file from scratch.
+2. OR plan a manual SSM one-shot during the same merge session for bootstrap recovery (this is what we did for PR #237).
+3. OR restructure: put the new step in a **separate** script that `deploy.sh` invokes via `bash /path/to/new-step.sh` rather than inline. The exec'd subprocess loads the new script fresh.
+
+The next deploy (whenever it lands) will naturally execute the new seed lines because the on-disk `deploy.sh` is correct. This gotcha is one-time-per-deploy.sh-edit; subsequent deploys to the same shape are fine.
+
+**Counter-example that doesn't hit this.** Changes to files INVOKED by deploy.sh (like new migration files, new seed scripts referenced via `pnpm db:seed:X`, new code under `apps/api/dist/`) are picked up immediately because deploy.sh INVOKES them after the `git reset --hard` — the invocation reads the file fresh from disk at exec time. Only deploy.sh edits ITSELF face this gap.
+
+**Related.** Similar pattern exists for any long-running script that mutates its own backing file. Convention: put the volatile inline logic into a helper script that deploy.sh invokes via `bash /path/to/helper.sh` so each helper invocation is a fresh fork-and-exec. Long-term consideration for `infra/deploy/`: factor sub-steps into helper scripts so future edits don't replay this gotcha.
+
+---
+
 ## Conventional-commits CI check rejects PR titles >100 chars (after the `type(scope): ` prefix) (2026-05-31 / Day 37 / PR #223)
 
 **Symptom.** PR #223's title `feat(eps): V5 production additive-field schema tolerance (EpsTransactionId + PaymentReferance + StoreAmount optional)` failed the **"PR title is Conventional Commits"** CI check on first run with no other explanation. All other checks (8 of 8) were green. The failure surfaced only after the PR opened and CI ran — the local `commitlint` pre-commit hook did not catch it because pre-commit lints the commit-message subject line, while the CI check lints the **PR title** which `gh pr create --title` populated from the operator-provided prompt verbatim (109 chars).
