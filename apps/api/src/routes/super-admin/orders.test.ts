@@ -265,7 +265,7 @@ describeIfDb('/api/v1/admin/orders router (Day 39 Phase 2b)', () => {
   describe('GET /disputed', () => {
     it('returns disputed orders only (paid orders excluded)', async () => {
       const disputedId = await seedOrder('disputed', 'list-disp')
-      await seedOrder('paid', 'list-paid')
+      const paidId = await seedOrder('paid', 'list-paid')
 
       const res = await app().request('/api/v1/admin/orders/disputed', {
         method: 'GET',
@@ -275,29 +275,43 @@ describeIfDb('/api/v1/admin/orders router (Day 39 Phase 2b)', () => {
       const body = (await res.json()) as {
         data: Array<{
           id: string
+          tenantId: string
           status: string
           totalPaisa: string
           epsPaymentMethod: string | null
         }>
       }
-      expect(body.data.length).toBe(1)
-      expect(body.data[0]?.id).toBe(disputedId)
-      expect(body.data[0]?.status).toBe('disputed')
+      // Super-admin queue returns ALL disputed orders across ALL tenants
+      // — no tenant filter is intentional (the whole point of the queue
+      // is platform-wide triage). Cross-suite leakage from settle.test.ts
+      // is therefore possible; assert presence of our seeded disputed
+      // order + absence of our seeded paid order, not an exact count.
+      const ourDisputed = body.data.find((o) => o.id === disputedId)
+      expect(ourDisputed).toBeDefined()
+      expect(ourDisputed?.status).toBe('disputed')
       // bigint paisa serialised as string per envelope convention
-      expect(body.data[0]?.totalPaisa).toBe('102004')
+      expect(ourDisputed?.totalPaisa).toBe('102004')
       // FinancialEntity passthrough — for v1.0 the seed uses 'card'
-      expect(body.data[0]?.epsPaymentMethod).toBe('card')
+      expect(ourDisputed?.epsPaymentMethod).toBe('card')
+      // Paid order must not appear in the disputed queue.
+      expect(body.data.find((o) => o.id === paidId)).toBeUndefined()
     })
 
-    it('empty list when no disputed orders exist', async () => {
+    it('empty list when no disputed orders exist for our tenant', async () => {
       const res = await app().request('/api/v1/admin/orders/disputed', {
         method: 'GET',
         headers: { Authorization: `Bearer ${fix.adminToken}` },
       })
       expect(res.status).toBe(200)
-      const body = (await res.json()) as { data: unknown[]; meta: { hasMore: boolean } }
-      expect(body.data).toEqual([])
-      expect(body.meta.hasMore).toBe(false)
+      const body = (await res.json()) as {
+        data: Array<{ tenantId: string }>
+        meta: { hasMore: boolean }
+      }
+      // Same cross-suite-leakage caveat as above: the super-admin queue
+      // is global. Scope the assertion to OUR seeded tenant — after the
+      // beforeEach clean, our tenant has no disputed orders; assert that
+      // no row in the response belongs to our tenant.
+      expect(body.data.filter((o) => o.tenantId === fix.tenantId)).toEqual([])
     })
   })
 
