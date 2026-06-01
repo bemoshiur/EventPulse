@@ -1047,3 +1047,42 @@ export const consentRecords = pgTable(
     index('idx_consent_document_version').on(t.documentId, t.versionId, t.consentedAt),
   ],
 )
+
+// ─── contact_submissions (Day 42 §26.1 Day 9 part 2) ────────────────────
+//
+// Public contact form submissions per §22.1. Platform-wide (no
+// tenant_id); the open internet POSTs here through the rate-limited
+// public endpoint. Read access via super-admin only (no read path
+// exposed in this PR — admin UI follows in a later PR).
+
+export const contactSubmissions = pgTable(
+  'contact_submissions',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    name: text().notNull(),
+    email: citext().notNull(),
+    phone: text(),
+    organisation: text(),
+    subject: text().notNull(),
+    message: text().notNull(),
+    topic: text(),
+    ip: inet(),
+    userAgent: text('user_agent'),
+    status: text().notNull().default('new'),
+    assignedTo: uuid('assigned_to').references(() => users.id),
+    respondedAt: timestamp('responded_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'contact_submissions_topic_chk',
+      sql`${t.topic} IS NULL OR ${t.topic} IN ('sales','support','legal','partnership','press','security','other')`,
+    ),
+    check(
+      'contact_submissions_status_chk',
+      sql`${t.status} IN ('new','triaged','responded','closed','spam')`,
+    ),
+    index('idx_contact_submissions_status_created').on(t.status, t.createdAt),
+    index('idx_contact_submissions_topic_created').on(t.topic, t.createdAt),
+  ],
+)
