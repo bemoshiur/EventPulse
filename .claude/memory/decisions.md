@@ -4,6 +4,102 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-01 · Day 40 EOD — Phase 4 SNS bounce/complaint suppression-list AWS-side wiring SHIPPED end-to-end on staging
+
+**Closes:** the AWS-side STOP-ASK gate from Day 39 PM's Phase 4 PR #236 ("AWS Console writes — SNS topic creation + Configuration Set + IAM — STOP-ASK for separate operator-authorised session"). Phase 4 is now operational end-to-end on staging: SES bounces + complaints route through SNS → webhook → `email_suppression_list` → outbound-send guard. Verified by mailbox-simulator round-trip.
+
+### Context
+
+Day 39 PM PR #236 shipped the Phase 4 code (verify-signature.ts, ses-bounce.ts + ses-complaint.ts webhooks, suppression-list service, outbound-send guard in SES client, migration 0014 `email_suppression_list`) with the AWS-side wiring **deliberately NOT executed** (STOP-ASK boundary). Runbook authored at `docs/runbooks/sns-bounce-complaint-aws-wiring.md` documented the 7-step procedure.
+
+Day 40 (this entry) executed the wiring on staging via 8 STOP-ASK-gated steps, each operator-approved before any AWS or EC2 write:
+
+| Step | Action | Verification |
+|---|---|---|
+| 0 | Read-only baseline (no writes) | 0 existing eventpulse SNS topics; 0 Config Sets; webhook endpoints reachable + fail-closed |
+| 1 | Create 2 SNS topics: `eventpulse-ses-bounces-staging` + `eventpulse-ses-complaints-staging` | ARNs recorded; tags `Environment=staging, Service=ses-feedback, Owner=eventpulse` |
+| 1.5 | Append `SES_BOUNCE_TOPIC_ARNS` + `SES_COMPLAINT_TOPIC_ARNS` to `.env.staging` + reload api with `set -a; source` pattern | `/proc/<api-pid>/environ` confirms env vars live; webhook returns `signature_mismatch` (not `topic_not_allowed`) for matching ARN, proving allowlist active |
+| 2 | Apply IAM topic policy to both topics: allow `ses.amazonaws.com` → `sns:Publish` with `SourceAccount` + `SourceArn` confused-deputy guards | Read-back via `get-topic-attributes` matches |
+| 3 | HTTPS subscriptions to webhook URLs + topic `SignatureVersion=2` opt-in + fresh subscribe to trigger SubscriptionConfirmation with SHA256 signature | Both subscriptions transition `PendingConfirmation` → full ARN; api log shows `webhook.sns.subscription_confirm` for each |
+| 5 | SES Configuration Set `eventpulse-staging` + 2 event destinations (BOUNCE → bounces topic; COMPLAINT → complaints topic) | `get-configuration-set-event-destinations` shows both enabled |
+| 6 | Append `AWS_SES_CONFIGURATION_SET=eventpulse-staging` to `.env.staging` + reload api with source pattern | `/proc/<api-pid>/environ` confirms; SES client (`apps/api/src/infra/ses/client.ts:120`) reads the var → passes `ConfigurationSetName` on every send |
+| 7 | Send 2 mailbox-simulator emails (bounce + complaint) via AWS CLI with `--configuration-set-name eventpulse-staging` | Full chain landed: api logs `webhook.ses.bounce.suppressed` (`hard_bounce`) + `webhook.ses.complaint.suppressed`; `email_suppression_list` row inserted for each; cleanup DELETE verified empty post-test |
+
+Standing invariants (`STAGING_PAYMENT_BLOCK=1`, `EPS_MODE=production`, `MAIL_DRY_RUN=1`, `/health db=ok`) preserved throughout.
+
+### Two bugs surfaced + fixes
+
+**Bug 1: SNS topic default `SignatureVersion=1`.** Topics default to SHA1; our `verify-signature.ts` only accepts v2 per AWS recommendation. The initial subscribe call's SubscriptionConfirmation was rejected with `verify:"bad_signature_version"`. **Fix:** `aws sns set-topic-attributes --attribute-name SignatureVersion --attribute-value 2` on both topics, then issue fresh subscribe (subscriptions in PendingConfirmation can't be unsubscribed via API; a fresh subscribe generates a new pending sub signed with v2). Documented in `gotchas.md` "SNS HTTPS subscriptions default to SignatureVersion=1".
+
+**Bug 2: SES envelope field name mismatch.** Phase 4 PR #236's webhook handlers checked `notificationType` only — based on the legacy `SetIdentityNotificationTopic` envelope shape. Configuration Set event destinations (Day 40 mechanism) publish with `eventType` instead. Mailbox-simulator round-trip showed `webhook.ses.message_unparseable` in api logs even though signature + topic-allowlist + cert checks all passed. **Fix:** PR #239 — accept BOTH field names via a small `sesPayloadEventType()` helper in each webhook. Forward + backward compatible. Merged + deployed mid-Day-40; re-running the round-trip landed both suppression rows cleanly. Documented in `gotchas.md` "SES publishes bounce/complaint events to SNS with `eventType`, not `notificationType`".
+
+### Third gotcha codified (architecture knowledge, not a bug)
+
+**`pm2 reload --update-env` only sees env vars from the parent shell.** The api process doesn't use `dotenv`; env loading happens via `deploy.sh:49`'s `set -a; source $ENV_FILE; set +a` pattern, then pm2 reload injects the parent shell's env into the restarted process. SSM `AWS-RunShellScript` runs each command in a fresh shell with no `.env.staging` sourced — so naive `pm2 reload --update-env` doesn't propagate new env vars. **Always wrap reload with the source pattern:**
+
+```bash
+sudo -u eventpulse bash -c '
+  set -a
+  source /home/eventpulse/.env.staging
+  set +a
+  pm2 reload api --update-env
+'
+```
+
+Documented in `gotchas.md` "`pm2 reload --update-env` only sees env vars from the parent shell".
+
+### Decision (atomic)
+
+**Phase 4 SNS bounce/complaint suppression-list pipeline is LIVE on staging as of 2026-06-01.** End-to-end verified. The `MAIL_DRY_RUN=0` flip is now structurally enabled — the AWS Support case 177899559700777 commitment is satisfied. The flip itself remains a **separate operator decision** (recommended sequence: flip on staging, run synthetic sends through the platform's SES client, confirm no unexpected suppressions accumulate, leave staging at 0 indefinitely).
+
+The production-equivalent wiring (substitute `-staging` → `-prod` in resource names + webhook URL host) is now a copy-paste of this exact 8-step procedure, applied during the production EC2 cutover ceremony per critical-path step [14].
+
+### Resources created on staging (AWS-side state)
+
+- SNS topic `arn:aws:sns:ap-southeast-1:739275468267:eventpulse-ses-bounces-staging` (SignatureVersion=2; IAM policy allows `ses.amazonaws.com` → `sns:Publish`)
+- SNS topic `arn:aws:sns:ap-southeast-1:739275468267:eventpulse-ses-complaints-staging` (same shape)
+- HTTPS subscription `…:eventpulse-ses-bounces-staging:764fb5c1-…` → `https://api.staging.eventpulse.com.bd/api/v1/webhooks/ses-bounce`
+- HTTPS subscription `…:eventpulse-ses-complaints-staging:a94e2110-…` → `https://api.staging.eventpulse.com.bd/api/v1/webhooks/ses-complaint`
+- SES Configuration Set `eventpulse-staging` with `bounces-to-sns` + `complaints-to-sns` event destinations
+- EC2 env vars: `SES_BOUNCE_TOPIC_ARNS`, `SES_COMPLAINT_TOPIC_ARNS`, `AWS_SES_CONFIGURATION_SET=eventpulse-staging`
+
+### Day 40 AWS billing tally — actually zero
+
+| Item | Cost |
+|---|---|
+| 2 SNS topics | $0 (resource creation free) |
+| 2 HTTPS subscriptions | $0 |
+| 1 SES Configuration Set | $0 |
+| 2 event destinations | $0 |
+| ~6 SES test sends (mailbox simulator; no reputation impact) | ~$0.001 |
+| ~12 SNS publishes (4 subscription confirmations + ~8 actual events) | ~$0.0001 |
+| ~40 AWS CLI list/get/describe + SSM commands | $0 |
+| CloudWatch metric queries | $0 |
+| **Day 40 total** | **< $0.002** (essentially zero) |
+
+**Ongoing monthly cost from Phase 4 wiring at expected MVP launch volume (sub-100 bounces/month):**
+
+- SNS publishes per real bounce/complaint: $0.50/million → at MVP scale, **~$0/month**
+- Configuration Set + topics + subscriptions: $0/month
+- **Net new ongoing cost: ~$0/month**
+
+### Consequences
+
+- **Phase 4 launch gate item ✅ CLOSED.** `docs/runbooks/sns-bounce-complaint-aws-wiring.md`'s "STOP-ASK boundary" no longer applies on staging. The pre-launch commitment from Day-39 PM handoff (item 1 of "Next pre-launch items — entirely AWS / infrastructure / ceremony track") is satisfied for staging.
+- **The legal track + the SES bounce/complaint observability infrastructure are both now closed.** Remaining pre-launch work is entirely EPS-credentials-clock + production cutover ceremony + production smoke + first-tenant onboarding.
+- **`MAIL_DRY_RUN=0` flip on staging is now structurally enabled** — separate operator decision (not in this session's scope).
+- **The runbook needs a v1.1 amendment** — add a step for SignatureVersion=2 attribute set after topic creation (the missing step that surfaced as Bug 1). Day 40 backlog: amend `docs/runbooks/sns-bounce-complaint-aws-wiring.md` with the corrected 9-step sequence (steps 0 + 1 + 1.5 + 2 + 3 + 5 + 6 + 7 from this entry + a SignatureVersion-set step bundled into 1).
+- **Production cutover.** When production EC2 lands, the same 8 steps run with `-prod` suffixes and the `api.eventpulse.com.bd` webhook host. The Phase 4 code on prod will Just Work because PR #239's dual-field shape handles either mechanism.
+
+### Cross-references
+
+- **Phase 4 code:** PR #236 (Day 39 PM) — `apps/api/src/infra/sns/verify-signature.ts`, `apps/api/src/routes/webhooks/ses-bounce.ts` + `ses-complaint.ts`, `apps/api/src/services/notifications/suppression-list.ts`, `apps/api/src/infra/ses/client.ts` outbound-send guard, migration 0014 `email_suppression_list`
+- **Bug 2 fix:** PR #239 (Day 40) — `fix(notifications): accept SES eventType + notificationType envelopes`
+- **Runbook:** `docs/runbooks/sns-bounce-complaint-aws-wiring.md` (needs the SignatureVersion-set step amendment)
+- **Gotchas codified Day 40:** `gotchas.md` top 3 entries — `eventType` vs `notificationType`, SNS SignatureVersion-1 default, pm2-reload-env-source pattern
+
+---
+
 ## 2026-05-31 · Day 39 PM EOD — Buyer-Terms-Lite v1.0 SHIPPED end-to-end (sign-off chain Step 5 ✅ CLOSED; legal track entirely closed)
 
 **Closes:** the v0.3 sign-off chain in `docs/legal/buyer-terms.md`. Step 4 (operator final sign-off on v0.3 → v1.0 promotion) cleared 2026-05-31 with Salehin's "all good to go" final-check confirmation. Step 5 (wire into checkout `consent_records`) cleared 2026-05-31 with PR #237 merged + deployed + smoke-confirmed live.

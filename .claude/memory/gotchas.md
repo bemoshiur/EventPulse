@@ -4,6 +4,129 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## SES publishes bounce/complaint events to SNS with `eventType`, not `notificationType` (Day 40 / PR #239)
+
+**Symptom.** Day 40 Phase 4 wiring smoke landed the SES Configuration Set + 2 event destinations + 2 SNS topics + 2 confirmed HTTPS subscriptions. Sent test emails to `bounce@simulator.amazonses.com` + `complaint@simulator.amazonses.com` via `aws sesv2 send-email --configuration-set-name eventpulse-staging`. CloudWatch confirmed SNS publishes happened (`NumberOfMessagesPublished` ticked +1 on each topic), nginx access log confirmed AWS POSTed to `/api/v1/webhooks/ses-bounce` + `ses-complaint` with the `Amazon Simple Notification Service Agent` User-Agent and the webhooks returned HTTP 200. But `email_suppression_list` stayed at 0 rows. The api log showed:
+
+```
+webhook:"ses-bounce", messageId:"5d186de2-...", msg:"webhook.ses.message_unparseable"
+webhook:"ses-complaint", messageId:"3981a571-...", msg:"webhook.ses.message_unparseable"
+```
+
+The signature + topic-allowlist + cert checks all passed; the bug was inside the JSON shape check.
+
+**Why it happens.** SES publishes bounce/complaint events to SNS in two different envelope shapes depending on the mechanism:
+
+| Mechanism | Top-level field | Common use |
+|---|---|---|
+| `SetIdentityNotificationTopic` direct SNS feedback (legacy) | `notificationType: "Bounce"` / `"Complaint"` | Cited in most AWS tutorials |
+| **SES Configuration Set event destinations** (Day 40 Phase 4 uses this) | `eventType: "Bounce"` / `"Complaint"` | Modern, multi-event-type mechanism with reputation metrics |
+
+Both variants share the same nested `bounce.bouncedRecipients` / `complaint.complainedRecipients` payload shape — only the top-level field name differs.
+
+Phase 4 PR #236 (Day 39) wrote the webhook handlers checking `notificationType` only — based on AWS documentation examples that mostly show the legacy mechanism. Day 40 wiring went through Configuration Set event destinations → field was `eventType` → `if (sesPayload.notificationType !== 'Bounce')` returned `not_a_bounce:undefined` and the suppression INSERT never ran.
+
+**Fix.** PR #239: accept BOTH field names via a small `sesPayloadEventType()` helper in each webhook. The fix preserves forward + backward compatibility so a future SES integration on either mechanism Just Works.
+
+```typescript
+interface SesBounceMessage {
+  eventType?: 'Bounce'
+  notificationType?: 'Bounce'
+  bounce: { ... }
+}
+
+function sesPayloadEventType(p: SesBounceMessage): string | undefined {
+  return p.eventType ?? p.notificationType
+}
+
+// In the handler:
+const evType = sesPayloadEventType(sesPayload)
+if (evType !== 'Bounce') {
+  return c.json({ ok: true, ignored: `not_a_bounce:${evType}` })
+}
+```
+
+After PR #239 merged + deployed, re-running the mailbox-simulator round-trip landed both rows in `email_suppression_list` cleanly.
+
+**How to avoid.** When wiring SES → SNS feedback in any new context, **explicitly test which envelope shape lands** before writing the type check. The two mechanisms produce subtly different payloads. The `eventType` form is what comes out of Configuration Set event destinations (the modern preferred path); `notificationType` is the legacy direct-SNS form. If unsure, accept both with the small union pattern shown above — there's no downside to the defensive shape.
+
+**Related.** SES event publishing also supports `Delivery`, `Send`, `Reject`, `Open`, `Click`, `RenderingFailure`, `DeliveryDelay`, `Subscription` — all under `eventType`. The Phase 4 handlers only handle `Bounce` + `Complaint`; if future ops need any of the others, they'll need parallel handlers with the same dual-field shape.
+
+---
+
+## SNS HTTPS subscriptions default to SignatureVersion=1 (SHA1); topics must opt into v2 per-topic (Day 40)
+
+**Symptom.** Day 40 Phase 4 wiring: created 2 SNS topics, applied the IAM topic policy for SES → SNS publish, ran `aws sns subscribe --protocol https --notification-endpoint <webhook-url>`. Both subscriptions stayed in `PendingConfirmation` state indefinitely. CloudWatch showed SNS attempted delivery — but the api log showed:
+
+```
+webhook:"ses-bounce", verify:"bad_signature_version", topicArn:"...eventpulse-ses-bounces-staging"
+webhook:"ses-complaint", verify:"bad_signature_version", topicArn:"...eventpulse-ses-complaints-staging"
+```
+
+**Why it happens.** SNS topics default to `SignatureVersion=1` (legacy SHA1-RSA). The platform's `apps/api/src/infra/sns/verify-signature.ts` (Phase 4 PR #236) ONLY accepts `SignatureVersion=2` (SHA256-RSA) per current AWS recommendation:
+
+```typescript
+if (msg.SignatureVersion !== '2') {
+  return { kind: 'bad_signature_version', got: msg.SignatureVersion }
+}
+```
+
+This is the correct, security-conscious posture — but topics must be **opted into v2 per-topic** via `set-topic-attributes`. There is no account-level default switch; every new SNS topic creation has to be paired with a SignatureVersion=2 attribute set.
+
+**Fix.** Set the attribute on each topic, then issue a fresh subscribe call (subscriptions in PendingConfirmation cannot be unsubscribed via the API; a fresh subscribe call generates a new pending sub that's signed with v2):
+
+```bash
+aws sns set-topic-attributes --topic-arn <topic-arn> \
+  --attribute-name SignatureVersion --attribute-value 2
+aws sns subscribe --topic-arn <topic-arn> --protocol https \
+  --notification-endpoint <webhook-url>
+```
+
+After this, AWS sends a fresh SubscriptionConfirmation with v2 signature. The webhook accepts + auto-confirms. The original PendingConfirmation entries silently get GC'd by AWS.
+
+**How to avoid.** Bundle the SignatureVersion=2 set into the **same step as topic creation** — pair every `create-topic` with a `set-topic-attributes SignatureVersion=2`. Or accept v1 alongside v2 in `verify-signature.ts` (less secure; not recommended). Update the runbook `docs/runbooks/sns-bounce-complaint-aws-wiring.md` to include this as step 1.x — it's currently missing.
+
+**Related.** The Phase 4 PR #236 verify-signature.ts JSDoc explicitly says "We only accept version 2 per current AWS recommendation" — the runbook should have flagged that this requires a topic-attribute opt-in. Day 40 EOD playbook bump: add the missing step to the runbook.
+
+---
+
+## `pm2 reload --update-env` only sees env vars from the parent shell — must `set -a; source .env.staging; set +a` first (Day 40)
+
+**Symptom.** Day 40 Phase 4 step 1.5: appended `SES_BOUNCE_TOPIC_ARNS` + `SES_COMPLAINT_TOPIC_ARNS` to `/home/eventpulse/.env.staging`, then ran `sudo -u eventpulse pm2 reload api --update-env` via SSM `AWS-RunShellScript`. The api process reloaded zero-downtime and `/health` stayed green. But probing the webhook with a TopicArn matching the new env var still returned `verify:"topic_not_allowed"` from `verify-signature.ts` — meaning the new env var wasn't loaded in the api process. Probing `/proc/<api-pid>/environ` confirmed the new vars were absent.
+
+**Why it happens.** The api process does NOT use `dotenv` or any in-app `.env` file loader. The `pm2/ecosystem.config.cjs` only declares `NODE_ENV` + `PORT` in `env`, NOT an `env_file` directive. Instead, the env loading happens in `infra/deploy/deploy.sh:49`:
+
+```bash
+set -a; source "$ENV_FILE"; set +a
+...
+$PM2 reload "$APP_DIR/pm2/ecosystem.config.cjs" --update-env
+```
+
+The `set -a` auto-exports every variable subsequently sourced. `pm2 reload --update-env` then reads the env from the **invoking shell's environment** and injects it into the restarted process.
+
+When SSM `AWS-RunShellScript` runs each command in a fresh shell, the invoking shell starts CLEAN — no env vars from `.env.staging` are sourced. Running `pm2 reload --update-env` in that fresh shell sees only the SSM-injected env (basically `PATH`, `HOME`, AWS region) and tries to inject THAT into the api process. pm2's daemon happens to fall back to whatever env vars pm2 already had cached for the api process at original spawn, which is why critical invariants (`STAGING_PAYMENT_BLOCK`, `EPS_MODE`, etc.) were preserved — but new vars from the file go nowhere.
+
+**Fix.** Mirror deploy.sh's pattern in the same shell that runs the reload:
+
+```bash
+sudo -u eventpulse bash -c '
+  set -a
+  source /home/eventpulse/.env.staging
+  set +a
+  pm2 reload api --update-env
+'
+```
+
+The `sudo -u eventpulse bash -c '...'` wraps the source + reload in ONE bash invocation as the `eventpulse` user. Inside that bash, the env is freshly sourced from the live file and the reload propagates everything to the new api process.
+
+**How to avoid.** When editing env vars on a long-running EC2 outside of a deploy.sh run, always invoke pm2 reload via the source-then-reload pattern above — never just `pm2 reload --update-env` alone. The deploy.sh source-first idiom is the load-bearing pattern; reproducing it in any ad-hoc env-change workflow is required for new vars to actually propagate.
+
+**Verification probe.** After the source-then-reload, confirm the new vars are live by reading `/proc/<api-pid>/environ` (the kernel-published env for the running process) and grepping for the new var names. If the var is missing from `/proc/.../environ` but present in `.env.staging`, the reload didn't propagate — re-do the wrap.
+
+**Related.** This also explains why pre-existing critical invariants survived a botched `pm2 reload --update-env` — pm2's daemon caches them across reloads. The api process maintains continuity on the invariants set at original spawn time even if subsequent reloads supply incomplete env. **This is fragile.** A second reload that succeeds (and replaces the cached env) without sourcing would WIPE the critical invariants. Always source.
+
+---
+
 ## `deploy.sh` edits don't execute on the deploy that ships them — bash buffers the script (2026-06-01 / Day 39 PM / PR #237)
 
 **Symptom.** PR #237 added a new "4.1) Idempotent seeds (post-migrate, pre-pm2-reload)" block to `infra/deploy/deploy.sh` invoking `db:seed:legal-documents` + `db:seed:buyer-terms-v1` between `db:migrate` and `pm2 reload`. After the squash-merge to main (`6e54f34`), deploy completed SUCCESS — `/health` returned 200, pm2 reloaded both api + web — but the smoke check `GET /api/v1/public/legal/by-url-path?path=/buyer-terms` returned `404 DOCUMENT_NOT_FOUND`. The deploy log showed `migrations complete: 1 applied, 14 already in place` jumping STRAIGHT to `no nginx vhost changes; skipping nginx reload`, **completely missing the seed-step output** (the seed's own `console.log('buyer-terms v1.0: seeded (X bytes HTML…)')` line was nowhere in the log).
