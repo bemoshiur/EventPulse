@@ -4,6 +4,102 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-01 · Day 42 (later) — STANDING CONSTRAINT: AWS spend hard ceiling = $30/month total (both envs combined)
+
+### Context
+
+Operator instruction at Day 42 end: **"i need to be bear minum cost in aws like below 30 dollar per month for this project"**. This is a hard ceiling — not a guideline, not a quarterly target. Every AWS-write decision from this point forward MUST be evaluated against the standing $30/month budget.
+
+This ceiling is **load-bearing** for the prod EC2 cutover plan (Day-37 audit critical-path step [14], handoff.md current state). Prior planning assumed "MVP costs under USD 100/month" (CLAUDE.md §17.1). That assumption no longer holds. Cutover plan must be re-costed against the $30 ceiling before any prod resource is created.
+
+### Decision — Hard $30/month cap, both envs combined
+
+- **Combined staging + production monthly AWS spend** must stay **under \$30/month**.
+- **Per-resource cost evaluation** is now a STOP-ASK trigger: every new resource that adds recurring cost requires confirming the new total stays under the ceiling.
+- **Prod-cutover plan** must be re-priced before any prod resource is created; current plan likely exceeds budget as-is and needs trimming.
+- **No "well, it's only \$1/month" decisions** without checking the running total — small charges compound; Secrets Manager went from \$0 → \$8/month silently across Sprints 2-3 because nobody tracked the running line.
+
+### Decision — Cost-aware preferred architecture (delta from current §17.x defaults)
+
+These are the cuts/changes that keep the architecture under $30/month. Each can be reversed later when revenue justifies; the change of default is what matters now.
+
+| Item | Current default | New cost-aware default | Saving |
+|---|---|---|---|
+| Staging EC2 | t3.small ($15/mo) | t3.small ($15/mo) — KEEP | — |
+| Prod EC2 (when cut over) | t3.large ($60/mo) per §17.2 production target | **t3.small ($15/mo) — START SMALL** | $45/mo |
+| Secrets Manager | 11 per-purpose secrets × 2 envs = 22 secrets × $0.40 = ~$9/mo | **1-2 consolidated JSON secrets per env (`eventpulse/<env>/all` + optional `eventpulse/<env>/eps-prod`)** | ~$8/mo |
+| KMS CMKs | 5 planned (general staging + general prod + KYC staging + KYC prod + future payouts) | **3 max for MVP** (general staging + general prod + KYC prod — KYC staging uses AWS-managed key) | $2/mo |
+| CloudWatch Logs retention | indefinite (default) | **14 days retention max** on all log groups | varies, ~$2-5/mo at MVP volume |
+| CloudWatch alarms (§17.11) | 7 alarms per env = 14 total at full prod | **Staging gets 1-2 alarms only (CPU + memory) for dev signal; prod gets the §17.11 set of 7** | $0.70-1.40/mo on staging |
+| Route 53 hosted zones | 1 zone (already provisioned) | KEEP | — |
+| EBS root volume | 30 GB gp3 ($3/mo each, both envs) | KEEP — required for app + Postgres + Redis | — |
+| Backups (EBS snapshots) | Daily, 7-day retention | **Daily, 7-day retention — keep, ~$1-2/mo** | — |
+| KMS API calls / data key ops | unmetered | **Audit ops with high call volume; cache data keys where safe** | varies |
+| SES outbound | $0.10/1K emails | KEEP — at MVP volume \$0.50-1/mo | — |
+| SNS publishes (Phase 4 bounces/complaints) | minimal | KEEP — at MVP volume ~\$0 | — |
+| S3 storage (KYC docs + backups) | minimal | KEEP — at MVP volume \$0.50-1/mo | — |
+
+### Estimated Day-42 trajectory vs. ceiling
+
+**Before this decision (status quo):**
+
+- Staging EC2 t3.small: ~$15/mo
+- Future prod EC2 t3.large per §17.2: ~$60/mo
+- Secrets Manager (current 11 × $0.40 = $4.40/mo staging; doubles at prod): ~$9/mo
+- KMS CMKs (3 current + 2 prod planned): ~$5/mo
+- Route 53 hosted zone + queries: ~$1/mo
+- CloudWatch alarms + Logs + agent: ~$5-10/mo at full prod
+- SES + S3 + SNS + EBS snapshots: ~$3-5/mo
+- **Total projected at prod cutover: ~$98-105/mo — OVER BUDGET BY $68-75/mo**
+
+**After this decision (cost-aware defaults):**
+
+- Staging EC2 t3.small: $15/mo
+- Prod EC2 t3.small: $15/mo
+- Consolidated secrets (2 secrets × 2 envs = 4 × $0.40): $1.60/mo
+- KMS CMKs (3 max for MVP): $3/mo
+- Route 53: $1/mo
+- CloudWatch (staging 2 alarms + prod 7 alarms + 14-day logs): ~$2-3/mo
+- SES + S3 + SNS + EBS snapshots: ~$3-5/mo
+- **Total projected at prod cutover: ~$40-43/mo — STILL OVER BY $10-13/mo**
+
+**Additional trims needed to hit $30:**
+
+1. **EBS snapshots: cut to weekly + 4-week retention** instead of daily + 7-day → -$0.50/mo
+2. **CloudWatch Logs**: ship pino logs to a single log group with 7-day retention; consolidate metrics → -$1-2/mo
+3. **Skip CloudWatch agent on staging** (only system metrics from prod) → -$0.50/mo
+4. **One staging EC2 PERIOD** until first paying tenant onboards (no parallel "test prod" instance) — defer prod EC2 cutover work that doesn't strictly require prod
+5. **Consider switching staging EC2 to spot** for non-business-hours dev cycles (saves ~30-50% but loses persistence) — DO NOT do this for MVP launch window; revisit post-launch
+
+Net after trims: ~$28-32/mo. Achievable but **NO ROOM** for surprise costs. Every AWS-write needs explicit cost evaluation.
+
+### Decision — Process changes
+
+1. **Every AWS-write STOP-ASK now includes "monthly cost delta"** in the question. Existing AWS-write STOP-ASK pattern (decisions.md early-Sprint-1) updated to require: "this resource adds \$X/month; current trajectory is \$Y/month; stays under \$30 ceiling: yes/no".
+2. **AWS Budget alarm at \$25 actual + \$30 forecasted** on the project's billing account — to be created in next operator-authorised AWS-write session. Budget itself is free; budget actions are not. This is the meta-cost-guard.
+3. **Cost-Explorer review at every EOD memory closeout** — running line in progress.md "Day X cost delta from prior session: +\$Y on resource Z, current monthly trajectory: \$X/month".
+4. **Pre-merge cost diff** in every infra PR's body — "this PR adds/removes the following AWS resources" + "monthly cost impact: +\$X / -\$X / $0".
+5. **No `t3.medium` upgrade** unless absolutely needed (per Day-33 staging-EC2-incident carry). The 2GB swap fix landed Day 34 makes t3.small viable for current load.
+
+### Consequences
+
+- **§17.2 production-target spec is amended de-facto** — t3.large prod is OUT for MVP; t3.small + 2GB swap is IN. CLAUDE.md §17.2 v2.4 bump will codify this; until then, this decisions.md entry overrides §17.2 verbatim.
+- **§17.9 Secrets Manager per-purpose pattern is amended** for MVP — consolidated JSON blob per env replaces 11 per-purpose entries. The per-purpose pattern remains a Phase-2/3 ideal for when revenue justifies the $0.40/secret/month overhead; at MVP it's an unaffordable luxury. Migration path: bootstrap script reads the JSON blob, deserialises into the same env-var shape the running code already expects. Zero code change to apps/api or apps/web.
+- **§17.9 KMS per-purpose CMK pattern is amended** for MVP — 3 CMKs max (general staging + general prod + KYC prod). KYC staging uses the general staging CMK. Future payouts/contracts CMKs deferred to when those features ship + revenue justifies.
+- **§17.11 alarm catalogue posture changes** — staging gets only CPU + memory (dev signal); prod gets the full 7-alarm set at cutover. Day 41 CPU 85% alarm on staging STAYS (already paid); no new staging alarms added until budget allows.
+- **Prod EC2 cutover plan re-cost lands as a separate decisions.md entry** before the cutover ceremony starts. Including a per-sub-item cost line for all 8 sub-items.
+- **No tenant-facing copy mentions the cost ceiling.** This is an operational constraint; tenants see the 0.25% fee + transparent EPS rate, not the AWS line item.
+- **Day-42 trajectory honest gap:** even with all cuts, MVP runs at ~$28-32/mo. Surprise costs (e.g., a Cloudflare for SaaS subscription if §12 lands at MVP scale; a third-party SMS rate increase; an EPS chargeback fee class) could push over. Budget alarm catches this within 24-48 hours; STOP-ASK on any new resource catches it at creation time.
+
+### Pointers
+
+- Operator directive: 2026-06-01 ("i need to be bear minum cost in aws like below 30 dollar per month for this project")
+- CLAUDE.md §17 (current architecture spec — to be amended in v2.4 playbook bump)
+- handoff.md "Pre-launch tracks" table — prod cutover ceremony plan that needs re-costing
+- gotchas.md will gain an entry: "Secrets Manager $0.40/secret/month compounds silently — consolidate at MVP scale" — codified alongside this decision.
+
+---
+
 ## 2026-06-01 · Day 42 EOD — Sprint 4 §26.1 Day 9 marketing pages SHIPPED (3 PRs) — apex + features + pricing + contact + changelog
 
 ### Context

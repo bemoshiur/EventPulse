@@ -4,6 +4,20 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## AWS Secrets Manager $0.40/secret/month compounds silently (Day 42 cost-ceiling audit)
+
+**Symptom.** Day 42 operator directive set a $30/month AWS budget. The cost audit revealed Secrets Manager alone was projected to consume ~$9/month at prod cutover (11 per-purpose entries × 2 envs × $0.40). Nobody tracked this number across Sprints 2-3 when entries were added one-at-a-time per the §17.9 per-purpose pattern (eps / database / oauth-google / oauth-apple / ses / sentry / jwt / redis / porichoy / ssl-wireless / cloudflare-saas).
+
+**Why it happens.** The §17.9 per-purpose pattern is a Phase-2/3 ideal — it gives each integration its own rotation cadence + blast-radius isolation. At MVP scale with no revenue, the $0.40/secret/month is recurring overhead the architecture can't yet justify. Each individual `aws secretsmanager create-secret` looked free at decision time ("it's $0.40/month, what's the harm?"). The aggregation across 11 secrets × 2 envs hit the budget without anyone running the running-total check.
+
+**Fix.** Day-42 decisions.md amends §17.9 for MVP: **1-2 consolidated JSON-blob secrets per environment** (`eventpulse/<env>/all` for the bulk + an optional standalone `eventpulse/<env>/eps-prod` if EPS prod creds need rotation independent of the rest). The bootstrap script (`infra/scripts/bootstrap-staging.sh`) reads the JSON blob, deserialises into the same env-var shape the running code already expects. Zero code change to `apps/api` or `apps/web`.
+
+**How to avoid.** Before any `aws secretsmanager create-secret` invocation, ask "is this secret in a rotation cycle independent of the rest"? If yes (e.g. JWT signing key, EPS prod creds), it gets its own entry. If no (90% of MVP integration credentials), it goes in the consolidated JSON blob. **The per-purpose pattern's blast-radius story doesn't pay off until revenue justifies the line item** — at MVP, the absence of revenue means a Secrets Manager compromise is a catastrophic event regardless of how many entries it spans.
+
+**More broadly:** every AWS resource type has a "compounds silently" failure mode (Secrets Manager per-secret cost, CloudWatch per-alarm cost, KMS per-CMK cost, S3 per-PUT cost at scale). The $30/month ceiling means every AWS-write STOP-ASK now includes a "monthly cost delta" question — decisions.md "STANDING CONSTRAINT: AWS spend hard ceiling = $30/month".
+
+---
+
 ## drizzle's `sql` template inlines JS arrays as tuples, not Postgres array literals (Day 41 / Day 42)
 
 **Symptom.** Two bugs in two days, same root cause. Day 41 PR #245's `afterAll` cleanup used:
