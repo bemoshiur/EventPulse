@@ -1,26 +1,26 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-06-01 — **Day 41 EOD** of 47-day Phase 1 MVP runway. **Sprint 4 §26.1 Day 7-8 refund flow v1.0 SHIPPED end-to-end on staging.**
+**Last update:** 2026-06-01 — **Day 42 EOD** of 47-day Phase 1 MVP runway. **Sprint 4 §26.1 Day 9 marketing pages SHIPPED end-to-end (3 PRs + 1 hotfix).**
 **LAUNCH TARGET: 2026-06-10** (9 days out — runway healthy).
 **Driver:** Claude Code (Opus 4.7).
-**Today's headline:** Day 41 ran three workstreams in one continuous "work continue" session: (1) the CloudWatch CPU >85%/10min alarm — first of seven §17.11 alarm catalogue entries codified (~$0.10/month, console-only, no SNS subscription yet); (2) the `MAIL_DRY_RUN=0` staging flip — durable across deploys, no suppression-list churn in 30-min observation window; (3) Sprint 4 §26.1 Day 7-8 **refund flow v1.0** — PR #242 (6 commits, ~1700 LOC, 14 new integration tests) merged + deployed + smoke green. Migration 0016 advances ladder, 7 new columns + 2 indexes + 2 CHECK constraints on `refunds`; state-machine extension `refund_requested → paid` for super-admin rejection rollback; 3 new audit helpers (writeRefundRequested actor=tenant_user + writeRefundApproved + writeRefundRejected actor=super_admin) + writeOrderRefunded reason union widened; `services/refunds/refund-flow.ts` 666 LOC with discriminated Result unions per function; tenant + super-admin routes wired. All 3 standing invariants intact post-deploy (`STAGING_PAYMENT_BLOCK=1` + `EPS_MODE=production` + `MAIL_DRY_RUN=0`).
+**Today's headline:** Day 42 ran the full §26.1 Day 9 marketing-pages workstream as a three-PR sequence in one continuous "work continue" session. **PR #244** (apex home + /features + /pricing) replaces the Day-1 scaffold and ships a server-rendered four-mode bigint-paisa fee calculator at v1.0 bKash 175bps with a 7-test drift guard pinning canonical §14.2-shape values. **PR #245** (/contact + form + API + migration 0017 contact_submissions) ships a 3-defence-layer endpoint (honeypot + per-IP rate limit + zod). **PR #246** (/legal/changelog + migration 0018 changelog_entries + v1.0 seed) lands the changelog scaffold but the seed itself failed at deploy time due to the drizzle array-tuple gotcha (same root cause as PR #245's afterAll test bug from Day 41). **PR #248 hotfix** switches the seed from raw `sql` template to drizzle's builder; after merge + re-deploy + manual re-seed, the 9 v1.0 launch entries populate. All 3 standing invariants intact post-deploy.
 
-**Day 41 AWS billing tally:** ~$0.10/month ongoing (single CloudWatch alarm). No other AWS resources created. Zero spike.
+**Day 42 AWS billing tally:** ~$0 net new. No AWS-side writes; one extra deploy run (~$0.00) plus a single SSM SendCommand for the manual changelog seed (~$0.00).
 
-**Carryover:** Day 40 closed Phase 4 SNS bounce/complaint AWS-side wiring end-to-end (PR #239 + PR #240 + PR #241). Day 39 closed the legal track entirely (Buyer-Terms-Lite v1.0 live in checkout 2026-06-01T10:32:57Z). Sprint 4 §26.1 plan now **~70% shipped** (Days 1-2 attendees ✓, 3-4 check-in ✓, 5 sales dashboard ✓, 6 super-admin revenue ✓, 7-8 refund flow first-half ✓; Day 9 marketing + Day 10 launch readiness + Day 7-8 second-half manual-disbursement adapters PENDING).
+**Carryover:** Day 41 closed the Sprint 4 Day 7-8 refund flow + CW CPU 85% alarm + MAIL_DRY_RUN=0 staging flip. Day 40 closed Phase 4 SNS bounce/complaint AWS-side wiring end-to-end. Day 39 closed the legal track entirely (Buyer-Terms-Lite v1.0 live in checkout 2026-06-01T10:32:57Z). Sprint 4 §26.1 plan now **~80% shipped** (Days 1-2 attendees ✓, 3-4 check-in ✓, 5 sales dashboard ✓, 6 super-admin revenue ✓, 7-8 refund flow first-half ✓, **9 marketing pages ✓ today**; Day 10 launch readiness + Day 7-8 second-half manual-disbursement adapters PENDING/DEFERRED).
 
 ## 🎯 Pre-launch tracks — remaining work
 
-§26.1 Day 7-8 first-half (refund flow) is now ✅ CLOSED. The remaining pre-launch surface is **infrastructure ceremony + marketing pages + external-clock**:
+§26.1 Day 9 (marketing pages) is now ✅ CLOSED. The remaining pre-launch surface is **infrastructure ceremony + Day 10 launch readiness + external-clock**:
 
 | # | Item | Gate | Owner |
 |---|---|---|---|
-| 1 | EPS production credentials arrival | External clock; gates step #3 | Operator-action |
-| 2 | §26.1 Day 9 marketing pages — apex, /features, /pricing, /contact, /legal/changelog | None | Claude Code |
-| 3 | Production EPS BDT-100 smoke per `docs/runbooks/production-smoke.md` | Gated on #1 + production EC2 cutover (#5 sub-items) | Operator + Claude Code |
-| 4 | §26.1 Day 10 launch readiness — AUP review, first paying tenant identification | None for AUP review; operator-led for first tenant | Claude Code + Operator |
-| 5 | Production EC2 cutover ceremony — 8 sub-items (Day-37 audit critical-path step [14]) | Multiple STOP-ASK gates per sub-item | Operator + Claude Code |
-| 6 | Phase 4 AWS-side wiring on PROD (when prod EC2 lands) | Sub-step of cutover ceremony | Operator-authorised |
+| 1 | EPS production credentials arrival | External clock; gates step #2 | Operator-action |
+| 2 | Production EPS BDT-100 smoke per `docs/runbooks/production-smoke.md` | Gated on #1 + production EC2 cutover (#4 sub-items) | Operator + Claude Code |
+| 3 | §26.1 Day 10 launch readiness — AUP review, first paying tenant identification | None for AUP review; operator-led for first tenant | Claude Code + Operator |
+| 4 | Production EC2 cutover ceremony — 8 sub-items (Day-37 audit critical-path step [14]) | Multiple STOP-ASK gates per sub-item | Operator + Claude Code |
+| 5 | Phase 4 AWS-side wiring on PROD (when prod EC2 lands) | Sub-step of cutover ceremony | Operator-authorised |
+| 6 | `MAIL_DRY_RUN=0` prod flip | Sub-step of cutover (not standalone) | Operator |
 | 7 | Manual disbursement second half (BEFTN file gen + bKash B2C + Nagad + Rocket adapters per §14.8) | DEFERRED to Sprint 7 settlement engine | Sprint 7 |
 
 ### Production EC2 cutover — 8 sub-items (unchanged)
@@ -31,7 +31,7 @@
 4. `eventpulse-deploy-prod` GitHub-OIDC role (canonical three-claim trust pattern per §17.9.1)
 5. 11 `eventpulse/prod/*` Secrets Manager entries (eps ✅ already; 10 remaining)
 6. 2 prod KMS CMKs (`alias/eventpulse-prod` + `alias/eventpulse-kyc-prod`)
-7. Prod-branch ff-merge (`origin/prod` at `21dad2cc` → current main; ~100+ commits to bring forward)
+7. Prod-branch ff-merge (`origin/prod` at `21dad2cc` → current main; ~105+ commits to bring forward)
 8. §17.11 alarm catalogue (CW CPU 85% ✅ codified Day 41 on staging; 6 remaining: mem >90%/5min, disk >80%, error rate >1%/5min, payment success <95%/15min, disbursement batch failure, reconciliation invariant violation)
 
 ## 📅 Path B incorporation — DATED CARRY ITEMS (unchanged)
@@ -43,44 +43,52 @@
 | Pvt Ltd target completion (RJSC certificate issued; new Organiser Agreements against Pvt Ltd) | **2026-07-22** outer boundary | PENDING |
 | v2.4 playbook bump backlog update | Pre-launch nice-to-have; post-launch firm | TRACKED |
 
-## ⚠️ TL;DR for next session (Day 42)
+## ⚠️ TL;DR for next session (Day 43)
 
-- **First-thing-tomorrow (Day 42):** Likely §26.1 Day 9 — marketing pages. Apex landing, /features, /pricing (with single-method honest copy from Day 38 Phase 3), /contact, /legal/changelog. No truth-gate dependency; pure build-track work that progresses without operator unblock. Use existing `apps/web/src/app/(public)/page.tsx` as starting point if scaffolded; otherwise scaffold from the §1.5 design tokens.
-- **Then (Day 42+):** §26.1 Day 10 launch readiness — AUP review of `apps/api/src/services/aup/` surface area; first paying tenant identification (operator-led).
-- **Prod-cutover sub-items as standalone tasks:** §17.11 remaining 6 alarms each is ~5-minute AWS write task — ASK-FIRST. CloudWatch memory >90%/5min is the natural next-pick after CPU 85%. Each landed on staging first; staged on prod under cutover ceremony.
+- **First-thing-tomorrow (Day 43):** §26.1 Day 10 launch readiness scope. Two natural next-picks: (a) AUP review — sweep `apps/api/src/services/aup/` (if any) + the public `event_reports` surface + the `/admin/aup-reports` triage queue against §21.5; (b) first-paying-tenant identification surface (operator-led; Claude Code can prep the onboarding checklist runbook). Pick whichever is "in by lunch".
+- **Then (Day 43+):** Prod-cutover sub-items as standalone tasks. Each remaining §17.11 alarm is a ~5-min AWS-write task — ASK-FIRST. CloudWatch memory >90%/5min is the natural next-pick after CPU 85%. Each landed on staging first; staged on prod under cutover ceremony.
 - **EPS prod credentials arrival:** still external clock. When credentials land, BDT-100 production smoke per `docs/runbooks/production-smoke.md` runs as its own gated session. Precondition #2 (`eventpulse/prod/eps`) already SATISFIED.
-- **MAIL_DRY_RUN=0 prod flip:** lands as sub-step of production EC2 cutover ceremony, not standalone.
 
-## ⚠️ Day 41 deliverables shipped (this session)
+## ⚠️ Day 42 deliverables shipped (this session)
 
-- **PR #242 `feat(refunds): Sprint 4 tenant-initiated refund flow + super-admin approval`** — 6 commits, ~1700 LOC, merged as `c38c91d`:
-  - Commit 1 `627d01a` — Migration 0016 + Drizzle schema (7 new columns + 2 indexes + 2 CHECK constraints + Phase 2b backfill UPDATE)
-  - Commit 2 `3af0bdf` — State-machine `refund_requested → paid` rejection rollback + 3 new audit helpers + widened RefundReasonCode union
-  - Commit 3 `ccaaeec` — `services/refunds/refund-flow.ts` (666 LOC, 4 functions, discriminated Result unions)
-  - Commit 4 `f67076f` — Tenant routes (POST /orders/:id/refund + GET /refunds[/:id] cursor-paginated)
-  - Commit 5 `2b48907` — Super-admin routes (queue + detail + approve/reject/mark-processed with super_admin_notes required on reject)
-  - Commit 6 `06d5668` — 14 DB-gated integration tests
-- **CloudWatch CPU alarm `eventpulse-staging-cpu-high-85pct`** — first §17.11 catalogue entry codified on staging. Console-only (no SNS subscription yet). ~$0.10/month.
-- **MAIL_DRY_RUN=0 staging flip** — durable across deploys. No suppression-list churn in 30-min post-flip observation window. Day-40 mailbox-simulator chain already proven; flip is "open valve and observe" not new verification.
-- **`decisions.md` 2026-06-01 Day 41 EOD entry** — Decisions A-H codified (v1.0 scope cuts + state-machine rollback + actor_type split + cross-tenant 404 hiding + super_admin_notes required-for-reject + describeIfDb test pattern + CW alarm threshold + MAIL_DRY_RUN flip semantics).
-- **`progress.md` Day 41 entry** — Sprint 4 §26.1 plan progress update (~70% shipped).
-- **§29 #5 STRUCTURALLY RESOLVED** — refund authority codified verbatim against §29 entry text.
+- **PR #244 `feat(marketing): apex home + /features + /pricing pages (§26.1 Day 9, part 1 of 3)`** merged as `2cff5fb`:
+  - Apex marketing home (replaces Day-1 scaffold) + 6 value-prop cards + use-cases panel
+  - /features 5-section feature catalogue per §22.3
+  - /pricing server-rendered four-mode bigint-paisa fee calculator at v1.0 bKash 175bps + EN+BN honest-copy disclosure from `docs/copy/bkash-only-launch.md`
+  - 7-test drift guard pinning §14.2-shape canonical values (`apps/web/src/app/(public)/pricing/pricing.test.ts`)
+  - Shared `MarketingNavbar` + `MarketingFooter` components
+- **PR #245 `feat(marketing): /contact page + form + API endpoint (§26.1 Day 9, part 2 of 3)`** merged as `bbf6730`:
+  - /contact page (Server Component shell + Client Component form island)
+  - POST /api/v1/public/contact with 3 defence layers (honeypot + per-IP rate limit + zod)
+  - Migration 0017 `contact_submissions` table + Drizzle schema export
+  - 6 DB-gated integration tests (described via `describeIfDb`)
+  - Hotfix `94dab28` mid-CI for drizzle ANY-with-JS-array tuple bug in afterAll cleanup; switched to `inArray()`
+- **PR #246 `feat(marketing): /legal/changelog + v1.0 seed (§26.1 Day 9, part 3 of 3)`** merged as `6ff4f9b`:
+  - /legal/changelog index + per-version page (Server Components)
+  - 3 GET endpoints (index + by-slug + by-version) edge-cacheable per Trust Center pattern
+  - Migration 0018 `changelog_entries` table + Drizzle schema export
+  - v1.0 seed with 9 launch entries; body_html rendered via shared `renderLegalMarkdown` per Decision J
+  - Build-time-fetch-failure tolerance pattern cloned from `lib/legal.ts`
+- **PR #248 `fix(seeds): changelog seed — use drizzle insert builder for text[] arrays`** — hotfix for the seed's array-tuple bug (same root cause as PR #245 afterAll); switched from raw sql template to drizzle's `.insert().values().onConflictDoUpdate().returning()` chain
+- **`decisions.md` 2026-06-01 Day 42 EOD entry** — Decisions A-I codified (three-PR breakdown by DB-dependency-shape, per-PR rebase pattern, drift-guard test pattern, contact form 3-defence-layer pattern, Decision J consumed not widened for changelog body, fetch-failure tolerance pattern cloned, seed-file pattern, v1.0 audience splits, conventional-commits title-length discipline)
+- **`gotchas.md` top entry** — drizzle's `sql` template inlines JS arrays as tuples — canonical fix table covering 4 contexts (ANY, IN-DELETE, INSERT text[], INSERT-on-conflict); detection rule + how-to-avoid grep pattern
+- **`progress.md` Day 42 entry** — Sprint 4 §26.1 plan progress update (~80% shipped)
 
-**Codebase state at Day 41 EOD:**
+**Codebase state at Day 42 EOD:**
 
 ```text
-main HEAD: c38c91d
+main HEAD: <after-hotfix-merge> (target — pending PR #248 merge)
         │  (today, in order)
-        └── feat(refunds): Sprint 4 tenant-initiated refund flow + super-admin approval (#242)
-        └── docs(runbook): Day 40 amendments to SNS bounce/complaint AWS-side wiring runbook (#241)
-        └── memory: Day 40 EOD closeout (#240)
-        └── fix(notifications): accept SES eventType + notificationType envelopes (#239)
+        └── fix(seeds): changelog seed — use drizzle insert builder for text[] arrays (#248) [pending]
+        └── feat(marketing): /legal/changelog + v1.0 seed (#246) — 6ff4f9b
+        └── feat(marketing): /contact + form + API + migration 0017 (#245) — bbf6730
+        └── feat(marketing): apex home + /features + /pricing (#244) — 2cff5fb
         └── (this EOD memory PR — pending merge)
 ```
 
-Staging EC2 at HEAD `c38c91d`. Migration ladder at 0016. pm2 web + api online + restart counts unchanged. /health db=ok 11ms.
+Staging EC2 at HEAD `6ff4f9b`; will advance to hotfix HEAD after PR #248 merges + re-deploys. Migration ladder at 0018. pm2 web + api online + restart counts steady. /health db=ok 11ms. **changelog_entries currently 0 rows on staging** (seed failed); SSM manual re-seed runs after #248 merges and bumps to 9 rows. /legal/changelog page returns 200 but renders empty-state card until then.
 
-## ⚠️ The launch gate state — 9 ✅ RESOLVED items (unchanged at Day 41 EOD)
+## ⚠️ The launch gate state — 10 ✅ RESOLVED items (carryover + Day 42)
 
 1. ~~EPS sandbox credentials~~ ✅ 2026-05-26
 2. ~~SES out-of-sandbox~~ ✅ 2026-05-31 (case 177899559700777)
@@ -91,8 +99,11 @@ Staging EC2 at HEAD `c38c91d`. Migration ladder at 0016. pm2 web + api online + 
 7. ~~Salehin: Incorporation path~~ ✅ 2026-05-31 Day 39 AM (Path B LOCKED)
 8. ~~Buyer-Terms-Lite v1.0 wire-in~~ ✅ 2026-05-31 Day 39 PM
 9. ~~Phase 4 SNS bounce/complaint suppression-list AWS-side wiring~~ ✅ 2026-06-01 Day 40
+10. ~~§26.1 Day 9 marketing pages (apex + features + pricing + contact + changelog)~~ ✅ 2026-06-01 Day 42
 
-**New §29 Open Decision STRUCTURALLY RESOLVED Day 41:** ~~§29 Open #5 Refund authority for MVP~~ ✅ STRUCTURALLY RESOLVED 2026-06-01 Day 41 (PR #242 codes the §29 policy verbatim into the running platform).
+**§29 Open Decisions tracking:**
+
+- **#5 Refund authority for MVP** — STRUCTURALLY RESOLVED 2026-06-01 Day 41 (PR #242 codes §29 policy verbatim)
 
 **Pre-launch commitments (gate ceremony or env flip, not legal):**
 
@@ -114,49 +125,50 @@ All amounts paisa. §14.10 Invariant-1 PASS across all 4. The only fully-clean f
 
 ## ⚠️ Build-track items still in play
 
-- ⏳ **§26.1 Day 9 marketing pages** — apex landing, /features, /pricing (single-method honest copy), /contact, /legal/changelog. No truth-gate dependency.
-- ⏳ **§26.1 Day 10 launch readiness** — AUP review, first paying tenant identification.
-- ⏳ **§17.11 alarm catalogue beyond CPU 85%** — mem >90%/5min, disk >80%, error rate >1%/5min, payment success <95%/15min, disbursement batch failure, reconciliation invariant violation. Each ~5-min AWS-write standalone task. Required pre-prod-cutover.
+- ⏳ **§26.1 Day 10 launch readiness** — AUP review, first paying tenant identification. Next session pick.
+- ⏳ **§17.11 alarm catalogue beyond CPU 85%** — 6 remaining alarms (mem >90%/5min, disk >80%, error rate >1%/5min, payment success <95%/15min, disbursement batch failure, reconciliation invariant violation). Each ~5-min AWS-write standalone task. Required pre-prod-cutover.
 - ⏳ **t3.medium upgrade** (4 GB, ~+$15/mo) — pre-prod-cutover Moshiur decision.
 - ⏳ **k6/artillery load test budget** (§24.4 Sprint-4-close CI requirement) — NOT WIRED.
 - ⏳ **`pnpm audit` blocking on high+critical** (§24.4 Sprint-4-close CI requirement) — NOT WIRED.
-- ⏳ **Production cutover surface** — 8 sub-items above. Notable: prod-branch ff-merge (`21dad2cc` → current main; now ~100+ commits divergent).
-- ⏳ **v2.4 playbook bump backlog** — §14.2 Mode C narrative, §29 #5+#9+#10 reclassification, §29 list housekeeping, Buyer-Terms-Lite v1.0 + Path B incorporation, Phase 4 SHIPPED, prod-branch tracking discipline, Sprint 2-4 accumulated amendments, fee-model resolution Day 38 sweep, Day 39 PR sweep, Day 40 Phase 4 sweep + runbook amendments, Day 41 refund-flow + §17.11 alarm catalogue progress + MAIL_DRY_RUN flip + §29 #5 structural resolution, consent_records §9.11 amendment.
+- ⏳ **Production cutover surface** — 8 sub-items above. Notable: prod-branch ff-merge (`21dad2cc` → current main; now ~105+ commits divergent).
+- ⏳ **v2.4 playbook bump backlog** — §14.2 Mode C narrative, §29 #5+#9+#10 reclassification, §29 list housekeeping, Buyer-Terms-Lite v1.0 + Path B incorporation, Phase 4 SHIPPED, prod-branch tracking discipline, Sprint 2-4 accumulated amendments, fee-model resolution Day 38 sweep, Day 39 PR sweep, Day 40 Phase 4 sweep + runbook amendments, Day 41 refund-flow + §17.11 alarm catalogue progress + MAIL_DRY_RUN flip + §29 #5 structural resolution, Day 42 marketing-pages full surface + drizzle-array-tuple gotcha consolidation, consent_records §9.11 amendment.
 - ⏳ **Loose ends (low priority):** Counsel docs 5 remaining bodies; manual click-through of OAuth callback redirect (PR #149 carry); stale `magic-link-form.tsx:20` + `super-admin/kyc.ts:51` TODO audit.
 
-## Where things live (quick map — Day 41 additions)
+## Where things live (quick map — Day 42 additions)
 
-- **Decision surface:** `decisions.md` 2026-06-01 Day 41 EOD top entry — Sprint 4 §26.1 Day 7-8 refund flow v1.0 + CW CPU 85% + MAIL_DRY_RUN flip.
-- **Critical path tracking surface:** Day-37 audit critical-path diagram. Step [8] Phase 4 ✅ COMPLETE Day 40. Step [16] CW alarm-catalogue first entry ✅ Day 41. Step [10] Day-7-8 refund-flow first-half ✅ Day 41.
-- **Refund-flow service:** `apps/api/src/services/refunds/refund-flow.ts` (666 LOC, 4 functions).
-- **Refund-flow tests:** `apps/api/src/services/refunds/refund-flow.test.ts` (680 LOC, 14 DB-gated tests).
-- **Refund routes:** `apps/api/src/routes/tenant/refunds.ts` + `apps/api/src/routes/super-admin/refunds.ts`.
-- **Migration 0016:** `apps/api/src/db/migrations/0016_refunds_approval_workflow.sql`.
-- **CW alarm:** `eventpulse-staging-cpu-high-85pct` (ap-southeast-1, console-only).
+- **Decision surface:** `decisions.md` 2026-06-01 Day 42 EOD top entry — three-PR marketing-pages workstream + 9 codified patterns (A-I).
+- **Gotchas surface:** `gotchas.md` top entry — drizzle `sql` template inlines JS arrays as tuples; canonical fix table + detection rule.
+- **Critical path tracking surface:** Day-37 audit critical-path diagram. Step [8] Phase 4 ✅ Day 40. Step [10] Day-7-8 refund-flow first-half ✅ Day 41. Step [16] CW alarm-catalogue first entry ✅ Day 41. Step [9] §26.1 Day 9 marketing pages ✅ Day 42.
+- **Marketing surface code:** `apps/web/src/app/page.tsx` (apex), `apps/web/src/app/(public)/{features,pricing,contact,legal/changelog}/page.tsx`, `apps/web/src/components/marketing/` (navbar, footer, contact-form), `apps/web/src/lib/changelog.ts`.
+- **Marketing surface API:** `apps/api/src/routes/public/{contact,changelog}.ts`, `apps/api/src/services/{contact,changelog}/`, `apps/api/src/db/seeds/seed-changelog-v1.ts`.
+- **Pricing drift-guard test:** `apps/web/src/app/(public)/pricing/pricing.test.ts` (7 tests pinning §14.2-shape canonical values at v1.0 bKash 175bps).
+- **Migrations 0017 + 0018:** contact_submissions + changelog_entries.
 
 ## Standing invariants (still enforcing through remaining runway)
 
-- **`STAGING_PAYMENT_BLOCK=1`** — re-verified Day 41 EOD post-deploy. Only authorized lift: BDT-100 production smoke on its own gated session. Non-negotiable through 2026-06-10.
-- **`MAIL_DRY_RUN=0`** — flipped Day 41 on staging. Durable across deploys. Real SES sends now exercise the full Phase 4 pipeline. Suppression-list outbound-guard intercepts before AWS call. Production flip lands as sub-step of cutover ceremony.
-- **`EPS_MODE=production`** — Day 38 codified. Verified Day 41.
-- **v1.0 single-method launch — bKash-only enforcement (Day 38).** Server-side via Phase 2a Verify-guard + Phase 2b dispute-flow surfaces. UI-side via Phase 3 honest copy + Day-39-PM bilingual clickwrap.
-- **HARD STOP on `fee-calculator.ts`** — LIFTED Day 38; single-PR-at-a-time discipline carries forward.
+- **`STAGING_PAYMENT_BLOCK=1`** — re-verified Day 42 EOD post-deploy. Only authorized lift: BDT-100 production smoke on its own gated session. Non-negotiable through 2026-06-10.
+- **`MAIL_DRY_RUN=0`** on staging — flipped Day 41; durable across deploys. Real SES sends now exercise the full Phase 4 pipeline. Suppression-list outbound-guard intercepts before AWS call. Production flip lands as sub-step of cutover ceremony.
+- **`EPS_MODE=production`** — Day 38 codified. Verified Day 42.
+- **v1.0 single-method launch — bKash-only enforcement (Day 38).** Server-side via Phase 2a Verify-guard + Phase 2b dispute-flow surfaces. UI-side via Phase 3 honest copy + Day-39-PM bilingual clickwrap + Day-42 /pricing transparent calculator at single-method rate.
+- **HARD STOP on `fee-calculator.ts`** — LIFTED Day 38; single-PR-at-a-time discipline carries forward. Day 42's /pricing inline math mirrors canonical calculator + is pinned by a 7-test drift guard; it is NOT a new money math source.
 - **Buyer-Terms-Lite v1.0 consent capture precondition (Day 39 PM):** every order writes `consent_records` row inside same `withSuperAdmin` tx; INSERT failure rolls back.
 - **Phase 4 outbound-send guard (Day 40):** every SES SendEmail consults `email_suppression_list` before AWS call.
-- **Phase 4 webhook fail-closed (Day 40):** `SES_BOUNCE_TOPIC_ARNS` + `SES_COMPLAINT_TOPIC_ARNS` allowlist gates. Non-matching TopicArn → `verify:"topic_not_allowed"`.
-- **Refund cross-tenant guard (Day 41):** tenant routes return 404 (not 403) on cross-tenant order/refund lookups. No enumeration.
-- **Refund actor_type split (Day 41):** tenant-portal-initiated → `actor_type=tenant_user`. Super-admin operations → `actor_type=super_admin`. Filter by actor_type in audit_logs distinguishes the two paths cleanly.
-- **Append-only refund row (Day 41):** the `refunds_approve_reject_exclusive_chk` CHECK constraint prevents the impossible-state row (`approved_at IS NOT NULL AND rejected_at IS NOT NULL`). Migration-level defence beyond state-machine invariants.
-- **CW CPU 85% alarm threshold (Day 41):** sized at 85% × 10 min per §17.11. Subsequent alarms inherit the same per-§17.11-spec discipline (each landed on staging first; staged on prod under cutover).
-- **Source-then-reload discipline for ad-hoc env edits (Day 40 codified):** `pm2 reload --update-env` only sees env vars from the parent shell. Wrap with `set -a; source .env.staging; set +a; pm2 reload api --update-env`. Verify post-reload by `/proc/<api-pid>/environ` grep.
-- **SES envelope-shape defensive coding (Day 40 codified):** SES → SNS payloads use different top-level fields (`eventType` for Configuration Set; `notificationType` for legacy). Phase 4 webhooks accept both via `sesPayloadEventType()`.
+- **Phase 4 webhook fail-closed (Day 40):** `SES_BOUNCE_TOPIC_ARNS` + `SES_COMPLAINT_TOPIC_ARNS` allowlist gates.
+- **Refund cross-tenant guard + actor_type split + append-only refund row (Day 41).**
+- **CW CPU 85% alarm threshold (Day 41).**
+- **Contact form 3-defence-layer pattern (Day 42):** honeypot returns silent success / per-IP rate-limit returns 429 / zod validation rejects malformed payloads. Pattern is canonical for any future public-write endpoint.
+- **Changelog body_html via Decision-J pipeline only (Day 42):** `renderLegalMarkdown` is the single sanitizer; widening the allowlist requires its own decisions.md entry. New sanitizers (DOMPurify, etc.) forbidden without supersession.
+- **Drizzle array gotcha discipline (Day 41 + Day 42 codified):** raw `sql` template with JS-array values produces tuple syntax that Postgres rejects against array columns + `ANY()`. Use drizzle builders + `inArray()` whenever the SQL context expects an array.
+- **Source-then-reload discipline for ad-hoc env edits (Day 40 codified).**
+- **SES envelope-shape defensive coding (Day 40 codified).**
+- **Bash-buffering deploy.sh discipline (Day 39 PM codified)** — edits to deploy.sh don't execute on the deploy that ships them. Day 42 confirmed: the `db:seed:changelog-v1` line added to deploy.sh in PR #246 didn't run on that deploy because the old buffered shell finished. Manual SSM remediation per the established pattern.
 - Branch protection: pre-push hook + workflow_dispatch gates on `main`; memory commits go through PRs.
 - Memory protocol: decisions → decisions.md the turn they're made; gotchas → gotchas.md the moment learned.
-- Money math single source: `fee-calculator.ts`. No fee arithmetic elsewhere. Refund-flow v1.0 reads `order.totalPaisa` directly for the refund amount; no calculator invocation needed (full-refund semantics).
+- Money math single source: `fee-calculator.ts`. Pricing drift-guard mirror is for display only.
 - Snapshot-vs-current display discipline (Day-33 Choice A).
 - Auth-gate-is-the-entire-security-model for `/api/v1/admin/*` (Day-35).
 - Build-track owns surfacing what's draftable for the launch gate (Day-35).
 - Wire-protocol diagnostic logging (PR #217) — keep ON permanently.
-- **Prod branch tracking discipline (Day 37):** `origin/prod` at `21dad2cc`; `main` at `c38c91d`; divergence now ~100+ commits.
-- **Method-agnostic-calculator discipline (Day 38).** Day 21 author's decision on `epsFeeBps` parameter still load-bearing.
-- **Bash-buffering deploy.sh discipline (Day 39 PM).** Edits to deploy.sh don't execute on the deploy that ships them.
+- **Prod branch tracking discipline (Day 37):** `origin/prod` at `21dad2cc`; `main` at `6ff4f9b` (+ pending #248); divergence now ~105+ commits.
+- **Method-agnostic-calculator discipline (Day 38).**
+- **Build-time-fetch-failure tolerance pattern (Day 42 codified for lib/changelog; carries forward for any new Server Component fetching the api).**

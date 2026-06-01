@@ -4,6 +4,43 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## drizzle's `sql` template inlines JS arrays as tuples, not Postgres array literals (Day 41 / Day 42)
+
+**Symptom.** Two bugs in two days, same root cause. Day 41 PR #245's `afterAll` cleanup used:
+
+```ts
+await tx.execute(sql`DELETE FROM contact_submissions WHERE email = ANY(${[...testEmails]})`)
+```
+
+CI threw `op ANY/ALL (array) requires array on right side` (SQLSTATE 42809). Day 42 PR #246's `seed-changelog-v1.ts` did:
+
+```ts
+await tx.execute(sql`INSERT INTO changelog_entries (..., audience, ...) VALUES (..., ${entry.audience as unknown as string[]}, ...)`)
+```
+
+Seed exited with `column "audience" is of type text[] but expression is of type record` because the array was inlined as a tuple.
+
+**Why it happens.** drizzle's `sql\`...\`` template treats every `${value}` as a SCALAR parameter. When `value` is a JS array, drizzle inlines it as multiple positional parameters wrapped in parentheses — `($7, $8, $9)` — which Postgres parses as a **tuple/record**, not an array. The fix isn't to escape harder; the `sql` template fundamentally has no concept of "this single placeholder should bind to an array".
+
+The Postgres-side syntax that DOES work is `ARRAY[$7, $8, $9]::text[]` (explicit array constructor) or the bound parameter actually being a typed array on the protocol level — which drizzle's builders (`.insert().values({ field: array })`, `inArray(col, array)`) handle correctly because they cast the parameter type at the protocol layer.
+
+**Fix patterns:**
+
+| Context | DON'T | DO |
+|---|---|---|
+| `WHERE col = ANY(<array>)` | `sql\`WHERE col = ANY(${arr})\`` | `inArray(col, arr)` |
+| `WHERE col IN (...) DELETE` | `sql\`... WHERE col IN (${arr})\`` | `tx.delete(table).where(inArray(table.col, arr))` |
+| INSERT into text[] column | `sql\`INSERT ... VALUES (..., ${arr}, ...)\`` | `tx.insert(table).values({ field: arr })` |
+| INSERT-on-conflict with text[] | `sql\`INSERT ... ON CONFLICT ... DO UPDATE\`` | `tx.insert(table).values({...}).onConflictDoUpdate({ target, set: {...} })` |
+
+**The detection rule:** any time you reach for the raw ``sql`...` `` template AND the value is a JS array AND the SQL context expects an array (right side of `ANY`/`ALL`, value for a `text[]` column, list for `WHERE col IN (...)`), STOP — switch to drizzle's builders or `inArray()`. The raw template is fine for scalars + literal SQL.
+
+**Trail.** Day 41 PR #245 hotfix `94dab28` switched the cleanup to `inArray()`. Day 42 PR #248 switched the seed to `.insert().values().onConflictDoUpdate()` — same fix shape. Both surfaced as CI failures (Day 41) / silent zero-row insert (Day 42); the SQLSTATE 42809 + the "type of type record vs array" error message is the canonical signal.
+
+**How to avoid.** Default to drizzle's builders for any INSERT / UPDATE / DELETE involving arrays. Reserve the raw `sql` template for SELECTs with custom-shape projections (the changelog seed's `RETURNING (xmax = 0)` is fine inside the builder via `.returning({ wasInserted: sql\`(xmax = 0)\` })` with an explicit Postgres type). If you grep for the literal `sql\`` token in a PR diff, audit any hit that mentions array-typed columns or `ANY()`.
+
+---
+
 ## SES publishes bounce/complaint events to SNS with `eventType`, not `notificationType` (Day 40 / PR #239)
 
 **Symptom.** Day 40 Phase 4 wiring smoke landed the SES Configuration Set + 2 event destinations + 2 SNS topics + 2 confirmed HTTPS subscriptions. Sent test emails to `bounce@simulator.amazonses.com` + `complaint@simulator.amazonses.com` via `aws sesv2 send-email --configuration-set-name eventpulse-staging`. CloudWatch confirmed SNS publishes happened (`NumberOfMessagesPublished` ticked +1 on each topic), nginx access log confirmed AWS POSTed to `/api/v1/webhooks/ses-bounce` + `ses-complaint` with the `Amazon Simple Notification Service Agent` User-Agent and the webhooks returned HTTP 200. But `email_suppression_list` stayed at 0 rows. The api log showed:
