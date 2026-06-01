@@ -423,4 +423,111 @@ describe('<BuyerForm>', () => {
     const { container } = render(<BuyerForm event={baseEvent} tiers={[paidTier]} />)
     expect(await axe(container)).toHaveNoViolations()
   })
+
+  // ──────────────────────────────────────────────────────────────────
+  // Day 39 Phase 2 — Buyer Terms v1.0 clickwrap wire-in.
+  // ──────────────────────────────────────────────────────────────────
+  describe('Buyer Terms v1.0 clickwrap (Day 39 Phase 2)', () => {
+    const BODY_HTML = '<h2>Buyer Terms Body</h2><p>SALEHIN_APPROVED_MARKER content goes here.</p>'
+
+    it('Day-34 link-footer text is GONE', () => {
+      render(
+        <BuyerForm
+          event={baseEvent}
+          tiers={[paidTier]}
+          buyerTermsBodyHtml={BODY_HTML}
+          buyerTermsVersion="v1.0"
+        />,
+      )
+      // The exact Day-34 footer phrasing must not appear anywhere.
+      expect(screen.queryByText(/By placing this order you agree to the/i)).toBeNull()
+    })
+
+    it('renders the body_html panel (paid event) with the Salehin-approved marker', () => {
+      render(
+        <BuyerForm
+          event={baseEvent}
+          tiers={[paidTier]}
+          buyerTermsBodyHtml={BODY_HTML}
+          buyerTermsVersion="v1.0"
+        />,
+      )
+      const panel = screen.getByTestId('buyer-terms-panel')
+      expect(panel).toBeInTheDocument()
+      const body = screen.getByTestId('buyer-terms-body')
+      expect(body.innerHTML).toContain('SALEHIN_APPROVED_MARKER')
+      expect(body.innerHTML).toContain('<h2>')
+      // Fallback message should NOT be present when body is provided.
+      expect(screen.queryByTestId('buyer-terms-body-unavailable')).toBeNull()
+    })
+
+    it('renders fallback panel when buyerTermsBodyHtml is null', () => {
+      render(
+        <BuyerForm
+          event={baseEvent}
+          tiers={[paidTier]}
+          buyerTermsBodyHtml={null}
+          buyerTermsVersion={null}
+        />,
+      )
+      const panel = screen.getByTestId('buyer-terms-panel')
+      expect(panel).toBeInTheDocument()
+      const fallback = screen.getByTestId('buyer-terms-body-unavailable')
+      expect(fallback).toBeInTheDocument()
+      expect(fallback.textContent).toMatch(/temporarily unavailable/i)
+      expect(screen.queryByTestId('buyer-terms-body')).toBeNull()
+    })
+
+    it('bilingual clickwrap line names the version + button label (paid → "Continue with bKash")', () => {
+      render(
+        <BuyerForm
+          event={baseEvent}
+          tiers={[paidTier]}
+          buyerTermsBodyHtml={BODY_HTML}
+          buyerTermsVersion="v1.0"
+        />,
+      )
+      const clickwrap = screen.getByTestId('buyer-terms-clickwrap')
+      expect(clickwrap.textContent).toContain('Continue with bKash')
+      expect(clickwrap.textContent).toContain('v1.0')
+      // BN parallel present (canonical "Buyer Terms" header + clickwrap phrasing).
+      expect(clickwrap.textContent).toMatch(/সম্মত হচ্ছেন/u)
+    })
+
+    it('bilingual clickwrap line names the FREE-event button label ("Confirm registration") once a free tier is selected', async () => {
+      const user = userEvent.setup()
+      render(
+        <BuyerForm
+          event={baseEvent}
+          tiers={[freeTier]}
+          buyerTermsBodyHtml={BODY_HTML}
+          buyerTermsVersion="v1.0"
+        />,
+      )
+      // isFreeEvent requires hasAnyTier && previewSubtotalPaisa === 0n;
+      // need to pick a free-tier qty > 0 to land on the free branch.
+      await user.clear(screen.getByTestId('qty-input-tier-free'))
+      await user.type(screen.getByTestId('qty-input-tier-free'), '1')
+      const clickwrap = screen.getByTestId('buyer-terms-clickwrap')
+      expect(clickwrap.textContent).toContain('Confirm registration')
+      expect(clickwrap.textContent).not.toContain('Continue with bKash')
+    })
+
+    it('clickwrap line renders even when version is null (fallback dash)', () => {
+      render(
+        <BuyerForm
+          event={baseEvent}
+          tiers={[paidTier]}
+          buyerTermsBodyHtml={null}
+          buyerTermsVersion={null}
+        />,
+      )
+      const clickwrap = screen.getByTestId('buyer-terms-clickwrap')
+      expect(clickwrap.textContent).toContain('Continue with bKash')
+      // The dash placeholder appears in BOTH the BN and EN halves
+      // when the version is unavailable — there's no version string
+      // to surface.
+      expect(clickwrap.textContent).toContain('—')
+    })
+  })
 })
