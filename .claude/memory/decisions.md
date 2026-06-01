@@ -4,6 +4,109 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-01 · Day 41 EOD — Sprint 4 §26.1 Day 7-8 refund flow SHIPPED v1.0 + CW CPU alarm + MAIL_DRY_RUN=0 staging flip
+
+### Context
+
+Day 41 ran a continuous "work continue" session across three distinct workstreams: (1) the cheap CloudWatch CPU >85%/10 min alarm (5-minute AWS-write task pre-authorised; carry from Day 39/40 backlog), (2) the `MAIL_DRY_RUN=0` flip on staging (structurally enabled by Day 40 Phase 4 wiring; recommended sequence per Day 40 EOD handoff), then (3) the next §26.1 Sprint 4 buildable: **refund flow + manual disbursement (Day 7-8)** — the v1.0 launch posture for tenant-initiated refunds + super-admin approval + EPS-dashboard-out-of-band processing.
+
+By close, all three landed. PR #242 (6 commits, ~1700 LOC, 14 new integration tests) added migration 0016 + state-machine extension + 3 new audit helpers + refund-flow service + tenant routes + super-admin routes. The CW alarm + MAIL_DRY_RUN flip preceded it earlier in the session.
+
+### Decision A — Refund flow v1.0 launch posture (full-refund only; EPS dashboard manual; no settlement netting)
+
+**Three deliberate scope cuts**, each documented in the PR body + service-level commentary:
+
+1. **Full-refund only at v1.0.** `amount_paisa = order.totalPaisa` always; tenant never supplies amount. Partial refunds are Phase 2 scope. Schema already permits arbitrary amounts (no migration debt) — only the orchestration enforces full-amount today.
+2. **No EPS API integration.** EPS V5 has no public refund API per CLAUDE.md §11.4 ("Refunds not in V5 public API → must be handled via EPS merchant dashboard, contact `integration@eps.com.bd`"). Platform side is pure accounting: tenant requests → super-admin approves → super-admin issues refund via EPS dashboard out-of-band → super-admin marks `processed` on platform. The state-machine never directly touches EPS.
+3. **No settlement netting at v1.0.** §14.9 batch-recompute + debit-carry-forward logic stays as Phase 2 Sprint-7 settlement-engine scope. Refund amounts on `processed` refunds will eventually drive disbursement-batch math; for v1.0 those refunds sit as historical records that settlement-engine consumers will read when implemented.
+
+### Decision B — State machine: refund_requested allowed back-transition to `paid`
+
+`order-state-machine.ts` Day-41 amendment:
+
+```diff
+- refund_requested: ['refunded'],
++ refund_requested: ['refunded', 'paid'],  // 'paid' = super-admin rejection rollback
+```
+
+The standard happy path remains `paid → refund_requested → refunded`. The new `refund_requested → paid` edge is **only** traversed when a super-admin rejects a pending refund — the order returns to fulfilled-paid state and the refund row carries `status=rejected, rejected_at, rejected_by, super_admin_notes (REQUIRED)`.
+
+**Why this matters for the §14.10 ledger invariant:** a rejected refund leaves the order in `paid`, so the §14.10 Invariant 1 (`Σ order.total = Σ (net + platform_fee + eps_fee + withholding)`) continues to hold without recomputation. Rejected refunds are accounting noise — visible in `audit_logs` + `refunds.status='rejected'` for ops traceability but not part of the money math.
+
+### Decision C — Refund actor types in audit_logs (tenant_user vs super_admin)
+
+Per the existing audit convention (`actor_type` ∈ `'user' | 'tenant_user' | 'super_admin' | 'system' | 'webhook'`):
+
+- `writeRefundRequested` writes `actor_type='tenant_user'` (tenant employee acting on behalf of the tenant)
+- `writeRefundApproved`, `writeRefundRejected`, and the existing `writeOrderRefunded` (when called from super-admin approve→processed path) all write `actor_type='super_admin'`
+
+This preserves the read-side property that filtering `audit_logs WHERE actor_type='super_admin'` shows all cross-tenant operations, while `actor_type='tenant_user'` shows tenant-portal-initiated actions. The split makes super-admin operations distinguishable in compliance/regulator audits.
+
+### Decision D — Cross-tenant guard at the service layer (defence-in-depth, hidden as 404)
+
+Both the tenant `requestRefund()` and the tenant route handlers explicitly look up the order/refund under `withSuperAdmin()` (BYPASSRLS) and then compare `tenantId` against the caller's JWT-tenant. Mismatches return the discriminated result `kind: 'cross_tenant'` which the HTTP layer **renders as 404 NOT_FOUND** (not 403) — no enumeration of foreign-tenant resource IDs.
+
+This is the inverse of the Day-35 super-admin revenue dashboard pattern (where cross-tenant-by-design is the whole point); for tenant-portal endpoints, cross-tenant attempts must be indistinguishable from non-existence.
+
+### Decision E — superAdminNotes required for reject, optional for approve (5-2000 char range when present)
+
+The rejection path requires `superAdminNotes` between 5 and 2000 characters (zod-validated). Approval path makes it optional. Rationale:
+
+- Rejection is a denied request — the tenant deserves an explanation that travels back to them via UI (when added Phase 2) + persists in `audit_logs.metadata`
+- Approval is the expected positive outcome — notes are useful for context but not required for the action to be valid
+
+The 5-character floor exists so single-word rejections (`"no"`) are caught; the 2000-character ceiling prevents weaponised log/audit-row bloat.
+
+### Decision F — Test pattern: `describeIfDb` over fresh seeded fixtures per describe block
+
+The refund-flow test suite (`refund-flow.test.ts`) follows the **Day-13 OIDC infra carry pattern**: top-of-file `describeIfDb` constant gates the entire suite on `DATABASE_URL` presence so the suite runs in CI Integration job + skips cleanly on the Unit job. Each describe block sets up its own minimal fixture (2 tenants for cross-tenant testing, owner + admin users, 1 event, 1 tier) and `seedPaidOrder()` helper creates per-test isolated orders. Final cleanup test TRUNCATEs all fixtures.
+
+The alternative (one big fixture across all tests) was rejected because the 14 tests exercise 4 functions × 5 result-kinds each (happy + cross_tenant + invalid_transition + already_requested + not_found) — per-test isolation prevents state leakage between tests where one test's `requestRefund` would shift another test's order state.
+
+### Decision G — Day-41 CW CPU alarm: dedicated alarm at 85% CPU > 10 minutes (matches §17.11 catalogue)
+
+Created `eventpulse-staging-cpu-high-85pct` per the §17.11 alarm catalogue ("CPU > 85% / 10 min" + memory > 90% / 5 min + disk > 80% + error rate > 1% / 5 min + payment success rate < 95% / 15 min + disbursement batch failure + reconciliation invariant violation). This is the FIRST entry from §17.11 codified as an actual AWS resource on staging. The remaining six follow in subsequent sessions when each becomes the cheapest standalone task on the prod-cutover backlog.
+
+**Cost:** ~$0.10/month (standard CW alarm). No SNS subscription yet — alarm fires in console only. Adding the existing `eventpulse-staging-ses-bounces` SNS topic as the alarm action is a separate future decision (we want operator hands on the topic before paging it on CPU).
+
+### Decision H — MAIL_DRY_RUN=0 staging flip = "open the valve and observe"
+
+The flip happened earlier in Day 41 with these invariants held immediately after:
+
+- `/health db=ok` ✓
+- `STAGING_PAYMENT_BLOCK=1` ✓ (separate env var; mail flip does not touch payment block)
+- `EPS_MODE=production` ✓
+- API + web pm2 status `online`, restart counts unchanged
+- No new entries on `email_suppression_list` in the 30 minutes post-flip (no real outbound triggered by smoke; Day 40 mailbox-simulator test runs already proven the SNS → webhook → suppression-list chain works end-to-end)
+
+The flip is now durable across deploys (lives in `/home/eventpulse/.env.staging`, not just shell session). PR #242 deploy at 13:47 UTC respected it across pm2 reload. Day 41+ sessions can now exercise the real SES send path on staging at will. The same flip on production lands as a sub-step of the production EC2 cutover ceremony (still on the §29 backlog).
+
+### Consequences
+
+- **Sprint 4 §26.1 Day 7-8 refund flow scope = SHIPPED v1.0.** The remaining Sprint 4 work surfaces (marketing pages §26.1 Day 9; launch readiness §26.1 Day 10 inc. prod cutover + first paying tenant) are the next backlog items. Manual-disbursement half (BEFTN file generation / bKash B2C / Nagad / Rocket adapters per §14.8) explicitly deferred — at v1.0 platform launch with first-paying-tenant onboarding being super-admin-attended, "manual disbursement" = super-admin uses BEFTN portal manually with order data from the platform's existing admin views.
+- **PR #232 (Phase 2b) `markDisputedOrderRefunded` remains intact and orthogonal.** It writes `refunds.reason = 'manual_refund_after_non_bkash_dispute'` for dispute-flow refunds; the Day-41 backfill UPDATE on migration 0016 set `reason_code = 'disputed_manual'` on those rows. Phase 2b's call-path is untouched by Day-41; the two refund-creation paths coexist.
+- **Migration ladder advances to 0016.** Future migrations: 0017+. Drizzle migration count on staging now 16. No drift between staging + main.
+- **Staging environment posture (post-Day-41) for next session:** `STAGING_PAYMENT_BLOCK=1` + `EPS_MODE=production` + `MAIL_DRY_RUN=0` + Phase 4 SNS wiring live + CW CPU 85% alarm live. The §17.11 alarm catalogue is at 1-of-7 codified.
+- **The §26.1 Sprint 4 plan is now ~70% shipped** (Days 1-2 attendees, 3-4 check-in, 5 sales dashboard, 6 super-admin revenue, 7-8 refund flow, all ✅; Day 9 marketing pages + Day 10 launch readiness pending; manual disbursement Day-7-8 second half explicitly deferred).
+- **§29 Open Decisions: #5 "Refund authority for MVP" tightens.** The §29 entry already reads "tenant initiates from portal; super admin approves; actual refund executed manually via EPS dashboard. No tenant-initiated direct refund until EPS public refund API exists." Day 41 codes that policy into the running platform. Mark #5 as STRUCTURALLY RESOLVED — code reflects the policy verbatim.
+- **Audit-helper-per-domain pattern reinforced.** 3 new helpers + 1 expanded helper added to `services/audit/orders.ts`:
+  - `writeRefundRequested` (NEW, actor_type=tenant_user)
+  - `writeRefundApproved` (NEW, actor_type=super_admin)
+  - `writeRefundRejected` (NEW, actor_type=super_admin, super_admin_notes required)
+  - `writeOrderRefunded` (EXPANDED — refund-reason union widened from `'manual_refund_after_non_bkash_dispute' | 'reconciliation_correction'` to `RefundReasonCode` 4-case union; backward compatible)
+
+### Pointers
+
+- PR #242 `c38c91d` — Sprint 4 refund-flow v1.0 (`feat(refunds): Sprint 4 tenant-initiated refund flow + super-admin approval`)
+- Migration 0016 — `apps/api/src/db/migrations/0016_refunds_approval_workflow.sql`
+- Service — `apps/api/src/services/refunds/refund-flow.ts` (666 LOC, 4 functions, discriminated Result unions)
+- Tests — `apps/api/src/services/refunds/refund-flow.test.ts` (680 LOC, 14 DB-gated tests)
+- Routes — `apps/api/src/routes/tenant/refunds.ts` + `apps/api/src/routes/super-admin/refunds.ts`
+- CW alarm — `eventpulse-staging-cpu-high-85pct` (ap-southeast-1, console-only, ~$0.10/month)
+- MAIL_DRY_RUN=0 — `/home/eventpulse/.env.staging` (durable across deploys)
+
+---
+
 ## 2026-06-01 · Day 40 EOD — Phase 4 SNS bounce/complaint suppression-list AWS-side wiring SHIPPED end-to-end on staging
 
 **Closes:** the AWS-side STOP-ASK gate from Day 39 PM's Phase 4 PR #236 ("AWS Console writes — SNS topic creation + Configuration Set + IAM — STOP-ASK for separate operator-authorised session"). Phase 4 is now operational end-to-end on staging: SES bounces + complaints route through SNS → webhook → `email_suppression_list` → outbound-send guard. Verified by mailbox-simulator round-trip.
