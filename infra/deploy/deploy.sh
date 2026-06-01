@@ -128,6 +128,19 @@ unset NODE_OPTIONS
 # 4) Migrate
 $PNPM --filter @eventpulse/api db:migrate
 
+# 4.1) Idempotent seeds (post-migrate, pre-pm2-reload).
+#
+# - legal-documents: 18 Trust Center docs at v0.1 placeholder.
+# - buyer-terms-v1: Buyer-Terms-Lite v1.0 (Day 39 Phase 2, ships at
+#   bKash-only launch). Salehin-approved 2026-05-31.
+#
+# Both are idempotent — re-running against an already-seeded DB is a
+# no-op (the legal-documents seed refreshes title/url metadata but
+# never overwrites version rows; buyer-terms-v1 ON CONFLICT DO NOTHING
+# on the (document_id, version) unique). Safe to run on every deploy.
+$PNPM --filter @eventpulse/api db:seed:legal-documents
+$PNPM --filter @eventpulse/api db:seed:buyer-terms-v1
+
 # 4.5) Nginx vhost reload — Fix 6b from Day 21 silent-failure remediation.
 #
 # Nginx vhost config lives in the repo at infra/nginx/eventpulse-staging.conf

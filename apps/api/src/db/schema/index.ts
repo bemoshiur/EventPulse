@@ -969,3 +969,57 @@ export const emailSuppressionList = pgTable(
     index('idx_email_suppression_until').on(t.suppressedUntil),
   ],
 )
+
+// ─── consent_records (Day 39 Phase 2) ───────────────────────────────────
+//
+// Buyer-Terms-Lite v1.0 consent capture per Phase 2 wire-in. The CLAUDE.md
+// §9.11 spec is amended for guest-buyer reality:
+//
+//   - `userId` is nullable (guest buyers have no user_id at checkout).
+//   - `orderId` is NEW — guest-checkout anchor; populated by the order-
+//     creation tx-seam INSERT.
+//   - CHECK requires at least one of (userId, orderId) be set.
+//   - §9.11 UNIQUE (user_id, document_id, version_id) dropped — guest
+//     consents wouldn't satisfy it; authenticated-user uniqueness story
+//     ships later when a `/my` consent surface lands.
+//
+// Access pattern (mirrors legal_document_versions): all reads + writes
+// via withSuperAdmin() under eventpulse_admin BYPASSRLS. RLS enabled +
+// FORCED with NO policies — defence-in-depth so non-BYPASSRLS routes
+// hit a hard "permission denied" rather than leaking via missing-policy
+// silent failures. Future tenant/user-portal read surfaces add policies
+// in their own migrations alongside the read code.
+//
+// NOT append-only: `withdrawnAt` is UPDATE'd to mark consent withdrawal.
+// §4.2.1.1 append-only invariant does NOT apply.
+
+export const consentRecords = pgTable(
+  'consent_records',
+  {
+    id: uuid()
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    userId: uuid('user_id').references(() => users.id),
+    orderId: uuid('order_id').references(() => orders.id),
+    tenantId: uuid('tenant_id').references(() => tenants.id),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => legalDocuments.id),
+    versionId: uuid('version_id')
+      .notNull()
+      .references(() => legalDocumentVersions.id),
+    consentedAt: timestamp('consented_at', { withTimezone: true }).notNull().defaultNow(),
+    ip: inet(),
+    userAgent: text('user_agent'),
+    withdrawnAt: timestamp('withdrawn_at', { withTimezone: true }),
+  },
+  (t) => [
+    check(
+      'consent_records_anchor_chk',
+      sql`${t.userId} IS NOT NULL OR ${t.orderId} IS NOT NULL`,
+    ),
+    index('idx_consent_user').on(t.userId, t.consentedAt),
+    index('idx_consent_order').on(t.orderId),
+    index('idx_consent_document_version').on(t.documentId, t.versionId, t.consentedAt),
+  ],
+)

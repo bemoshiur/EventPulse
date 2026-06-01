@@ -267,6 +267,14 @@ jobs:
       - name: Apply migrations
         run: pnpm --filter @eventpulse/api db:migrate
 
+      - name: Seed Buyer-Terms-Lite v1.0
+        # Day 39 Phase 2 wire-in: the buyer-form integration tests assert
+        # a consent_records row is written, which requires the
+        # legal_documents + legal_document_versions rows for buyer-terms
+        # v1.0 to exist. Idempotent — re-running against an already-seeded
+        # DB is a no-op.
+        run: pnpm --filter @eventpulse/api db:seed:buyer-terms-v1
+
       - name: Integration + RLS tests
         run: pnpm --filter @eventpulse/api test
 
