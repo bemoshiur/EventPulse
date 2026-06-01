@@ -1014,10 +1014,7 @@ export const consentRecords = pgTable(
     withdrawnAt: timestamp('withdrawn_at', { withTimezone: true }),
   },
   (t) => [
-    check(
-      'consent_records_anchor_chk',
-      sql`${t.userId} IS NOT NULL OR ${t.orderId} IS NOT NULL`,
-    ),
+    check('consent_records_anchor_chk', sql`${t.userId} IS NOT NULL OR ${t.orderId} IS NOT NULL`),
     index('idx_consent_user').on(t.userId, t.consentedAt),
     index('idx_consent_order').on(t.orderId),
     index('idx_consent_document_version').on(t.documentId, t.versionId, t.consentedAt),

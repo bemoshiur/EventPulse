@@ -157,9 +157,8 @@ describeIfDb('seed-legal-documents — idempotency (DB)', () => {
     // meaningful. Safe because legal_documents/legal_document_versions
     // are platform-global and not used by other tests in this suite.
     const { withSuperAdmin } = await import('../client.js')
-    const { consentRecords, legalDocuments, legalDocumentVersions } = await import(
-      '../schema/index.js'
-    )
+    const { consentRecords, legalDocuments, legalDocumentVersions } =
+      await import('../schema/index.js')
     const { sql } = await import('drizzle-orm')
 
     await withSuperAdmin(async (tx) => {
