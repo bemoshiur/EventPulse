@@ -10,6 +10,8 @@ import { publicLegalRoutes } from './routes/public/legal.js'
 import { epsReturnRoutes } from './routes/public/orders-eps-return.js'
 import { publicOrdersRoutes } from './routes/public/orders.js'
 import { epsWebhookRoutes } from './routes/webhooks/eps.js'
+import { sesBounceRoutes } from './routes/webhooks/ses-bounce.js'
+import { sesComplaintRoutes } from './routes/webhooks/ses-complaint.js'
 import { feeConfigRoutes } from './routes/super-admin/fee-config.js'
 import { adminKycRoutes } from './routes/super-admin/kyc.js'
 import { adminLegalRoutes } from './routes/super-admin/legal.js'
@@ -106,6 +108,16 @@ export function createApp() {
   // §11 does NOT specify an EPS-side webhook signature mechanism
   // (decisions.md "Day 27 EPS webhook auth model" 2026-05-25).
   app.route('/api/v1/webhooks/eps', epsWebhookRoutes)
+  // SES bounce + complaint SNS webhooks — Day 39 Phase 4 per
+  // decisions.md 2026-05-31 SES entry's pre-launch commitment to AWS
+  // Support case 177899559700777. Auth model: SNS signature
+  // verification (X.509 signed body); no token/Sigv4 auth. Bodies
+  // arrive from AWS SNS HTTPS subscription pointed at SES
+  // Configuration Set event destinations. AWS-side wiring (SNS topics
+  // + IAM + Configuration Set hookup) is STOP-ASK gated; this code
+  // ships ready to receive once the AWS resources land.
+  app.route('/api/v1/webhooks/ses-bounce', sesBounceRoutes)
+  app.route('/api/v1/webhooks/ses-complaint', sesComplaintRoutes)
   // Tenant routes — order doesn't matter (Hono routes are matched by
   // exact path prefix), but the `me` + `account-type` mounts deliberately
   // sit alongside `kyc` because they share the /api/v1/tenant/* namespace.

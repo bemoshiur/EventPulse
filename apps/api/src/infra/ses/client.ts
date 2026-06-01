@@ -21,6 +21,7 @@
 import { SendEmailCommand, SESv2Client } from '@aws-sdk/client-sesv2'
 
 import { logger } from '../../lib/logger.js'
+import { hashEmail, isSuppressed } from '../../services/notifications/suppression-list.js'
 
 let _client: SESv2Client | undefined
 
@@ -45,6 +46,8 @@ export interface SendEmailInput {
 export interface SendEmailResult {
   messageId: string
   dryRun: boolean
+  /** True when the send was blocked by the suppression-list guard (Day 39 Phase 4). */
+  suppressed?: boolean
 }
 
 function from(): string {
@@ -57,6 +60,35 @@ function returnPath(): string {
 
 export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
   const toAddresses = Array.isArray(input.to) ? input.to : [input.to]
+
+  // Day 39 Phase 4 — outbound suppression-list guard. Skip the SES
+  // API call entirely if ANY recipient is currently suppressed (hard
+  // bounce / complaint / unexpired soft bounce). Per the AWS Support
+  // case 177899559700777 pre-launch commitment, this MUST run before
+  // every production send.
+  //
+  // All-or-nothing semantics: if any recipient is suppressed, the
+  // entire send is skipped — we do NOT split the recipient list +
+  // send to the survivors. Rationale: typically `to` is a single
+  // address (transactional pattern); multi-recipient sends are rare
+  // and not worth the partial-failure complexity at v1.0.
+  for (const addr of toAddresses) {
+    if (await isSuppressed(addr)) {
+      logger.info(
+        {
+          emailHash: hashEmail(addr),
+          subject: input.subject,
+          tags: input.tags ?? {},
+        },
+        'ses.send.suppressed',
+      )
+      return {
+        messageId: `suppressed-${Date.now()}`,
+        dryRun: false,
+        suppressed: true,
+      }
+    }
+  }
 
   if (process.env['MAIL_DRY_RUN'] === '1') {
     logger.info(
