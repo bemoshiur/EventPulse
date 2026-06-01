@@ -225,6 +225,68 @@ export async function writeOrderDisputed(tx: Tx, input: WriteOrderDisputedInput)
   })
 }
 
+// ─── writeOrderRefunded (Day 39 Phase 2b — manual refund of v1.0 disputed orders) ─
+
+export interface WriteOrderRefundedInput {
+  orderId: string
+  tenantId: string
+  eventId: string
+  merchantTransactionId: string
+  /** Refund amount in paisa; for the v1.0 Verify-guard path this is the order's full totalPaisa. */
+  amountPaisa: bigint
+  /**
+   * Refund reason code. v1.0 Phase 2b uses
+   * `'manual_refund_after_non_bkash_dispute'` for the Verify-guard
+   * follow-up flow. Future expansion: `'tenant_initiated_refund'`,
+   * `'eps_chargeback_resolved'`, etc.
+   */
+  refundReason: 'manual_refund_after_non_bkash_dispute'
+  /** State machine `from` — typically `disputed` for the Day 39 Phase 2b path. */
+  previousStatus: string
+  /** ID of the super-admin user who marked the refund complete. */
+  refundedBy: string
+  /** UUID of the refunds-table row inserted in the same tx. */
+  refundId: string
+}
+
+/**
+ * Refund audit. Fires when a super-admin completes a manual refund of
+ * a Day-38-Phase-2a disputed order (Day 39 Phase 2b path).
+ *
+ * The dispute path (PR #228) routes non-bKash payments to `disputed`;
+ * the super-admin issues the actual refund via the EPS merchant
+ * dashboard (V5 has no public refund API per §11.4), then calls the
+ * Phase 2b admin endpoint to mark the order `refunded`. This audit
+ * helper writes the corresponding audit-log row inside the same tx
+ * as the orders UPDATE + refunds INSERT + order_events INSERT.
+ *
+ * The diff carries the refund amount + reason + refunds-table id so
+ * a single audit row tells the complete refund story without needing
+ * to join back to other tables. No PII — buyer details stay on the
+ * orders row.
+ */
+export async function writeOrderRefunded(tx: Tx, input: WriteOrderRefundedInput): Promise<void> {
+  await tx.insert(auditLogs).values({
+    tenantId: input.tenantId,
+    actorType: 'super_admin',
+    actorId: input.refundedBy,
+    action: 'order.refunded',
+    entityType: 'order',
+    entityId: input.orderId,
+    diff: {
+      previous_status: input.previousStatus,
+      new_status: 'refunded',
+      refund_reason: input.refundReason,
+      amount_paisa: input.amountPaisa.toString(),
+      refund_id: input.refundId,
+      merchant_transaction_id: input.merchantTransactionId,
+    },
+    metadata: { source: 'super_admin_manual_refund', event_id: input.eventId },
+    ip: null,
+    userAgent: null,
+  })
+}
+
 // ─── writeOrderDelivered (Day 28 Phase 3) ────────────────────────────
 
 export interface WriteOrderDeliveredInput {

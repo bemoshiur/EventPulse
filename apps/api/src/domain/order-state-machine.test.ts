@@ -91,8 +91,12 @@ describe('legal transitions per §2.5 + §11.1', () => {
     // Refund subpath
     ['refund_requested', 'refunded'],
 
-    // Dispute subpath
+    // Dispute subpath — two valid forward paths from disputed:
+    //   path 1: disputed → chargeback → reversed (EPS-initiated, §2.5)
+    //   path 2: disputed → refunded (Day 39 Phase 2b manual refund of
+    //           the v1.0 non-bKash Verify-guard dispute path)
     ['disputed', 'chargeback'],
+    ['disputed', 'refunded'],
     ['chargeback', 'reversed'],
   ]
 
