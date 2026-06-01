@@ -4,6 +4,96 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-31 · Day 39 PM EOD — Buyer-Terms-Lite v1.0 SHIPPED end-to-end (sign-off chain Step 5 ✅ CLOSED; legal track entirely closed)
+
+**Closes:** the v0.3 sign-off chain in `docs/legal/buyer-terms.md`. Step 4 (operator final sign-off on v0.3 → v1.0 promotion) cleared 2026-05-31 with Salehin's "all good to go" final-check confirmation. Step 5 (wire into checkout `consent_records`) cleared 2026-05-31 with PR #237 merged + deployed + smoke-confirmed live.
+
+**Closes (broader frame):** Salehin's Buyer-Terms-Lite engagement is now **end-to-end COMPLETE.** v0.1 → v0.2 (operator) → v0.3 (Salehin round 1 + operator selective-adoption clarification) → v1.0 (Salehin "all good to go" + operator final sign-off + checkout wire-in). The legal track of the Day-39 work shape is closed.
+
+### Context
+
+Day 39 AM reconciliation (top entry below this one and the two further-down Salehin entries) captured Salehin's substantive review of v0.2; v0.3 was drafted with four edits applied (§1 minor-age verbatim per Salehin / §4 BN "পরোক্ষ ক্ষতি" / §3 fraud-prevention recipient / §4 Clause 6.2 verbatim five-exception list with selective adoption boundary). Two BN-rendering items ("সম্মতি ও তত্ত্বাবধানে" for "consent and supervision"; "প্রতারণা বা প্রতারণামূলক উপস্থাপনা" for "fraud or fraudulent misrepresentation") were flagged for Salehin's final-check.
+
+Salehin's 2026-05-31 final-check reply: **"all good to go"** — no edits requested; both flagged BN renderings confirmed acceptable. Operator final sign-off cleared same day.
+
+PR #237 (`feat/buyer-terms-v1-consent-wire-in`) shipped Day 39 PM in 6 commits (4 substantive + 2 CI-fix). Merged to main at `6e54f34` (squash commit "feat(checkout): Buyer-Terms-Lite v1.0 consent_records wire-in (#237)") at **2026-06-01T10:31:02Z UTC**. Deploy completed SUCCESS same UTC window. Migration 0015 applied (`consent_records` table). Seed `db:seed:buyer-terms-v1` ran via SSM bootstrap-recovery (see gotcha below) — 12104 bytes HTML cached on `legal_document_versions.body_html`; row effective at `2026-06-01T10:32:57.174Z UTC`.
+
+### Decision (atomic)
+
+**Buyer-Terms-Lite v1.0 is the canonical buyer-terms surface for v1.0 launch.** It ships in checkout as of 2026-06-01T10:32:57 UTC (deploy SHA `6e54f34`; seed row effective same window). All paid + free orders at checkout from this point forward capture a `consent_records` row anchored by `order_id`, pointing at (document_id, version_id) for `slug='buyer-terms'` + `version='v1.0'`.
+
+**The Day-34 link-footer pattern is dead** — replaced atomically by the bilingual clickwrap line + collapsible body panel in `apps/web/src/components/public/buyer-form.tsx`. Regression-guard test pins the absence of the old footer text.
+
+### Selective-adoption boundary preserved (verbatim from PR #237 description)
+
+- **Clause 6.2 exception list — ✅ ADOPTED VERBATIM** in §4 carve-out list: (a) Gross negligence or wilful misconduct; (b) Fraud or fraudulent misrepresentation; (c) Breach of fiduciary duty; (d) Death or personal injury caused by negligence; (e) Any other liability that cannot be limited or excluded by applicable law.
+- **Clause 6.1 (cap formula: "total fees received from the Organiser during 12 months preceding") — ❌ DELIBERATELY NOT ADOPTED** per Salehin's written confirmation 2026-05-31. Buyer-side cap stays "total ticket amount you paid". Rationale: Organiser-side 12-month-fees cap is B2B-appropriate; applying it to consumers would be mismatched and could create enforceability issues.
+- **Clause 6.3 (Organiser-indemnifies-Platform) — ❌ DELIBERATELY NOT ADOPTED** per Salehin's written confirmation 2026-05-31. A buyer-indemnifies-Platform clause would carry Consumer Rights Protection Act 2009 risk; inappropriate for a v1.0 consumer-facing lite document.
+
+### Out-of-v1.0 scope (per Salehin 2026-05-31, explicitly deferred)
+
+A **narrow buyer indemnity limited to fraud or wilful abuse** may be revisited post-launch with transaction data. Explicitly deferred from v1.0 per the editing-notes section of `docs/legal/buyer-terms.md`. Revisit gate: real customer-pattern data from launch + first 30 days (fraud incident rate, account-abuse pattern frequency, dispute classification) informing Salehin's draft.
+
+### Architecture (load-bearing for future reviewers)
+
+**The consent_records INSERT lives INSIDE the existing `withSuperAdmin` order-creation tx in `apps/api/src/services/orders/index.ts`** — positioned AFTER `audit_logs` INSERT and BEFORE the tx commits, anchored by `order_id`, with `(document_id, version_id)` resolved via the new helper `apps/api/src/services/consent/buyer-terms.ts:resolveBuyerTermsCurrentVersion`.
+
+**This is the operator-spec'd precondition behavior** ("consent capture is a precondition, not a side effect"). Failure modes:
+
+1. `resolveBuyerTermsCurrentVersion` throws (e.g. seed not run, `currentVersionId` NULL) → `BuyerTermsNotSeededError` → tx rolls back → orders row never persists → STEP 7 EPS Initialize never fires.
+2. `consent_records` INSERT throws (FK violation, RLS, DB hiccup) → same rollback chain → no order, no EPS.
+3. tx commits successfully but STEP 7 EPS init fails → order persists in `awaiting_payment` WITH consent captured (correct — consent IS captured pre-EPS).
+
+Both free and paid events capture consent (the document covers ALL platform usage — data processing, platform's limited role, liability — not just payment). The bilingual clickwrap line varies by button label ("Continue with bKash" vs. "Confirm registration") but the consent semantics are identical.
+
+### Schema amendment vs CLAUDE.md §9.11
+
+Migration 0015 amended §9.11's spec for guest-buyer reality:
+
+- `user_id` is **nullable** (guest buyers have no user_id at checkout).
+- `order_id` is **NEW** (guest-checkout anchor).
+- CHECK requires at least one of `(user_id, order_id)` to be set.
+- §9.11's `UNIQUE (user_id, document_id, version_id)` **dropped** — guest consents wouldn't satisfy it; authenticated-user uniqueness story ships later when a `/my` consent surface lands. Out of v1.0 scope.
+
+RLS enabled + FORCED with **NO policies** — mirrors `legal_document_versions` pattern (Decision K 2026-05-19); all v1.0 reads/writes via `withSuperAdmin`. Future tenant/user-portal read surfaces add policies in their own migrations alongside the read code.
+
+NOT append-only: `withdrawn_at` is UPDATE'd to mark consent withdrawal; §4.2.1.1 invariant explicitly does NOT apply.
+
+### Consequences
+
+- **Step 5 of v0.3 sign-off chain CLOSES.** The chain is 5/5 ✅ in `docs/legal/buyer-terms.md`. Salehin's Buyer-Terms-Lite engagement is end-to-end complete.
+- **Legal track of the Day-39 work shape closes entirely** — both overnight legal replies (Salehin Buyer Terms, Salehin incorporation Path B, CA NBR/VAT) processed end-to-end this single day. §29 #9 + #10 both RESOLVED; both Salehin items both RESOLVED.
+- **The legal-doc consent-capture pattern is now established** for future Trust Center docs. When `privacy` / `terms` / `eula` / `dpa` / `cookies` / `refund-policy` ship v1.0 (post counsel-completion), they follow the same wire-in shape: `legal_documents` row + `legal_document_versions` row at v1.0 + consent capture inside the relevant tx + a clickwrap reference on the relevant submit surface.
+- **Pre-launch commitment list shrinks by one** — the Day-39-morning "Buyer-Terms-Lite document at checkout (NEW)" line is replaced by "DONE 2026-05-31 Day 39 PM" in `handoff.md`.
+- **Next pre-launch commitments are entirely AWS / infrastructure / ceremony track:** (a) Phase 4 SNS topic creation (own operator-authorised session per runbook); (b) BDT-100 production bKash smoke (own gated session per runbook); (c) production EC2 cutover ceremony (8 sub-items from the Day-37 audit's critical-path step [14]). The legal track is no longer a launch blocker.
+
+### Day 39 PM PR sweep (record of what shipped today end-of-day)
+
+Four PRs landed Day 39 (in order):
+
+1. **PR #233** (`memory: Day 39 AM reconciliation`) — merged `48460a2`. Salehin + CA written replies captured verbatim in this `decisions.md` (three entries below) + `handoff.md` Day-39-AM-state rewrite.
+2. **PR #232** (`feat(admin): Phase 2b disputed-orders workflow`) — merged `719967b`. State machine `disputed → refunded`; `writeOrderRefunded` audit helper; `order-disputed-wrong-method` SES template (XSS-hardened); `manualRefundService`; super-admin GET `/admin/orders/disputed` + POST `/admin/orders/:id/mark-refunded`. CI-fix required (`Option A` test-isolation patch on `GET /disputed` assertions — assert presence-of-our-seeded rows + absence-of-our-seeded-paid instead of exact list length, because the super-admin queue is global by design).
+3. **PR #236** (`feat(notifications): SNS bounce/complaint suppression-list — code-only Phase 4`) — merged `ed03132`. `email_suppression_list` table (migration 0014); X.509 RSA-SHA256 SNS signature verification with TopicArn allowlist (load-bearing trust-source check) + ±1-hour timestamp freshness; SES bounce + complaint webhooks; outbound-send guard in SES client. AWS-side wiring (SNS topic creation + Configuration Set + IAM) **STOP-ASK gated** — runbook `docs/runbooks/sns-bounce-complaint-aws-wiring.md` documented but NOT executed. Three operator-required clarifications in PR description: anchored regex confirmation; replay-defense scope (MessageId-replay deferred with idempotency rationale); topicArn-in-log observability fix landed within PR scope (commit `65f428b`).
+4. **PR #237** (`feat(checkout): Buyer-Terms-Lite v1.0 consent_records wire-in`) — merged `6e54f34`. This entry.
+
+### Operator-action items remaining after Day 39 PM EOD
+
+Per the post-Phase-2 reframe, **only one external-clock item still gates June 10 launch**: EPS production credentials (operator-action #1; gates critical-path step [4]→[5]→[6] production smoke). All four operator-action items from the Day-38 EOD shape are now: #1 ⏳ still pending; #2 ✅ resolved Day 39 (Salehin Buyer-Terms-Lite engagement end-to-end complete); #3 ✅ resolved Day 39 AM (CA NBR/VAT written opinion); #4 ✅ identified Day 38 EOD (first paying tenant) — onboarding sequence ready once Phase 4 AWS-side wiring + production smoke + the cutover ceremony complete.
+
+### Cross-references
+
+- **Doc:** `docs/legal/buyer-terms.md` (canonical APPROVED v1.0; replaces the prior `buyer-terms-lite-draft.md` filename)
+- **Migration:** `apps/api/src/db/migrations/0015_consent_records.sql`
+- **Schema:** `apps/api/src/db/schema/index.ts` (`consentRecords` export)
+- **Seed:** `apps/api/src/db/seeds/seed-buyer-terms-v1.ts` + `apps/api/src/db/seeds/buyer-terms-v1-body.ts`
+- **Service helper:** `apps/api/src/services/consent/buyer-terms.ts` (`resolveBuyerTermsCurrentVersion` + `BuyerTermsNotSeededError`)
+- **Service tx-seam:** `apps/api/src/services/orders/index.ts` (lines after `audit_logs` INSERT, before `return oid`)
+- **Frontend:** `apps/web/src/components/public/buyer-form.tsx` (clickwrap line + body panel + Day-34 footer removed); `apps/web/src/components/public/event-landing.tsx` (props threaded); `apps/web/src/app/(public)/[tenant]/[event]/page.tsx` (parallel fetch)
+- **Tests:** `apps/api/src/services/orders/orders.test.ts` (two new precondition tests at end of file); `apps/web/src/components/public/buyer-form.test.tsx` (clickwrap render + body render + Day-34 footer absence)
+- **Prior day's frame:** `decisions.md` entries directly below this one — Salehin Buyer Terms reading (a) + Salehin incorporation Path B + CA NBR/VAT (§29 #10).
+
+---
+
 ## 2026-05-31 · Day 39 — CA written opinion received on NBR/VAT (§29 #10) — RESOLVED with written record
 
 **Resolves:** §29 #10 NBR/VAT registration model (the last open §29 launch-blocking legal question per CLAUDE.md §29 "MUST resolve with NBR before MVP launch"). This entry is the canonical written-record citation; §29 #10 moves from "external clock" / "still open" to RESOLVED at Day 39.
