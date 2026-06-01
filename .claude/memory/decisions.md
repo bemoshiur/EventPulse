@@ -4,6 +4,191 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-05-31 · Day 39 — CA written opinion received on NBR/VAT (§29 #10) — RESOLVED with written record
+
+**Resolves:** §29 #10 NBR/VAT registration model (the last open §29 launch-blocking legal question per CLAUDE.md §29 "MUST resolve with NBR before MVP launch"). This entry is the canonical written-record citation; §29 #10 moves from "external clock" / "still open" to RESOLVED at Day 39.
+
+### Context
+
+The operator submitted a written request to the CA who previously handled the AIT opinion (2026-05-26 resolved entry). The CA's reply arrived overnight 2026-05-30 → 2026-05-31; operator surfaced it in the Day 39 session. The reply confirms all three interpretations the operator surfaced for review: (a) disclosed-agency VAT treatment, (b) commission falls within the existing PPA BIN at v1.0 scale, (c) Mushak-9.1 nil-return cadence continues.
+
+### Verbatim record — CA written opinion
+
+> **From:** Jannatul Maoua, Chartered Accountant
+> **Date:** 2026-05-31
+> **Re:** VAT registration opinion — Event Pulse / Public Pulse Agency
+>
+> "Based on the facts discussed yesterday and the operational model you described (Event Pulse acting as a disclosed payment facilitator and technology provider under a disclosed agency arrangement), my opinion is as follows:
+>
+> (a) is correct: Under the disclosed agency model (Section 182, Contracts Act 1872), the Organiser remains the principal and the seller of the ticket. Accordingly, the VAT obligation on the ticket sale itself rests with the Organiser, not with Event Pulse / Public Pulse Agency.
+>
+> (b) is also correct for the v1.0 launch: Your platform commission (service fee) falls within the scope of your existing Public Pulse Agency BIN (009043032-0102). No separate or new VAT registration is required at this stage solely because of the platform commission.
+>
+> (c) is correct: You may continue with the existing Mushak-9.1 nil-return filing cadence under your current BIN, unless and until your turnover or nature of supplies crosses the relevant VAT registration thresholds or changes in a manner that requires fresh registration or different treatment.
+>
+> This position is based on the agency/facilitator characterisation of your model and the current expected transaction volumes for the June 10 soft launch. Should your operational model change, commission structure be revised significantly, or turnover approach the VAT threshold, we should revisit the position promptly.
+>
+> Please feel free to share this email with your legal counsel or Organisers as needed for their records."
+
+### Decision
+
+**§29 #10 NBR/VAT is RESOLVED with written record cited above.** The platform's VAT posture for v1.0 launch is: (a) VAT on ticket sale rests with Organiser per disclosed-agency Section 182 framing; (b) platform commission falls within existing PPA BIN 009043032-0102, no new VAT registration; (c) Mushak-9.1 nil-return cadence continues. Sharing-authorisation clause in the reply explicitly authorises showing this opinion to counsel and Organisers for their records.
+
+### Trigger conditions for revisiting (verbatim from CA reply)
+
+The opinion is bounded by today's facts. **Three documented revisit conditions** that require returning to the CA before proceeding:
+
+1. Operational model change (anything that moves Event Pulse away from disclosed-agency / payment-facilitator / technology-provider characterisation)
+2. Commission structure significant revision (the 0.25% / 175 bps composition; any change in who-charges-what)
+3. Turnover approaching the VAT registration threshold (current PPA BIN scope; threshold per NBR rules — operator + CA to monitor)
+
+### Consequences
+
+- **§29 #10 moves from "external clock" / "still open" to RESOLVED in `handoff.md`.** The CLAUDE.md §29 "Still open — Claude Code asks before assuming" list previously had #9 (AIT) and #10 (NBR/VAT) as the two launch-blocking legal questions. AIT resolved 2026-05-26; NBR/VAT resolves today. **Both §29 launch-blocking legal questions are now RESOLVED with written records.**
+- **v2.4 playbook bump backlog grows by 1 item:** update CLAUDE.md §29 to reflect both #9 AIT and #10 NBR/VAT as resolved; move the "Still open" framing to reflect zero remaining §29 legal blockers for v1.0.
+- **No code changes triggered.** Calculator's `DEFAULT_EPS_FEE_BPS_ESTIMATE = 175` (PR #227) computes platform commission under the existing PPA BIN per (b); no per-tenant VAT split required at v1.0; settlement engine retains its current single-rate-snapshot model.
+- **No new compliance surfaces required for v1.0.** Mushak-9.1 nil-return cadence continues unchanged per (c); no Mushak-6.3 (VAT invoice) generation needed for v1.0; no per-tenant VAT registration prompts in tenant onboarding.
+- **Disclosed-agency framing becomes a structural anchor for Buyer-Terms-Lite** (Day 39 Phase 2 deliverable). The Section 182 Contracts Act 1872 grounding cited by both the CA and Salehin (separately on Buyer Terms — see entry below) is the canonical legal lens for the platform's limited-role disclaimer to buyers.
+
+### Cross-references
+
+- `decisions.md` 2026-05-26 "AIT (Advance Income Tax) treatment under ITA 2023 — RESOLVED" — sibling resolution; same CA
+- `decisions.md` 2026-05-31 Day 39 "Salehin written opinion received on Buyer Terms" entry (this commit) — independent confirmation of disclosed-agency framing
+- CLAUDE.md §29 #10 (Still-open list to be updated in v2.4 playbook bump per v2.4 backlog)
+- `handoff.md` (updated this session to move §29 #10 to RESOLVED + Path B carry items)
+
+---
+
+## 2026-05-31 · Day 39 — Salehin written opinion received on incorporation; Path B (soft-launch + post-launch Pvt Ltd) LOCKED
+
+**Context:** Companion to the Salehin Buyer Terms reply (entry below). The operator's request asked counsel to weigh Path A (incorporate before June 10) vs Path B (soft-launch on existing sole proprietorship + post-launch Pvt Ltd) given the June 10 launch timeline. Salehin's reply arrived overnight 2026-05-30 → 2026-05-31.
+
+### Verbatim record — Salehin written opinion
+
+> **From:** Mahmudus Salehin, Managing Partner & Founder, Law Legacy Bangladesh (salehin@lawlegacybd.com)
+> **Date:** 2026-05-31
+> **Re:** Incorporation
+>
+> "Given the June 10 soft launch with your first paying tenant, it is pragmatic to proceed with the current sole proprietorship structure for the initial transactions. However, I maintain my earlier recommendation: incorporate as a Private Limited Company as soon as practicable after launch (ideally within 4–6 weeks, once you have some volume data and operational clarity). This will limit personal liability before you scale third-party fund flows.
+>
+> If incorporation can be completed comfortably before June 10 without delaying the launch, that would be cleaner. Otherwise, proceed with the soft launch and treat formal incorporation as a priority post-launch task."
+
+### Decision — Path B LOCKED
+
+**Path B chosen:** soft-launch June 10 on existing sole proprietorship (Public Pulse Agency); formal Pvt Ltd incorporation within 4–6 weeks post-launch per Salehin's recommendation. **Path A (incorporate before June 10) is technically possible per Salehin's qualification but rejected on stacked-task risk.**
+
+### Operator rationale (for Path B over Path A)
+
+Path A (incorporate before June 10) is technically possible but would stack incorporation work (RJSC filing + name clearance + memorandum/articles + TIN/BIN reissue + bank account) against the technical critical path (Phase 2b + Phase 4 + production smoke + production cutover) and first-tenant onboarding in a 10-day window. Risk of stacking is launch slip and operational mistake. Path B leverages the novation clause Salehin already structured into the Organiser Agreement to allow clean contract transfer when the Pvt Ltd is formed. Exposure during the 4–6 week window is bounded by initial transaction volume; counsel-confirmed acceptable for soft-launch scale.
+
+### Path B carry items — dated markers (per Day 39 operator instruction "Path B carry items need a dated marker")
+
+- **Begin Pvt Ltd incorporation paperwork:** target start **week of 2026-06-24** (≈14 days post-launch; falls within Salehin's "4–6 weeks post-launch" recommended window). RJSC name-clearance application + draft memorandum/articles + bank-account-opening initiation.
+- **Novation execution target window:** **2026-07-08 → 2026-07-22** (≈4–6 weeks post-launch; mirrors Salehin's recommended Pvt Ltd completion window). When the Pvt Ltd is operational, transfer (a) Organiser Agreements via the novation clause; (b) AWS account + Secrets Manager ownership to new entity; (c) EPS merchant account ownership (a real EPS-side process with documentation); (d) BIN/VAT registration transition (per the CA reply above — current PPA BIN 009043032-0102 transitions to Pvt Ltd-held BIN).
+- **Pvt Ltd target completion:** **2026-07-22** (6 weeks post-launch; the outer boundary of Salehin's recommended window). After this date, every new Organiser Agreement signs against the Pvt Ltd directly; the novation transition phase ends.
+
+### Consequences
+
+- **June 10 launch proceeds on existing sole proprietorship** (Public Pulse Agency). No incorporation work blocks the launch sequence.
+- **Novation clause in Organiser Agreement is now load-bearing** for the post-launch transfer. The clean-transfer mechanism Salehin structured into the master agreement (the operator confirmed exists) is the canonical path; no parallel Pvt-Ltd-specific Organiser Agreement needs drafting now.
+- **First paying tenant signs against the sole proprietorship**, with the explicit understanding (captured in the Organiser Agreement language; counsel-confirmed) that novation will transfer the contract to the Pvt Ltd within 4–6 weeks.
+- **`handoff.md` gets two new carry items dated 2026-06-24 (incorporation paperwork start) and 2026-07-08 → 2026-07-22 (novation execution window).** These are tracked obligations, not soft "post-launch" notes.
+- **AWS account + Secrets Manager + EPS merchant ownership transitions** become Pvt-Ltd post-incorporation work items, sequenced after RJSC issues the certificate of incorporation. None of these transitions need to start before incorporation completes.
+
+### Cross-references
+
+- `decisions.md` 2026-05-31 Day 39 "CA written opinion on NBR/VAT" entry (this commit) — independent reply; the BIN transition is one of the four novation work items in (d)
+- `decisions.md` 2026-05-31 Day 39 "Salehin written opinion on Buyer Terms" entry below (this commit) — companion Salehin reply; same author/date/correspondence thread
+- `handoff.md` (updated this session to add Path B carry items)
+- Organiser Agreement master document (counsel-held; novation clause is the cited mechanism)
+
+---
+
+## 2026-05-31 · Day 39 — Salehin written opinion received on Buyer Terms — reading (a) primarily confirmed, Buyer-Terms-Lite required at checkout
+
+**Context:** The operator submitted Buyer Terms framing to counsel asking which reading applies: (a) Organiser holds the consumer contract, Event Pulse does not need full parallel Buyer Terms; (b) Event Pulse needs full parallel Buyer Terms regardless; (c) some hybrid. Salehin's reply arrived overnight 2026-05-30 → 2026-05-31; surfaced in Day 39 session. Reply confirms reading (a) "primarily, with a practical qualification" — the qualification surfaces a NEW pre-launch deliverable (Buyer-Terms-Lite checkout document covering 4 specific topics).
+
+### Verbatim record — Salehin written opinion
+
+> **From:** Mahmudus Salehin, Managing Partner & Founder, Law Legacy Bangladesh (salehin@lawlegacybd.com)
+> **Date:** 2026-05-31
+> **Re:** Buyer Terms for v1.0
+>
+> "The correct position is primarily (a), with a practical qualification. The core consumer contract for the ticket is between the Organiser and the Buyer. As the disclosed agent and payment facilitator, Event Pulse does not need to issue a full parallel set of consumer-facing Buyer Terms for the ticket itself. The Organiser's own event terms govern the primary buyer relationship.
+>
+> However, you should still have lightweight platform-level terms presented at checkout (covering platform usage, disclaimers on Event Pulse's limited role, data processing consent, and basic liability carve-outs). This protects the platform and supports your consent_records and refund workflow. We can keep this version concise for the June 10 soft launch and expand it into full dedicated Buyer Terms shortly after you have initial transaction data and user feedback.
+>
+> Happy to review the consent capture flow and refund workflow language this week if you share the draft text."
+
+### Decision
+
+**Reading (a) confirmed as primary — with practical qualification.** Event Pulse does NOT need a full parallel consumer-facing Buyer Terms document for v1.0. The Organiser's own event terms govern the primary buyer-Organiser relationship; Event Pulse operates as the disclosed-agent / payment-facilitator under that contract (consistent with the disclosed-agency framing in the CA NBR/VAT entry above + Section 182 Contracts Act 1872 grounding).
+
+**Practical qualification — NEW pre-launch deliverable:** Salehin requires lightweight platform-level terms at checkout covering **four topics**: (1) platform usage, (2) disclaimers on Event Pulse's limited role, (3) data processing consent, (4) basic liability carve-outs. This protects the platform and supports the `consent_records` capture + refund-workflow surfaces (PR #228 Verify-guard + Phase 2b notification/queue deliverables).
+
+**Full Buyer Terms deferred to post-launch.** Per Salehin's "we can keep this version concise for the June 10 soft launch and expand it into full dedicated Buyer Terms shortly after you have initial transaction data and user feedback" — full Buyer Terms is deliberately deferred until transaction-data and user-feedback inform the scope. Not a launch blocker.
+
+**Review-this-week offer accepted (operator-action):** Salehin offered to review the draft consent-capture flow and refund-workflow language this week if the operator shares the draft text. Day 39 Phase 2 produces a first-draft Buyer-Terms-Lite document for operator review; operator emails the draft to Salehin once approved (Claude Code does not send the email).
+
+### Consequences
+
+- **NEW pre-launch deliverable surfaces:** Buyer-Terms-Lite checkout document, drafted by Wednesday (target 2026-06-03), sent to Salehin via operator email for his review-this-week offer. Day 39 Phase 2 produces the first draft.
+- **Four sections fixed by Salehin's framing:** (1) Platform usage, (2) Event Pulse's limited role (disclosed-agency + Section 182 Contracts Act 1872 grounding; cite the CA reply's same framing for consistency), (3) Data processing consent + link to Privacy Policy, (4) Basic liability carve-outs (mirror the master Organiser Agreement's carve-out structure — counsel-held; the gross-negligence / wilful-misconduct / fraud / fiduciary-duty / death-injury / non-limitable exceptions structure).
+- **Bilingual per CLAUDE.md R12 (BN-first):** native Bengali primary; English alongside. Operator instruction Day 39 explicit: "BN-first per R12 (native Bengali, not translated-from-English)."
+- **Plain-language buyer-readable tone** (not lawyer-readable). Target ~600–1,000 words EN + ~600–1,000 words BN per Day 39 Phase 2 brief.
+- **Existing `consent_records` capture path (PR #228 + downstream) becomes the wire for buyer consent at checkout** once Buyer-Terms-Lite ships into checkout (post-Salehin-review). Current buyer-form footer-link pattern (Day-34) bridges the gap until then.
+- **Full Buyer Terms NOT a launch blocker.** v2.4 playbook bump backlog grows by 1 item: track full Buyer Terms as a post-launch deliverable triggered by "initial transaction data + user feedback" milestone.
+
+### Cross-references
+
+- `decisions.md` 2026-05-31 Day 39 "CA written opinion on NBR/VAT" entry above (this commit) — companion legal record; same disclosed-agency / Section 182 framing
+- `decisions.md` 2026-05-31 Day 39 "Salehin written opinion on incorporation" entry above (this commit) — companion Salehin reply; same author/date/correspondence thread
+- `docs/copy/bkash-only-launch.md` (PR #229) — existing buyer-flow copy that the Buyer-Terms-Lite draft slots into at checkout
+- `handoff.md` (updated this session to mark Buyer Terms full-version-deferred + Buyer-Terms-Lite as NEW pre-launch deliverable)
+- Day 39 Phase 2 deliverable: `docs/legal/buyer-terms-lite-draft.md` (this session)
+
+---
+
+## 2026-05-31 · Day 38 — Option 3 implementation SHIPPED end-to-end (4 PRs: calculator + Verify-guard + UI copy + smoke runbook)
+
+**Context:** Day 38 implementation of the Option 3 decision recorded yesterday (top entry below this one). Operator-prompt sequence: Phase 1 fee-calculator rate change → Phase 2 buyer-method-restriction → Phase 3 honest UI copy → Phase 4 production smoke prompt → Phase 5 EOD closeout. STAGING_PAYMENT_BLOCK=1 stayed enforcing throughout; no production EPS calls fired this session; HARD STOP on fee-calculator.ts lifted at Phase 1 per the Option 3 entry's "What stays unchanged" section + STOP-ASK gate.
+
+### What shipped today — 4 PRs against main
+
+- **PR #227 `fix(fees)`** `8afb079` — `DEFAULT_EPS_FEE_BPS_ESTIMATE` 250 → 175 (bKash rate per truth-gate Mode A 1.747%). Calculator architecture unchanged (method-agnostic by Day 21 design; the rate lives in the caller). JSDoc rewritten with Option 3 citation + observed 1.747% + capture-base arithmetic (+7-paisa floor delta over the BDT 17.47 observation). Truth-gate `scenarios.ts:49` LEFT at 250 (§14.2-narrative-bound historical artifact for completed Phase 1.4 work; bumping cascades through 3 test files + invalidates cross-check semantics). v2.4 playbook bump backlog grows by 2 items: scenarios.ts rewire + CLAUDE.md §14.2 worked-example doc update.
+- **PR #228 `feat(checkout)`** `8fefa41` — Day 38 Phase 2a Verify-guard rejection (mechanism (d) per operator choice). When EPS Verify returns Success but `FinancialEntity` is anything other than bKash, the order is diverted to `disputed` status instead of `paid`. New files: `bkash-financial-entity.ts` predicate (case-insensitive trimmed exact match against `'bkash'`, fails closed on null/missing/non-string) + 15 predicate tests. State machine extended: `awaiting_payment → disputed` newly legal. New audit helper `writeOrderDisputed` captures `dispute_reason` + verbatim `FinancialEntity` value. settle.ts integrates the guard between EPS-status-mapping and state-machine-validation; `/orders/return/wrong-method` redirect target added. 8 new integration tests covering happy-bKash + card-disputed + Nagad-disputed + missing-FE-fail-closed + EPS-failed-not-success + audit + events + no-delivery. Two pre-existing settle.test.ts mocks updated to include `FinancialEntity: 'bKash'` so they continue testing the happy paid-path (the new fail-closed behaviour on missing FE is exhaustively tested by the new dispute suite).
+- **PR #229 `feat(copy)`** `79177d7` — Day 38 Phase 3 honest UI copy. `buyer-form.tsx`: NEW bilingual bKash-only notice below subtotal preview ("Currently accepting bKash payments only. More methods coming soon." + BN) + submit-button label `Continue to payment` → `Continue with bKash` (paid tier only; free-tier label unchanged). 4 new tests pin notice + button across paid/free/bilingual/isFreeEvent-gating. NEW `docs/copy/bkash-only-launch.md` living document with canonical EN+BN strings for surfaces that don't exist yet (marketing pages, Day 28+ buyer-return frontend pages, tenant pre-Organiser-Agreement disclosure, Phase 2b dispute-notice email template). Counsel-owned legal docs surveyed: NONE imply multi-method support, no follow-up flag needed. Email templates surveyed: method-agnostic, no change. KYC step-3-financial.tsx is organiser PAYOUT options (distinct from buyer payment method) — no change.
+- **PR #230 `docs(runbook)`** (pending CI at EOD-write time) — Day 38 Phase 4 BDT-100 production bKash smoke runbook. 7 hard preconditions gating session start (EPS prod credentials, Secrets Manager, prod EC2 ready, prod-branch ff-merged, EPS_MODE=production, operator on-call, reversal path pre-arranged). Smoke transaction parameters (BDT 100 face, Mode A both-PT, bKash only, calculator predicts buyer BDT 102.04 / EPS fee BDT 1.79 / organiser net BDT 100.00). Decision rules matrix (CONFIRMED ±0.05% / CALCULATOR-UPDATE-REQUIRED ±0.50% / STOP-INVESTIGATE > 0.50% / CRITICAL-FAILURE if FinancialEntity != bKash). 9-step procedure (lift block → smoke → capture → decide → refund → re-enable block → record). Post-smoke gates. Post-launch evolution (each new method requires its own smoke before joining catalogue). Documented but NOT run this session.
+
+### Key operator decisions logged today (in addition to Phase 1 175 bps and Phase 2 mechanism (d))
+
+- **Phase 1 (1/2) bps value:** 175 with JSDoc citing both the observed 1.747% AND the truncated 175 bps — operator picked "175 + JSDoc note observed 1.747%" over plain 175 or defer-until-prod-smoke. Rationale: preserves empirical-observation archaeology in source code.
+- **Phase 1 (2/2) truth-gate scenarios.ts:** stay at 250; track "rewire truth-gate scenarios for v1.0 launch-rate baseline" as v2.4 playbook bump backlog item. Operator picked "Skip scenarios.ts entirely; consider in a separate later PR" over the structural-refactor option, after Claude surfaced that the file is §14.2-narrative-bound (the cross-check semantics break if epsFeeBps changes without recomputing the spec14_2_primaryEpsFeePaisa constants).
+- **Phase 2 mechanism choice — (d) Verify-guard rejection** chosen over (c) UI-side-only, deferred-pause, and other options. Rationale: highest-discipline path honoring the Option-3 product principle "buyers see the exact fee at checkout, no estimate." Cost accepted: dispute orders require manual ops handling (EPS V5 has no public refund API per §11.4; ops uses EPS merchant dashboard). Mitigated in v1.0 by Phase 3 honest UI copy reducing buyer deviation rate.
+- **Phase 2 sub-decision A — admin queue UI:** lightweight endpoint in Phase 2 PR; full React UI deferred to Phase 2b follow-up. Honoured in Phase 2a as: minimal endpoint NOT shipped (deferred to Phase 2b alongside the buyer-notification SES template). v1.0 launch posture: ops queries `audit_logs WHERE action = 'order.disputed'` directly to drive manual-refund work. Acceptable because dispute volume expected to be near-zero with Phase 3 copy in place.
+- **Phase 2 sub-decision B — FinancialEntity match semantics:** exact case-insensitive trimmed match against `'bkash'`. Pinned in 15 unit tests; substring matches (`bKash Wallet` / future EPS variants) explicitly NOT accepted at v1.0 — adding a new variant requires explicit code change + operator sign-off.
+
+### Consequences
+
+- **HARD STOP on `apps/api/src/domain/payments/fee-calculator.ts` is LIFTED** per the Option 3 decision entry's "What stays unchanged" section + Phase 1's money-math PR shipping with operator approval. The calculator architecture itself remains untouched (no code changes inside fee-calculator.ts; only the caller's default constant in services/orders/index.ts changed). Future fee-math changes are still STOP-ASK gates per CLAUDE.md §1.4; the HARD STOP language carries forward as a single-PR-at-a-time discipline rather than a blanket lock.
+- **STAGING_PAYMENT_BLOCK=1 stays enforcing through the entire remaining 9-day runway.** Re-verified live this session (pm2 api process env). The only authorized lift is the BDT-100 production smoke per the Phase 4 runbook + decisions.md §11.0; smoke is its own gated session (Day 39+, subject to EPS prod-credential arrival).
+- **Phase 2b deferred to Day 39 session:** buyer-notification SES template (bilingual `order_disputed_wrong_method` with full copy already drafted in `docs/copy/bkash-only-launch.md`) + admin disputed-orders queue endpoint + mark-as-refunded action. Until then, ops uses direct `audit_logs` queries.
+- **Phase 6 / Phase 7 (prior Day 37 handoff naming):** SNS bounce/complaint suppression-list wiring still queued for Day 39-40; gates `MAIL_DRY_RUN=0` per AWS commitment (decisions.md 2026-05-31 SES entry). Sequenceable parallel with Phase 2b.
+- **v2.4 playbook bump backlog grows by 2 items today:** rewire truth-gate scenarios.ts for v1.0 launch-rate baseline + update CLAUDE.md §14.2 worked examples to reflect Option 3 launch rate. Plus the existing Day 37 backlog items.
+- **4 operator-action external clocks — STATUS CORRECTED at Day 38 EOD Phase 5 STOP-ASK:** All four were started BEFORE Day 38 (Day 37 handoff had them as queued-but-not-confirmed; Phase 5 STOP-ASK confirmed all four already in motion). Specifically: (1) EPS production credentials request — sent before Day 38, awaiting EPS reply; (2) NBR/VAT opinion request to the AIT CA — sent before Day 38, awaiting reply (CA's prior turn-around was excellent and fast); (3) Salehin Buyer Terms body follow-up — sent before Day 38, awaiting reply; (4) **candidate first paying tenant — IDENTIFIED, bKash-audience-suitable for v1.0 single-method launch shape per Option 3 implication (b).** The runway picture is materially healthier than the Day 37 handoff implied; all four clocks are running rather than pending start.
+- **`eventpulse/prod/eps` AUTHORISED as the canonical production-credential holder (Day 38 EOD-late).** Read-only diagnostic at EOD verified the two EPS secrets in AWS Secrets Manager (ap-southeast-1): `eventpulse/staging/eps` (existing since 2026-05-19, single AWSCURRENT version) and `eventpulse/prod/eps` (newly created today, single AWSCURRENT version `6754cc98-164d-4504-aa92-e82c2c446409`, LastChangedDate 2026-05-31T10:00:31Z). Per-field sha256-digest comparison across the four hashed fields (merchant_id, store_id, username, hash_key) returned **SAME** on all four; password lengths identical (13 chars each). The two secrets hold bit-identical credentials. Operator authorisation: `eventpulse/prod/eps` IS the canonical production-credential holder going forward; the Day-20 architectural decision ("staging credentials are production-tier per Moshiur Day 20 directive") explains the per-path duplication and is accepted. Implication for `docs/runbooks/production-smoke.md` (PR #230): **precondition #2 ("Production credentials loaded into AWS Secrets Manager at `eventpulse/prod/eps` — JSON-shaped per CLAUDE.md §11.3") is now SATISFIED.** Read-only diagnostic also surfaced that the staging EC2 IAM role (`eventpulse-staging-ec2`) cannot read the prod secret (`AccessDeniedException` on `DescribeSecret` + `GetSecretValue`) — correct security boundary; prod EC2 will need its own role with `eventpulse/prod/eps` read access when provisioned per critical-path step [14] sub-tasks. **STAGING_PAYMENT_BLOCK=1 remains the sole real-money safety layer between staging and EPS prod calls** until prod EC2 is provisioned and the smoke session moves off this staging instance per the runbook discipline.
+
+### Cross-references
+
+- `decisions.md` 2026-05-31 "EPS fee-model structural decision — Option 3 CHOSEN" (the canonical decision this session implemented)
+- `decisions.md` 2026-05-30 Phase 1.4 truth-gate empirical findings (the empirical basis)
+- `decisions.md` 2026-05-31 Day 37 audit reconciliation entry (the launch-target + critical-path source)
+- `handoff.md` (overwritten this session for Day 38 EOD state)
+- `docs/copy/bkash-only-launch.md` (Phase 3 living-doc deliverable)
+- `docs/runbooks/production-smoke.md` (Phase 4 deliverable)
+
+---
+
 ## 2026-05-31 · EPS fee-model structural decision — Option 3 (single-method launch, bKash-only for v1.0) CHOSEN
 
 **Resolves:** the active launch-gate item per `decisions.md` 2026-05-30 (Phase 1.4 truth-gate empirical findings + Options 1/2/3/4 framing) and the audit's critical-path step [1] (`handoff.md` 2026-05-31 Day 37). This is the sole remaining launch-gate blocker before June 10.
