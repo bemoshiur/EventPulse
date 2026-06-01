@@ -1086,3 +1086,38 @@ export const contactSubmissions = pgTable(
     index('idx_contact_submissions_topic_created').on(t.topic, t.createdAt),
   ],
 )
+
+// ─── changelog_entries (Day 42 §26.1 Day 9 part 3) ──────────────────────
+//
+// Public + tenant-facing changelog per §9.11 + §22.2. Platform-wide
+// (no tenant_id). RLS not enabled; access via SELECT WHERE
+// published_at IS NOT NULL AND $audience = ANY(audience). Authoring
+// path runs under withSuperAdmin BYPASSRLS.
+
+export const changelogEntries = pgTable(
+  'changelog_entries',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    slug: text().notNull().unique(),
+    version: text().notNull(),
+    title: text().notNull(),
+    bodyMd: text('body_md').notNull(),
+    bodyHtml: text('body_html').notNull(),
+    category: text().notNull(),
+    audience: text()
+      .array()
+      .notNull()
+      .default(sql`ARRAY['tenant','public']::text[]`),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    createdBy: uuid('created_by').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'changelog_entries_category_chk',
+      sql`${t.category} IN ('feature','improvement','fix','breaking','security','deprecation')`,
+    ),
+    index('idx_changelog_published').on(t.publishedAt),
+    index('idx_changelog_version').on(t.version),
+  ],
+)

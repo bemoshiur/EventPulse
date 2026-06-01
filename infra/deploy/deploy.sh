@@ -133,13 +133,19 @@ $PNPM --filter @eventpulse/api db:migrate
 # - legal-documents: 18 Trust Center docs at v0.1 placeholder.
 # - buyer-terms-v1: Buyer-Terms-Lite v1.0 (Day 39 Phase 2, ships at
 #   bKash-only launch). Salehin-approved 2026-05-31.
+# - changelog-v1: v1.0 launch changelog entries (Day 42 §26.1 Day 9 part 3).
+#   Body HTML rendered through the same rehype-sanitize pipeline as
+#   Trust Center per Decision J. ON CONFLICT (slug) DO UPDATE so future
+#   edits to the seed propagate without manual SQL.
 #
-# Both are idempotent — re-running against an already-seeded DB is a
-# no-op (the legal-documents seed refreshes title/url metadata but
+# All three are idempotent — re-running against an already-seeded DB is
+# a no-op (the legal-documents seed refreshes title/url metadata but
 # never overwrites version rows; buyer-terms-v1 ON CONFLICT DO NOTHING
-# on the (document_id, version) unique). Safe to run on every deploy.
+# on the (document_id, version) unique; changelog-v1 ON CONFLICT (slug)
+# DO UPDATE refreshes content). Safe to run on every deploy.
 $PNPM --filter @eventpulse/api db:seed:legal-documents
 $PNPM --filter @eventpulse/api db:seed:buyer-terms-v1
+$PNPM --filter @eventpulse/api db:seed:changelog-v1
 
 # 4.5) Nginx vhost reload — Fix 6b from Day 21 silent-failure remediation.
 #
