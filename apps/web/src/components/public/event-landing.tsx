@@ -33,6 +33,18 @@ export interface EventLandingProps {
   event: PublicEventWire
   brand: PublicEventBrandWire
   tiers: PublicEventTierWire[]
+  /**
+   * Pre-rendered, sanitized HTML for the current Buyer Terms (v1.0).
+   * Server-fetched upstream of this component and passed straight through
+   * to BuyerForm. `null` (or absent) if the legal API is transiently
+   * unreachable — see BuyerForm prop docs for the failure-mode handling.
+   *
+   * Optional purely for test-fixture ergonomics; production callsite
+   * always passes the fetched value.
+   */
+  buyerTermsBodyHtml?: string | null
+  /** Version string ("v1.0", "v1.1", …) of the Buyer Terms above. */
+  buyerTermsVersion?: string | null
 }
 
 function formatDateTime(iso: string, timezone: string): string {
@@ -63,7 +75,13 @@ function formatVenue(venue: unknown): string {
   return ''
 }
 
-export function EventLanding({ event, brand, tiers }: EventLandingProps) {
+export function EventLanding({
+  event,
+  brand,
+  tiers,
+  buyerTermsBodyHtml,
+  buyerTermsVersion,
+}: EventLandingProps) {
   // Brand-color CSS variables — tenant primary + accent override the
   // platform defaults inside this template only. Fallback to the
   // §1.5 platform palette so events without brand customisation
@@ -147,8 +165,13 @@ export function EventLanding({ event, brand, tiers }: EventLandingProps) {
         </section>
       )}
 
-      {/* ─── tickets + buyer form (Sprint 4 Day 34) ─────────────────── */}
-      <BuyerForm event={event} tiers={tiers} />
+      {/* ─── tickets + buyer form (Sprint 4 Day 34; Day 39 Phase 2 consent wire-in) ─────────────────── */}
+      <BuyerForm
+        event={event}
+        tiers={tiers}
+        buyerTermsBodyHtml={buyerTermsBodyHtml}
+        buyerTermsVersion={buyerTermsVersion}
+      />
       {/* End buyer form */}
 
       {/* ─── footer ──────────────────────────────────────────────────── */}

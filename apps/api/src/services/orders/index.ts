@@ -58,6 +58,7 @@ import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 
 import { withSuperAdmin } from '../../db/client.js'
 import {
+  consentRecords,
   events,
   orderEvents,
   orderItems,
@@ -73,6 +74,7 @@ import {
 import { initialiseOrder, StagingPaymentBlockedError } from '../../infra/eps/client.js'
 import { logger } from '../../lib/logger.js'
 import { writeOrderCreated } from '../audit/orders.js'
+import { resolveBuyerTermsCurrentVersion } from '../consent/buyer-terms.js'
 import { getEffectiveFees } from '../fee-config/index.js'
 import { enqueueOrderDelivery } from '../../workers/delivery-queue.js'
 import { mintMerchantTransactionId } from './order-id.js'
@@ -572,6 +574,43 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       epsFeeBps,
       platformFeeHandling: event.platformFeeHandling as 'absorb' | 'pass_through',
       epsFeeHandling: event.epsFeeHandling as 'absorb' | 'pass_through',
+      ip: input.ip ?? null,
+      userAgent: input.userAgent ?? null,
+    })
+
+    // ────────────────────────────────────────────────────────────────
+    // Day 39 Phase 2 — consent_records anchor to Buyer Terms v1.0.
+    // ────────────────────────────────────────────────────────────────
+    //
+    // Operator-spec'd precondition semantics ("consent capture is a
+    // precondition, not a side effect"): the INSERT lives INSIDE this
+    // tx so failure modes are:
+    //
+    //   - resolveBuyerTermsCurrentVersion throws (e.g. seed not run,
+    //     currentVersionId NULL) → tx rolls back → orders row never
+    //     persists → STEP 7 EPS init below never fires.
+    //   - consent_records INSERT throws (e.g. FK constraint, RLS, DB
+    //     hiccup) → same rollback chain → no order, no EPS.
+    //   - tx commits successfully but STEP 7 EPS init fails → order
+    //     persists in awaiting_payment WITH consent captured (correct
+    //     — consent IS captured pre-EPS).
+    //
+    // Both free and paid events get a consent row: the document covers
+    // ALL platform usage (data processing, platform's limited role,
+    // liability), not just payment. The bilingual clickwrap line on
+    // the buyer form varies by button label ("Continue with bKash" vs.
+    // "Confirm registration") but the consent semantics are identical.
+    //
+    // Anchor: order_id (the new column on consent_records — guest
+    // buyers have no user_id at checkout). tenant_id is denormalised
+    // for compliance-dashboard queries.
+    const buyerTermsRef = await resolveBuyerTermsCurrentVersion(db)
+    await db.insert(consentRecords).values({
+      userId: null,
+      orderId: oid,
+      tenantId: event.tenantId,
+      documentId: buyerTermsRef.documentId,
+      versionId: buyerTermsRef.versionId,
       ip: input.ip ?? null,
       userAgent: input.userAgent ?? null,
     })

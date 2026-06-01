@@ -35,9 +35,12 @@ import nock from 'nock'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { resetPool, withSuperAdmin } from '../../db/client.js'
+import { run as seedBuyerTermsV1 } from '../../db/seeds/seed-buyer-terms-v1.js'
 import {
   auditLogs,
+  consentRecords,
   events,
+  legalDocuments,
   orderEvents,
   orderItems,
   orders,
@@ -53,6 +56,7 @@ import {
   setDefaultTokenCache,
   inMemoryTokenCache,
 } from '../../infra/eps/client.js'
+import { BuyerTermsNotSeededError } from '../consent/buyer-terms.js'
 import {
   createOrder,
   DEFAULT_EPS_FEE_BPS_ESTIMATE,
@@ -120,6 +124,12 @@ describeIfDb('createOrder service — money math + state + block behaviour', () 
     process.env['EPS_FAIL_URL'] = 'https://test.local/orders/fail'
     process.env['EPS_CANCEL_URL'] = 'https://test.local/orders/cancel'
     delete process.env['STAGING_PAYMENT_BLOCK']
+
+    // Day 39 Phase 2 — every test in this suite that creates an
+    // order now requires Buyer Terms v1.0 seeded (the order-creation
+    // tx inserts consent_records anchored to the current version).
+    // Seed is idempotent; safe to run if already seeded.
+    await seedBuyerTermsV1()
 
     await withSuperAdmin(async (db) => {
       const [owner] = await db
@@ -534,6 +544,170 @@ describeIfDb('createOrder service — money math + state + block behaviour', () 
 
       expect(result.paymentInitState).toBe('ready')
       expect(result.redirectUrl).toBe('https://gateway.example/checkout/abc')
+    })
+  })
+
+  // ────────────────────────────────────────────────────────────────────
+  // Day 39 Phase 2 — Buyer Terms v1.0 consent capture wire-in.
+  // ────────────────────────────────────────────────────────────────────
+  //
+  // These tests run LAST in the suite because the precondition-failure
+  // test mutates `legal_documents.current_version_id` for the buyer-terms
+  // doc. The try/finally restores it, but ordering this group at the
+  // end limits blast radius if a restore ever fails: other order-
+  // creating tests above us already completed; only same-suite tests
+  // that ran AFTER would be affected, and there are none.
+  describe('Buyer Terms v1.0 consent capture (Day 39 Phase 2)', () => {
+    it('writes a consent_records row anchored to the new order_id (happy path)', async () => {
+      process.env['STAGING_PAYMENT_BLOCK'] = '1'
+      // STAGING_PAYMENT_BLOCK=1 ensures EPS HTTP is not invoked, so
+      // this test exercises the tx-seam INSERT semantics in isolation.
+
+      const result = await createOrder({
+        eventId: fx.eventId,
+        tierSelections: [{ tierId: fx.tierAId, quantity: 1 }],
+        buyer: baseBuyer,
+        ip: '203.0.113.45',
+        userAgent: 'consent-capture-happy-path-test/1.0',
+      })
+
+      // The order persisted (block-guard path).
+      expect(result.paymentInitState).toBe('blocked')
+      expect(result.status).toBe('awaiting_payment')
+
+      // The consent_records row exists for this order, with the
+      // expected anchoring + version-pointer shape.
+      const consents = await withSuperAdmin((db) =>
+        db
+          .select({
+            id: consentRecords.id,
+            userId: consentRecords.userId,
+            orderId: consentRecords.orderId,
+            tenantId: consentRecords.tenantId,
+            documentId: consentRecords.documentId,
+            versionId: consentRecords.versionId,
+            ip: consentRecords.ip,
+            userAgent: consentRecords.userAgent,
+            withdrawnAt: consentRecords.withdrawnAt,
+          })
+          .from(consentRecords)
+          .where(eq(consentRecords.orderId, result.orderId)),
+      )
+      expect(consents).toHaveLength(1)
+      const consent = consents[0]!
+      expect(consent.userId).toBeNull()
+      expect(consent.orderId).toBe(result.orderId)
+      expect(consent.tenantId).toBe(fx.tenantId)
+      expect(consent.ip).toBe('203.0.113.45')
+      expect(consent.userAgent).toBe('consent-capture-happy-path-test/1.0')
+      expect(consent.withdrawnAt).toBeNull()
+
+      // The (document_id, version_id) pair points at the SEEDED
+      // Buyer Terms v1.0 — verify by cross-referencing the
+      // legal_documents.current_version_id.
+      const [seededDoc] = await withSuperAdmin((db) =>
+        db
+          .select({
+            id: legalDocuments.id,
+            currentVersionId: legalDocuments.currentVersionId,
+          })
+          .from(legalDocuments)
+          .where(eq(legalDocuments.slug, 'buyer-terms')),
+      )
+      expect(seededDoc).toBeDefined()
+      expect(consent.documentId).toBe(seededDoc!.id)
+      expect(consent.versionId).toBe(seededDoc!.currentVersionId)
+    })
+
+    it('Buyer Terms unseeded → createOrder throws + orders row NOT created + ZERO HTTP requests fire', async () => {
+      process.env['STAGING_PAYMENT_BLOCK'] = '1'
+      // NO nock interceptor — if EPS HTTP is reached, nock's
+      // disableNetConnect throws "Disallowed net connect" loudly.
+
+      // Snapshot the current Buyer Terms current_version_id, then NULL
+      // it out to simulate "doc not seeded / no current version
+      // published". The try/finally restores it so subsequent tests in
+      // the suite (if any) are unaffected.
+      const [snap] = await withSuperAdmin((db) =>
+        db
+          .select({ id: legalDocuments.currentVersionId })
+          .from(legalDocuments)
+          .where(eq(legalDocuments.slug, 'buyer-terms')),
+      )
+      const savedVersionId = snap?.id
+      // Sanity: the suite-level seed should have populated this.
+      expect(savedVersionId).toBeTruthy()
+
+      // Count orders for our tenant before the failed attempt so we
+      // can assert exact-no-new-rows after.
+      const ordersBefore = await withSuperAdmin((db) =>
+        db.select({ id: orders.id }).from(orders).where(eq(orders.tenantId, fx.tenantId)),
+      )
+
+      try {
+        await withSuperAdmin((db) =>
+          db
+            .update(legalDocuments)
+            .set({ currentVersionId: null })
+            .where(eq(legalDocuments.slug, 'buyer-terms')),
+        )
+
+        await expect(
+          createOrder({
+            eventId: fx.eventId,
+            tierSelections: [{ tierId: fx.tierAId, quantity: 1 }],
+            buyer: { ...baseBuyer, email: 'consent-precondition-test@example.test' },
+          }),
+        ).rejects.toBeInstanceOf(BuyerTermsNotSeededError)
+      } finally {
+        if (savedVersionId) {
+          await withSuperAdmin((db) =>
+            db
+              .update(legalDocuments)
+              .set({ currentVersionId: savedVersionId })
+              .where(eq(legalDocuments.slug, 'buyer-terms')),
+          )
+        }
+      }
+
+      // Belt-and-braces: nock saw no requests.
+      expect(nock.pendingMocks()).toEqual([])
+
+      // No new orders rows for this tenant — tx rolled back atomically.
+      const ordersAfter = await withSuperAdmin((db) =>
+        db.select({ id: orders.id }).from(orders).where(eq(orders.tenantId, fx.tenantId)),
+      )
+      expect(ordersAfter.length).toBe(ordersBefore.length)
+
+      // No consent_records rows referencing an order that doesn't
+      // exist (defence-in-depth: the FK should make this impossible,
+      // but assert it explicitly).
+      const orphanedConsents = await withSuperAdmin((db) =>
+        db
+          .select({ id: consentRecords.id })
+          .from(consentRecords)
+          .where(eq(consentRecords.tenantId, fx.tenantId)),
+      )
+      const orderIds = new Set(ordersAfter.map((o) => o.id))
+      for (const c of orphanedConsents) {
+        // Every consent row's order_id (if set) must point at a
+        // persisted order — no orphans from the rolled-back tx.
+        expect((c as { id: string }).id).toBeTruthy()
+      }
+      // Tighter assertion: every consent row in this tenant references
+      // an order in `ordersAfter` (or none, for future user-anchored
+      // consents — not applicable in v1.0).
+      const consentsWithOrder = await withSuperAdmin((db) =>
+        db
+          .select({ orderId: consentRecords.orderId })
+          .from(consentRecords)
+          .where(eq(consentRecords.tenantId, fx.tenantId)),
+      )
+      for (const c of consentsWithOrder) {
+        if (c.orderId) {
+          expect(orderIds.has(c.orderId)).toBe(true)
+        }
+      }
     })
   })
 })

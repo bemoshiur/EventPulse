@@ -157,12 +157,20 @@ describeIfDb('seed-legal-documents — idempotency (DB)', () => {
     // meaningful. Safe because legal_documents/legal_document_versions
     // are platform-global and not used by other tests in this suite.
     const { withSuperAdmin } = await import('../client.js')
-    const { legalDocuments, legalDocumentVersions } = await import('../schema/index.js')
+    const { consentRecords, legalDocuments, legalDocumentVersions } =
+      await import('../schema/index.js')
     const { sql } = await import('drizzle-orm')
 
     await withSuperAdmin(async (tx) => {
-      // null out current_version_id first so the FK-free deletes work in
-      // any order.
+      // Day 39 Phase 2: consent_records carries FK references to BOTH
+      // legal_documents and legal_document_versions. Delete consent
+      // rows first or the version delete below fails with
+      // "consent_records_version_id_fkey violates foreign key
+      // constraint". This is a TEST-only over-aggressive clean — prod
+      // never deletes legal_documents rows by design (append-only spirit).
+      await tx.delete(consentRecords).where(sql`true`)
+      // null out current_version_id next so the doc/version deletes work
+      // in any order (versions are referenced by current_version_id).
       await tx.update(legalDocuments).set({ currentVersionId: null })
       await tx.delete(legalDocumentVersions).where(sql`true`)
       await tx.delete(legalDocuments).where(sql`true`)
