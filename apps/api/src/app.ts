@@ -5,6 +5,7 @@ import { withSuperAdmin } from './db/client.js'
 import { logger } from './lib/logger.js'
 import { authRoutes } from './routes/auth.js'
 import { oauthRoutes } from './routes/oauth-routes.js'
+import { publicContactRoutes } from './routes/public/contact.js'
 import { publicEventsRoutes } from './routes/public/events.js'
 import { publicLegalRoutes } from './routes/public/legal.js'
 import { epsReturnRoutes } from './routes/public/orders-eps-return.js'
@@ -96,6 +97,11 @@ export function createApp() {
   // awaiting_payment regardless. Day 27 ships the EPS callback
   // handler that completes the lifecycle.
   app.route('/api/v1/public/orders', publicOrdersRoutes)
+  // Public contact form — Day 42 §26.1 Day 9 marketing pages part 2.
+  // Rate-limited 3/hour/IP + honeypot at the route layer. Persists to
+  // contact_submissions; no read path here (super-admin admin UI lands
+  // in a follow-up PR).
+  app.route('/api/v1/public/contact', publicContactRoutes)
   // EPS browser redirect handlers — Sprint 3 Day 27 Phase 3. Buyer
   // lands here from EPS hosted page after success/fail/cancel. The
   // redirect URL itself is NEVER authoritative (§1.3 R3); the handler
