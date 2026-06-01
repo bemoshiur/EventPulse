@@ -26,6 +26,7 @@ import { kycDraftRoutes } from './routes/tenant/kyc-drafts.js'
 import { kycRoutes } from './routes/tenant/kyc.js'
 import { meRoutes } from './routes/tenant/me.js'
 import { tenantReportsRoutes } from './routes/tenant/reports.js'
+import { tenantOrderRefundRoutes, tenantRefundRoutes } from './routes/tenant/refunds.js'
 import { tenantTicketTiersRoutes } from './routes/tenant/ticket-tiers.js'
 
 /**
@@ -168,6 +169,12 @@ export function createApp() {
   // an unscoped SUM accidentally crossing tenants would leak
   // another tenant's revenue.
   app.route('/api/v1/tenant/reports', tenantReportsRoutes)
+  // Day 41 Sprint 4 refund-flow routes per §10.2 + §26.1 Day 7-8.
+  // Tenant-initiated refund request mounts under /tenant/orders/:id/refund;
+  // listing + detail live under /tenant/refunds. Two routers because the
+  // spec spreads the routes across two top-level namespaces.
+  app.route('/api/v1/tenant/orders', tenantOrderRefundRoutes)
+  app.route('/api/v1/tenant/refunds', tenantRefundRoutes)
 
   // Super admin routes — Sprint 2 Day 18 Item 13 + Day 19 Item 15.
   // Mounted under /api/v1/admin/* per §10.4. requireSuperAdminAuth
