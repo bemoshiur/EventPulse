@@ -39,9 +39,30 @@ These are the cuts/changes that keep the architecture under $30/month. Each can 
 | SNS publishes (Phase 4 bounces/complaints) | minimal | KEEP — at MVP volume ~\$0 | — |
 | S3 storage (KYC docs + backups) | minimal | KEEP — at MVP volume \$0.50-1/mo | — |
 
-### Estimated Day-42 trajectory vs. ceiling
+### Actual Day-42 spend (live AWS resource audit)
 
-**Before this decision (status quo):**
+Live `aws` CLI audit of `eventpulse` profile at Day 42 close (Cost Explorer blocked by SCP, so estimated from resource counts):
+
+| Resource | Count / state | Monthly cost |
+|---|---|---|
+| EC2 staging `i-02e4fddeb923c14f9` t3.small running | 1 | ~$15.00 |
+| EBS root volume staging (30 GB gp3) | 1 | ~$3.00 |
+| Secrets Manager entries (staging: 6, prod: 1) | 7 × $0.40 | $2.80 |
+| KMS CMKs (`alias/eventpulse-staging` + `alias/eventpulse-kyc-staging`) | 2 × $1.00 | $2.00 |
+| CloudWatch alarms (`eventpulse-staging-ec2-cpu-high` — Day 41) | 1 × $0.10 | $0.10 |
+| Route 53 hosted zone (`eventpulse.com.bd`) | 1 × $0.50 | $0.50 |
+| S3 buckets (`eventpulse-kyc-staging` + `eventpulse-staging-ssm-logs`) | 2 | ~$0.50 |
+| SNS topics (Phase 4: bounce + complaint) — topics free; publishes at MVP volume | 2 | ~$0.10 |
+| SES outbound (Phase 4 wiring + MAIL_DRY_RUN=0 staging) | low volume | ~$0.50 |
+| CloudWatch Logs (SSM session logs) | low volume | ~$0.50 |
+| Data transfer | minimal | ~$1.00 |
+| **CURRENT MONTHLY TRAJECTORY** | | **~$26.00** |
+
+**Current spend is already under the $30 ceiling by ~$4/month.** The cost-aware default deltas below remain the right architectural posture for the prod cutover; the trajectory math below is what the cutover would cost WITHOUT the cost-aware deltas applied. With deltas applied, prod cutover stays under $30.
+
+### Estimated trajectory at prod cutover (the bigger risk)
+
+**Before this decision (status quo — what §17.x prod-target spec would cost):**
 
 - Staging EC2 t3.small: ~$15/mo
 - Future prod EC2 t3.large per §17.2: ~$60/mo
