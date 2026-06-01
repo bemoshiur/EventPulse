@@ -701,7 +701,7 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
               </span>
               <span lang="en" className="mt-1 block">
                 By clicking {isFreeEvent ? '"Confirm registration"' : '"Continue with bKash"'} you
-                agree to Event Pulse's{' '}
+                agree to Event Pulse&apos;s{' '}
                 <Link className="underline" href="/buyer-terms">
                   Buyer Terms ({buyerTermsVersion ?? '—'})
                 </Link>{' '}
