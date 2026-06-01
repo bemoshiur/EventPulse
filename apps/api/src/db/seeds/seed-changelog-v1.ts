@@ -166,6 +166,7 @@ export async function run(): Promise<void> {
   }
 
   const { withSuperAdmin, resetPool } = await import('../client.js')
+  const { changelogEntries } = await import('../schema/index.js')
   const { sql } = await import('drizzle-orm')
 
   let inserted = 0
@@ -174,24 +175,38 @@ export async function run(): Promise<void> {
   try {
     await withSuperAdmin(async (tx) => {
       for (const entry of renderedEntries) {
-        const result = await tx.execute(sql`
-          INSERT INTO changelog_entries
-            (slug, version, title, body_md, body_html, category, audience, published_at)
-          VALUES
-            (${entry.slug}, ${entry.version}, ${entry.title}, ${entry.bodyMd}, ${entry.bodyHtml},
-             ${entry.category}, ${entry.audience as unknown as string[]}, ${entry.publishedAt})
-          ON CONFLICT (slug) DO UPDATE SET
-            version = EXCLUDED.version,
-            title = EXCLUDED.title,
-            body_md = EXCLUDED.body_md,
-            body_html = EXCLUDED.body_html,
-            category = EXCLUDED.category,
-            audience = EXCLUDED.audience,
-            published_at = EXCLUDED.published_at
-          RETURNING (xmax = 0) AS was_inserted
-        `)
-        const rows = result.rows as Array<{ was_inserted: boolean }>
-        if (rows[0]?.was_inserted) inserted += 1
+        // Drizzle's INSERT builder serialises text[] arrays as Postgres
+        // array literals correctly. The previous raw-sql template inlined
+        // arrays as tuples — `($7, $8)` instead of `ARRAY[$7, $8]::text[]`
+        // — which Postgres rejects against a text[] column. The same
+        // tuple-vs-array gotcha bit refund-flow tests on Day 41 (see
+        // gotchas.md "drizzle's sql template inlines arrays as tuples").
+        const result = await tx
+          .insert(changelogEntries)
+          .values({
+            slug: entry.slug,
+            version: entry.version,
+            title: entry.title,
+            bodyMd: entry.bodyMd,
+            bodyHtml: entry.bodyHtml,
+            category: entry.category,
+            audience: [...entry.audience],
+            publishedAt: new Date(entry.publishedAt),
+          })
+          .onConflictDoUpdate({
+            target: changelogEntries.slug,
+            set: {
+              version: entry.version,
+              title: entry.title,
+              bodyMd: entry.bodyMd,
+              bodyHtml: entry.bodyHtml,
+              category: entry.category,
+              audience: [...entry.audience],
+              publishedAt: new Date(entry.publishedAt),
+            },
+          })
+          .returning({ wasInserted: sql<boolean>`(xmax = 0)` })
+        if (result[0]?.wasInserted) inserted += 1
         else updated += 1
       }
     })
