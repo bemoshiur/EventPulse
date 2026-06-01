@@ -178,7 +178,23 @@ const TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   completed: [], // terminal
   cancelled: [], // terminal
   failed: [], // terminal
-  refund_requested: ['refunded'],
+  // Day 41 Sprint 4 — refund_requested has two valid forward paths:
+  //
+  //   1. `refund_requested → refunded` — happy path. Super-admin approves
+  //      the tenant's request, then issues the EPS refund out-of-band
+  //      via the merchant dashboard (§11.4 — EPS V5 has no public refund
+  //      API), then marks the refund processed via the super-admin
+  //      mark-processed endpoint, which transitions the order.
+  //
+  //   2. `refund_requested → paid` — rejection rollback. Super-admin
+  //      reviews the request and declines (refunds.status `pending →
+  //      rejected` + super_admin_notes captured). The order returns to
+  //      `paid` so it remains completed/honored. No money moves.
+  //
+  // Per CLAUDE.md §29 #5: tenant-initiated refunds always pass through
+  // super-admin approval before any EPS-side action; the state machine
+  // is the gate.
+  refund_requested: ['refunded', 'paid'],
   refunded: [], // terminal
   // Two valid forward paths from `disputed`, each tied to a distinct
   // dispute reason captured in audit trail / order_events payload:

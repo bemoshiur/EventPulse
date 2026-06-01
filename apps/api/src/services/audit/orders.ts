@@ -225,44 +225,199 @@ export async function writeOrderDisputed(tx: Tx, input: WriteOrderDisputedInput)
   })
 }
 
-// ─── writeOrderRefunded (Day 39 Phase 2b — manual refund of v1.0 disputed orders) ─
+// ─── writeRefundRequested (Day 41 Sprint 4 — tenant-initiated refund request) ─
+
+export interface WriteRefundRequestedInput {
+  orderId: string
+  tenantId: string
+  eventId: string
+  merchantTransactionId: string
+  /** Refund amount in paisa. v1.0 = order.totalPaisa (full-refund only). */
+  amountPaisa: bigint
+  /** Free-text reason supplied by the tenant. */
+  reason: string
+  /** Categorical reason_code for analytics — typically 'tenant_requested'. */
+  reasonCode: string
+  /** Tenant-user who initiated the refund request. */
+  initiatedBy: string
+  /** UUID of the refunds-table row inserted in the same tx (status='pending'). */
+  refundId: string
+  ip: string | null
+  userAgent: string | null
+}
+
+/**
+ * Tenant-initiated refund request audit. Fires when a tenant submits a
+ * refund request via the tenant portal. Captures the orders.status
+ * transition `paid → refund_requested` + the new refunds row in
+ * `pending` state. The refund is NOT yet executed — super-admin
+ * approval comes next via writeRefundApproved / writeRefundRejected.
+ */
+export async function writeRefundRequested(
+  tx: Tx,
+  input: WriteRefundRequestedInput,
+): Promise<void> {
+  await tx.insert(auditLogs).values({
+    tenantId: input.tenantId,
+    actorType: 'tenant_user',
+    actorId: input.initiatedBy,
+    action: 'order.refund_requested',
+    entityType: 'order',
+    entityId: input.orderId,
+    diff: {
+      previous_status: 'paid',
+      new_status: 'refund_requested',
+      refund_reason: input.reason,
+      refund_reason_code: input.reasonCode,
+      amount_paisa: input.amountPaisa.toString(),
+      refund_id: input.refundId,
+      merchant_transaction_id: input.merchantTransactionId,
+    },
+    metadata: { source: 'tenant_portal_refund_request', event_id: input.eventId },
+    ip: input.ip,
+    userAgent: input.userAgent,
+  })
+}
+
+// ─── writeRefundApproved (Day 41 Sprint 4 — super-admin approval) ─
+
+export interface WriteRefundApprovedInput {
+  orderId: string
+  tenantId: string
+  eventId: string
+  merchantTransactionId: string
+  amountPaisa: bigint
+  refundId: string
+  /** Super-admin who approved. */
+  approvedBy: string
+  /** Optional reviewer notes captured at approval time. */
+  superAdminNotes: string | null
+}
+
+/**
+ * Super-admin approval audit. Fires when a super-admin approves a
+ * pending tenant refund request. orders.status stays at
+ * `refund_requested` until the super-admin issues the EPS-dashboard
+ * refund out-of-band and then calls mark-processed. This audit row
+ * captures only the refunds.status `pending → approved` transition.
+ */
+export async function writeRefundApproved(tx: Tx, input: WriteRefundApprovedInput): Promise<void> {
+  await tx.insert(auditLogs).values({
+    tenantId: input.tenantId,
+    actorType: 'super_admin',
+    actorId: input.approvedBy,
+    action: 'refund.approved',
+    entityType: 'refund',
+    entityId: input.refundId,
+    diff: {
+      refund_id: input.refundId,
+      refund_previous_status: 'pending',
+      refund_new_status: 'approved',
+      amount_paisa: input.amountPaisa.toString(),
+      merchant_transaction_id: input.merchantTransactionId,
+      order_id: input.orderId,
+      super_admin_notes: input.superAdminNotes,
+    },
+    metadata: { source: 'super_admin_refund_approval', event_id: input.eventId },
+    ip: null,
+    userAgent: null,
+  })
+}
+
+// ─── writeRefundRejected (Day 41 Sprint 4 — super-admin rejection rollback) ─
+
+export interface WriteRefundRejectedInput {
+  orderId: string
+  tenantId: string
+  eventId: string
+  merchantTransactionId: string
+  amountPaisa: bigint
+  refundId: string
+  /** Super-admin who rejected. */
+  rejectedBy: string
+  /** Reviewer notes — REQUIRED on rejection to capture the why. */
+  superAdminNotes: string
+}
+
+/**
+ * Super-admin rejection audit. Fires when a super-admin rejects a
+ * pending refund request. Captures BOTH transitions in a single audit
+ * row: refunds.status `pending → rejected` AND orders.status
+ * `refund_requested → paid` (the rollback that returns the order to
+ * its honored state). super_admin_notes is required on the input
+ * shape — rejections must be justified for tenant communication +
+ * audit trail integrity.
+ */
+export async function writeRefundRejected(tx: Tx, input: WriteRefundRejectedInput): Promise<void> {
+  await tx.insert(auditLogs).values({
+    tenantId: input.tenantId,
+    actorType: 'super_admin',
+    actorId: input.rejectedBy,
+    action: 'refund.rejected',
+    entityType: 'refund',
+    entityId: input.refundId,
+    diff: {
+      refund_id: input.refundId,
+      refund_previous_status: 'pending',
+      refund_new_status: 'rejected',
+      order_previous_status: 'refund_requested',
+      order_new_status: 'paid',
+      amount_paisa: input.amountPaisa.toString(),
+      merchant_transaction_id: input.merchantTransactionId,
+      order_id: input.orderId,
+      super_admin_notes: input.superAdminNotes,
+    },
+    metadata: { source: 'super_admin_refund_rejection', event_id: input.eventId },
+    ip: null,
+    userAgent: null,
+  })
+}
+
+// ─── writeOrderRefunded (Day 39 Phase 2b + Day 41 Sprint 4 generalisation) ─
+
+/**
+ * Day 41 Sprint 4: refundReason expanded from a single-literal union
+ * to a wider union covering both the Phase 2b disputed-manual path
+ * AND the Day 41 tenant-initiated path. The audit row format is
+ * identical; only the source string differs.
+ */
+export type RefundReasonCode =
+  | 'manual_refund_after_non_bkash_dispute' // Phase 2b backfill
+  | 'tenant_initiated_refund' // Day 41
+  | 'reconciliation_correction' // Phase 2+ settlement layer
+  | 'other'
 
 export interface WriteOrderRefundedInput {
   orderId: string
   tenantId: string
   eventId: string
   merchantTransactionId: string
-  /** Refund amount in paisa; for the v1.0 Verify-guard path this is the order's full totalPaisa. */
+  /** Refund amount in paisa; v1.0 always equals order.totalPaisa (full-refund only). */
   amountPaisa: bigint
-  /**
-   * Refund reason code. v1.0 Phase 2b uses
-   * `'manual_refund_after_non_bkash_dispute'` for the Verify-guard
-   * follow-up flow. Future expansion: `'tenant_initiated_refund'`,
-   * `'eps_chargeback_resolved'`, etc.
-   */
-  refundReason: 'manual_refund_after_non_bkash_dispute'
-  /** State machine `from` — typically `disputed` for the Day 39 Phase 2b path. */
+  /** Refund reason code — taxonomy aligned with refunds.reason_code column. */
+  refundReason: RefundReasonCode
+  /** State machine `from` — `disputed` for Phase 2b path, `refund_requested` for Day 41 tenant-initiated path. */
   previousStatus: string
   /** ID of the super-admin user who marked the refund complete. */
   refundedBy: string
-  /** UUID of the refunds-table row inserted in the same tx. */
+  /** UUID of the refunds-table row associated with this refund. */
   refundId: string
 }
 
 /**
- * Refund audit. Fires when a super-admin completes a manual refund of
- * a Day-38-Phase-2a disputed order (Day 39 Phase 2b path).
+ * Refund completion audit. Fires when a super-admin completes a refund
+ * (transitions orders.status `<previousStatus> → refunded` +
+ * refunds.status `<previousStatus> → processed`).
  *
- * The dispute path (PR #228) routes non-bKash payments to `disputed`;
- * the super-admin issues the actual refund via the EPS merchant
- * dashboard (V5 has no public refund API per §11.4), then calls the
- * Phase 2b admin endpoint to mark the order `refunded`. This audit
- * helper writes the corresponding audit-log row inside the same tx
- * as the orders UPDATE + refunds INSERT + order_events INSERT.
+ * Two call sites:
+ *   1. Phase 2b `markDisputedOrderRefunded` (`disputed → refunded`,
+ *      refundReason='manual_refund_after_non_bkash_dispute')
+ *   2. Day 41 Sprint 4 `markRefundProcessed` (`refund_requested →
+ *      refunded`, refundReason='tenant_initiated_refund')
  *
- * The diff carries the refund amount + reason + refunds-table id so
- * a single audit row tells the complete refund story without needing
- * to join back to other tables. No PII — buyer details stay on the
+ * Both paths converge on this single helper to keep the audit row
+ * format consistent — the diff payload tells the complete refund
+ * story without needing a join. No PII — buyer details stay on the
  * orders row.
  */
 export async function writeOrderRefunded(tx: Tx, input: WriteOrderRefundedInput): Promise<void> {
