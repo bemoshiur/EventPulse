@@ -16,6 +16,7 @@ import { feeConfigRoutes } from './routes/super-admin/fee-config.js'
 import { adminKycRoutes } from './routes/super-admin/kyc.js'
 import { adminLegalRoutes } from './routes/super-admin/legal.js'
 import { adminOrdersRoutes } from './routes/super-admin/orders.js'
+import { adminRefundsRoutes } from './routes/super-admin/refunds.js'
 import { adminRevenueRoutes } from './routes/super-admin/revenue.js'
 import { adminTicketTiersRoutes } from './routes/super-admin/ticket-tiers.js'
 import { accountTypeRoutes } from './routes/tenant/account-type.js'
@@ -213,6 +214,12 @@ export function createApp() {
   // posture: lightweight endpoint only; React UI follow-up deferred
   // per Day 38 Phase 2 sub-decision A.
   app.route('/api/v1/admin/orders', adminOrdersRoutes)
+  // Day 41 Sprint 4 super-admin refund-flow routes per §10.4 + §26.1 Day 7-8:
+  // queue + detail + approve/reject/mark-processed. Tenant-initiated refund
+  // requests land in the pending queue here for super-admin review. The
+  // actual EPS refund happens out-of-band via the merchant dashboard
+  // between approve and mark-processed (§11.4 — V5 has no public refund API).
+  app.route('/api/v1/admin/refunds', adminRefundsRoutes)
 
   return app
 }
