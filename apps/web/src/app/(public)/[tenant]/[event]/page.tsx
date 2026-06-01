@@ -23,6 +23,7 @@
 import { notFound } from 'next/navigation'
 
 import { EventLanding } from '@/components/public/event-landing'
+import { fetchLegalDocumentByUrlPath } from '@/lib/legal'
 import { fetchPublicEvent } from '@/lib/public-events'
 
 interface PageProps {
@@ -48,8 +49,28 @@ export async function generateMetadata({ params }: PageProps) {
 
 export default async function PublicEventPage({ params }: PageProps) {
   const { tenant, event } = await params
-  const payload = await fetchPublicEvent(tenant, event)
+
+  // Day 39 Phase 2 consent wire-in: fetch Buyer Terms v1.0 body in
+  // parallel with the event payload. The legal fetcher returns null on
+  // legitimate 404 (document missing); on api failure it throws
+  // LegalApiUnavailableError which Next.js's error boundary surfaces
+  // as 503 — fail-loud is correct here because the server-side
+  // consent_records INSERT (createOrder service) also fails if the
+  // doc is missing, so a 503 at page-load is the buyer-facing surface
+  // of the same root cause.
+  const [payload, buyerTerms] = await Promise.all([
+    fetchPublicEvent(tenant, event),
+    fetchLegalDocumentByUrlPath('/buyer-terms'),
+  ])
   if (!payload) notFound()
 
-  return <EventLanding event={payload.event} brand={payload.brand} tiers={payload.tiers} />
+  return (
+    <EventLanding
+      event={payload.event}
+      brand={payload.brand}
+      tiers={payload.tiers}
+      buyerTermsBodyHtml={buyerTerms?.currentVersion.bodyHtml ?? null}
+      buyerTermsVersion={buyerTerms?.currentVersion.version ?? null}
+    />
+  )
 }

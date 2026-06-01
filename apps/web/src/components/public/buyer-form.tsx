@@ -55,14 +55,29 @@
  *   double-click → duplicate orders.
  *
  * ════════════════════════════════════════════════════════════════════
- * Consent (Day-19 placeholder-docs constraint):
+ * Consent (Day-39 Phase 2 — Buyer Terms v1.0 wire-in):
  * ════════════════════════════════════════════════════════════════════
  *
- * No blocking consent checkbox. Trust Center docs are v0.1 placeholder
- * pending counsel; a checkbox here would produce meaningless consent
- * records. The form's footer line links to /terms + /refund-policy
- * as informational reference. Real binding consent capture lands as
- * a separate PR when v1.0 docs arrive.
+ * Clickwrap (no checkbox per the wiring spec in docs/legal/buyer-terms.md
+ * editing notes). The submit-button click IS the consent action; a
+ * bilingual line above the button names the document + version + links
+ * to /buyer-terms and /privacy.
+ *
+ * The Buyer Terms v1.0 body renders in a collapsible <details> panel
+ * above the clickwrap line — the body_html arrives as a prop
+ * (`buyerTermsBodyHtml`) server-fetched from
+ * /api/v1/public/legal/by-url-path?path=/buyer-terms by the parent
+ * page. Pre-rendered + sanitized via the rehype-sanitize allowlist
+ * (Decision J 2026-05-19) at seed time; safe to inject as innerHTML.
+ *
+ * Server-side: createOrder (apps/api/src/services/orders/index.ts)
+ * inserts a consent_records row inside the order-creation tx,
+ * anchored by order_id, with document_id + version_id resolved from
+ * the current Buyer Terms (helper at services/consent/buyer-terms.ts).
+ * If that INSERT fails the tx rolls back, the order is never
+ * persisted, and the EPS Initialize call is never made. This is the
+ * operator-spec'd precondition behavior ("consent capture is a
+ * precondition, not a side effect").
  *
  * ════════════════════════════════════════════════════════════════════
  * Money math (§14.3 + §1.3 R10):
@@ -86,6 +101,31 @@ import type { PublicEventTierWire, PublicEventWire } from '@/lib/public-events'
 export interface BuyerFormProps {
   event: PublicEventWire
   tiers: PublicEventTierWire[]
+  /**
+   * Pre-rendered, sanitized HTML for the current Buyer Terms v1.0 body
+   * (server-fetched from `/api/v1/public/legal/by-url-path?path=/buyer-terms`
+   * upstream of this component). Renders inside a collapsible panel
+   * above the bilingual clickwrap consent line.
+   *
+   * `null` (or absent) means the document is unavailable (legal API
+   * down or buyer-terms not seeded) — the clickwrap line still renders
+   * with a link to /buyer-terms so buyers always have a path to the
+   * text; the in-page panel shows a fallback message.
+   *
+   * Optional purely for test-fixture ergonomics — production callsite
+   * (apps/web/src/app/(public)/[tenant]/[event]/page.tsx) always passes
+   * the fetched value, and the server-side createOrder service refuses
+   * to create the order if Buyer Terms isn't seeded (per the
+   * resolveBuyerTermsCurrentVersion precondition), so a `null` here in
+   * production indicates a transient legal-API blip.
+   */
+  buyerTermsBodyHtml?: string | null
+  /**
+   * Version string ("v1.0", "v1.1", …) of the Buyer Terms surfaced
+   * above. Rendered in the clickwrap line for transparency + tracked
+   * in audit trails. `null` mirrors `buyerTermsBodyHtml === null`.
+   */
+  buyerTermsVersion?: string | null
 }
 
 interface BuyerFields {
@@ -153,7 +193,7 @@ function tierSellable(tier: PublicEventTierWire, now: Date): boolean {
   return true
 }
 
-export function BuyerForm({ event, tiers }: BuyerFormProps) {
+export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion }: BuyerFormProps) {
   const formHeadingId = useId()
   const buyerHeadingId = useId()
   const statusRegionId = useId()
@@ -590,18 +630,87 @@ export function BuyerForm({ event, tiers }: BuyerFormProps) {
             </div>
           )}
 
-          {/* ─── submit + legal footer ─── */}
+          {/* ─── Buyer Terms v1.0 body panel + bilingual clickwrap ─── */}
+          {/*
+            Day 39 Phase 2 wire-in replaces the Day-34 link-footer
+            ("By placing this order you agree to the Terms and the
+            Refund Policy") with (a) a collapsible panel rendering the
+            Salehin-approved Buyer Terms v1.0 body from
+            legal_document_versions.body_html, and (b) a bilingual
+            clickwrap line above the button per the
+            docs/legal/buyer-terms.md wiring spec.
+
+            The button click IS the consent action (clickwrap; no
+            checkbox per the editing-notes wiring spec). Server-side,
+            createOrder writes a consent_records row inside the
+            order-creation tx anchored by order_id; if that INSERT
+            fails the tx rolls back and EPS Initialize never fires.
+
+            buyerTermsBodyHtml may be `null` if the legal API is
+            transiently unreachable or buyer-terms is not seeded —
+            in that case we still render the clickwrap line with a
+            link to /buyer-terms so buyers have an out-of-band path.
+            The server-side consent_records INSERT will fail (the
+            resolveBuyerTermsCurrentVersion helper throws), which
+            rolls the order back — so a `null` body here would also
+            block checkout, surfacing as a 500 to the buyer. That's
+            intentional: better fail-loud than capture consent
+            against an unavailable document.
+          */}
+          <details
+            className="border-ep-line/60 bg-ep-paper/40 mt-6 rounded-2xl border"
+            data-testid="buyer-terms-panel"
+          >
+            <summary className="text-ep-ink cursor-pointer px-4 py-3 text-sm font-medium">
+              Buyer Terms ({buyerTermsVersion ?? 'unavailable'}) · ক্রেতা শর্তাবলী
+            </summary>
+            <div className="px-4 pb-4">
+              {buyerTermsBodyHtml ? (
+                <div
+                  className="text-ep-graphite prose prose-sm max-w-none text-sm"
+                  data-testid="buyer-terms-body"
+                  // The body_html is pre-rendered + sanitized server-side
+                  // via the rehype-sanitize allowlist in
+                  // apps/api/src/domain/legal/render.ts (Decision J).
+                  // It's safe to inject as innerHTML — the pipeline
+                  // strips <script>, event handlers, data:/javascript:
+                  // URIs, etc. before the HTML is cached on disk.
+                  dangerouslySetInnerHTML={{ __html: buyerTermsBodyHtml }}
+                />
+              ) : (
+                <p className="text-ep-graphite text-sm" data-testid="buyer-terms-body-unavailable">
+                  The terms document is temporarily unavailable. You can read it at{' '}
+                  <Link className="underline" href="/buyer-terms">
+                    /buyer-terms
+                  </Link>{' '}
+                  before continuing.
+                </p>
+              )}
+            </div>
+          </details>
+
           <div className="mt-6 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-ep-graphite/70 text-xs">
-              By placing this order you agree to the{' '}
-              <Link className="underline" href="/terms">
-                Terms
-              </Link>{' '}
-              and the{' '}
-              <Link className="underline" href="/refund-policy">
-                Refund Policy
-              </Link>
-              .
+            <p className="text-ep-graphite/80 text-xs" data-testid="buyer-terms-clickwrap">
+              <span lang="bn" className="block">
+                {isFreeEvent ? '"Confirm registration"' : '"Continue with bKash"'} বাটনে ক্লিক করে
+                আপনি Event Pulse-এর Buyer Terms ({buyerTermsVersion ?? '—'}) এবং{' '}
+                <Link className="underline" href="/privacy">
+                  প্রাইভেসি পলিসিতে
+                </Link>{' '}
+                সম্মত হচ্ছেন।
+              </span>
+              <span lang="en" className="mt-1 block">
+                By clicking {isFreeEvent ? '"Confirm registration"' : '"Continue with bKash"'} you
+                agree to Event Pulse's{' '}
+                <Link className="underline" href="/buyer-terms">
+                  Buyer Terms ({buyerTermsVersion ?? '—'})
+                </Link>{' '}
+                and{' '}
+                <Link className="underline" href="/privacy">
+                  Privacy Policy
+                </Link>
+                .
+              </span>
             </p>
             <button
               type="submit"
