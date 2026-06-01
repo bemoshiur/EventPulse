@@ -1,8 +1,9 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-06-01 — **Day 42 EOD** of 47-day Phase 1 MVP runway. **Sprint 4 §26.1 Day 9 marketing pages SHIPPED end-to-end (3 PRs + 1 hotfix).**
+**Last update:** 2026-06-01 — **Day 42 EOD + cost-ceiling addendum** of 47-day Phase 1 MVP runway. **Sprint 4 §26.1 Day 9 marketing pages SHIPPED end-to-end (3 PRs + 1 hotfix). NEW STANDING CONSTRAINT: AWS spend < \$30/month total (both envs combined).**
 **LAUNCH TARGET: 2026-06-10** (9 days out — runway healthy).
 **Driver:** Claude Code (Opus 4.7).
+**🛑 LOAD-BEARING:** Operator set hard ceiling — total monthly AWS spend below **\$30/month** for the project. Every AWS-write STOP-ASK now includes "monthly cost delta + running total" before proceeding. **Live AWS audit Day-42 EOD: current spend is ~\$26/month — UNDER ceiling by ~\$4/mo.** Future risk is the prod cutover (~\$98/mo at §17.x defaults; needs cost-aware cuts to fit). Cost-aware defaults codified in decisions.md 2026-06-01 "STANDING CONSTRAINT" entry (top of log): prod EC2 = t3.small (NOT t3.large); 1-2 consolidated Secrets Manager JSON blobs per env (NOT 11 per-purpose); 3 KMS CMKs max for MVP; staging gets 2 alarms, prod gets the §17.11 set; 14-day log retention; weekly EBS snapshots. **Next AWS-write window: AWS Budget alarm (\$25 actual / \$30 forecast) is the meta-cost-guard** — free resource; lands as the structural enforcement of the ceiling.
 **Today's headline:** Day 42 ran the full §26.1 Day 9 marketing-pages workstream as a three-PR sequence in one continuous "work continue" session. **PR #244** (apex home + /features + /pricing) replaces the Day-1 scaffold and ships a server-rendered four-mode bigint-paisa fee calculator at v1.0 bKash 175bps with a 7-test drift guard pinning canonical §14.2-shape values. **PR #245** (/contact + form + API + migration 0017 contact_submissions) ships a 3-defence-layer endpoint (honeypot + per-IP rate limit + zod). **PR #246** (/legal/changelog + migration 0018 changelog_entries + v1.0 seed) lands the changelog scaffold but the seed itself failed at deploy time due to the drizzle array-tuple gotcha (same root cause as PR #245's afterAll test bug from Day 41). **PR #248 hotfix** switches the seed from raw `sql` template to drizzle's builder; after merge + re-deploy + manual re-seed, the 9 v1.0 launch entries populate. All 3 standing invariants intact post-deploy.
 
 **Day 42 AWS billing tally:** ~$0 net new. No AWS-side writes; one extra deploy run (~$0.00) plus a single SSM SendCommand for the manual changelog seed (~$0.00).
@@ -127,7 +128,8 @@ All amounts paisa. §14.10 Invariant-1 PASS across all 4. The only fully-clean f
 
 - ⏳ **§26.1 Day 10 launch readiness** — AUP review, first paying tenant identification. Next session pick.
 - ⏳ **§17.11 alarm catalogue beyond CPU 85%** — 6 remaining alarms (mem >90%/5min, disk >80%, error rate >1%/5min, payment success <95%/15min, disbursement batch failure, reconciliation invariant violation). Each ~5-min AWS-write standalone task. Required pre-prod-cutover.
-- ⏳ **t3.medium upgrade** (4 GB, ~+$15/mo) — pre-prod-cutover Moshiur decision.
+- ⏳ **t3.medium upgrade** (4 GB, ~+$15/mo) — **REJECTED for MVP** per the $30/month ceiling. Day-34 swap fix (2 GB swap + swappiness=10) keeps t3.small viable. Revisit post-launch when revenue justifies.
+- 🛑 **AWS Budget alarm** ($25 actual / $30 forecast) — must land in next AWS-write session to enforce the ceiling structurally. Free resource; budget actions cost ~$0.
 - ⏳ **k6/artillery load test budget** (§24.4 Sprint-4-close CI requirement) — NOT WIRED.
 - ⏳ **`pnpm audit` blocking on high+critical** (§24.4 Sprint-4-close CI requirement) — NOT WIRED.
 - ⏳ **Production cutover surface** — 8 sub-items above. Notable: prod-branch ff-merge (`21dad2cc` → current main; now ~105+ commits divergent).
@@ -145,6 +147,8 @@ All amounts paisa. §14.10 Invariant-1 PASS across all 4. The only fully-clean f
 - **Migrations 0017 + 0018:** contact_submissions + changelog_entries.
 
 ## Standing invariants (still enforcing through remaining runway)
+
+- 🛑 **AWS spend hard ceiling: $30/month total (both envs combined).** Decisions.md "STANDING CONSTRAINT" entry at top of log. Every AWS-write STOP-ASK now includes monthly cost delta + running total. Cost-aware defaults override §17.x prod-target spec until v2.4 playbook bump: prod EC2 t3.small (NOT t3.large); 1-2 consolidated Secrets Manager JSON blobs per env (NOT 11 per-purpose); 3 KMS CMKs max for MVP; 14-day log retention; staging gets 2 alarms / prod gets §17.11 set.
 
 - **`STAGING_PAYMENT_BLOCK=1`** — re-verified Day 42 EOD post-deploy. Only authorized lift: BDT-100 production smoke on its own gated session. Non-negotiable through 2026-06-10.
 - **`MAIL_DRY_RUN=0`** on staging — flipped Day 41; durable across deploys. Real SES sends now exercise the full Phase 4 pipeline. Suppression-list outbound-guard intercepts before AWS call. Production flip lands as sub-step of cutover ceremony.
