@@ -15,7 +15,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { eq, sql } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 
 import { withSuperAdmin } from '../../db/client.js'
 import { contactSubmissions } from '../../db/schema/index.js'
@@ -34,7 +34,7 @@ describeIfDb('contact-service — Day 42 §26.1 Day 9 part 2', () => {
   afterAll(async () => {
     if (testEmails.size === 0) return
     await withSuperAdmin(async (tx) => {
-      await tx.execute(sql`DELETE FROM contact_submissions WHERE email = ANY(${[...testEmails]})`)
+      await tx.delete(contactSubmissions).where(inArray(contactSubmissions.email, [...testEmails]))
     })
   })
 
