@@ -5,6 +5,7 @@ import { withSuperAdmin } from './db/client.js'
 import { logger } from './lib/logger.js'
 import { authRoutes } from './routes/auth.js'
 import { oauthRoutes } from './routes/oauth-routes.js'
+import { publicChangelogRoutes } from './routes/public/changelog.js'
 import { publicContactRoutes } from './routes/public/contact.js'
 import { publicEventsRoutes } from './routes/public/events.js'
 import { publicLegalRoutes } from './routes/public/legal.js'
@@ -85,6 +86,10 @@ export function createApp() {
   // apps/web Server Components for the /trust + /privacy/etc pages
   // (Decision K, 2026-05-19). Edge-cacheable.
   app.route('/api/v1/public/legal', publicLegalRoutes)
+  // Public changelog endpoints — Day 42 §26.1 Day 9 marketing pages part 3.
+  // Edge-cacheable; consumed by the apps/web Server Component at
+  // /(public)/legal/changelog.
+  app.route('/api/v1/public/changelog', publicChangelogRoutes)
   // Public event landing read — Sprint 3 Day 25 Phase 2. Consumed by
   // the apps/web Server Component at /(public)/[tenant]/[event]/page.
   // Visibility + status filtering is application-side; the route's
