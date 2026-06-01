@@ -41,14 +41,25 @@ function allowedComplaintTopicArns(): string[] {
     .filter((s) => s.length > 0)
 }
 
+/**
+ * SES publishes complaint events to SNS in two different envelopes — see the
+ * matching comment block in ses-bounce.ts. Configuration Set event destinations
+ * use `eventType`; legacy `SetIdentityNotificationTopic` uses `notificationType`.
+ * Both variants share the same nested `complaint` payload shape.
+ */
 interface SesComplaintMessage {
-  notificationType: 'Complaint'
+  eventType?: 'Complaint'
+  notificationType?: 'Complaint'
   complaint: {
     complainedRecipients: Array<{ emailAddress: string }>
     timestamp: string
     feedbackId: string
     complaintFeedbackType?: string
   }
+}
+
+function sesPayloadEventType(p: SesComplaintMessage): string | undefined {
+  return p.eventType ?? p.notificationType
 }
 
 async function fetchUrl(url: string): Promise<void> {
@@ -135,8 +146,9 @@ sesComplaintRoutes.post('/', async (c) => {
     )
     return c.json({ ok: true, ignored: 'message_unparseable' })
   }
-  if (sesPayload.notificationType !== 'Complaint') {
-    return c.json({ ok: true, ignored: `not_a_complaint:${sesPayload.notificationType}` })
+  const evType = sesPayloadEventType(sesPayload)
+  if (evType !== 'Complaint') {
+    return c.json({ ok: true, ignored: `not_a_complaint:${evType}` })
   }
 
   let suppressedCount = 0

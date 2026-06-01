@@ -72,8 +72,22 @@ function allowedBounceTopicArns(): string[] {
     .filter((s) => s.length > 0)
 }
 
+/**
+ * SES publishes bounce events to SNS in two different envelopes depending on
+ * the mechanism used:
+ *
+ *   - **Configuration Set event destinations** (what Phase 4 wires) use
+ *     `eventType: "Bounce"` at the top level.
+ *   - **Legacy `SetIdentityNotificationTopic`** direct SNS feedback uses
+ *     `notificationType: "Bounce"` at the top level.
+ *
+ * Both variants share the same nested `bounce` payload shape. We accept either
+ * field name to stay robust if a future SES integration is wired via the
+ * legacy mechanism alongside Configuration Sets.
+ */
 interface SesBounceMessage {
-  notificationType: 'Bounce'
+  eventType?: 'Bounce'
+  notificationType?: 'Bounce'
   bounce: {
     bounceType: 'Permanent' | 'Transient' | 'Undetermined'
     bounceSubType?: string
@@ -81,6 +95,10 @@ interface SesBounceMessage {
     timestamp: string
     feedbackId: string
   }
+}
+
+function sesPayloadEventType(p: SesBounceMessage): string | undefined {
+  return p.eventType ?? p.notificationType
 }
 
 /** Map AWS bounceType to our SuppressionReason enum. */
@@ -194,8 +212,9 @@ sesBounceRoutes.post('/', async (c) => {
     )
     return c.json({ ok: true, ignored: 'message_unparseable' })
   }
-  if (sesPayload.notificationType !== 'Bounce') {
-    return c.json({ ok: true, ignored: `not_a_bounce:${sesPayload.notificationType}` })
+  const evType = sesPayloadEventType(sesPayload)
+  if (evType !== 'Bounce') {
+    return c.json({ ok: true, ignored: `not_a_bounce:${evType}` })
   }
 
   const reason = bounceTypeToReason(sesPayload.bounce.bounceType)
