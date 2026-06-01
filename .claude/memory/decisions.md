@@ -4,6 +4,116 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-01 · Day 42 EOD — Sprint 4 §26.1 Day 9 marketing pages SHIPPED (3 PRs) — apex + features + pricing + contact + changelog
+
+### Context
+
+Day 42 ran the full §26.1 Day 9 marketing-pages workstream as a three-PR sequence in one continuous "work continue" session. The goal was to ship the public marketing surface end-to-end so the platform has a credible launch frontend before 2026-06-10. All three PRs land green; staging deploy in flight at session close.
+
+### Decision A — Three-PR breakdown, not one mega-PR
+
+The §26.1 Day 9 scope (apex + /features + /pricing + /contact + /legal/changelog) was split into three focused PRs by **DB-dependency shape**, not by page count:
+
+- **PR #244 — apex + /features + /pricing** — pure static content + design-system, **no DB**. Safe to ship and merge first; eliminates the largest UI delta from the review surface for the data-bearing PRs that follow.
+- **PR #245 — /contact** — page + Client Component form + Hono POST route + service + **migration 0017** (`contact_submissions`).
+- **PR #246 — /legal/changelog** — index page + per-version page + 3 GET endpoints + service + **migration 0018** (`changelog_entries`) + **v1.0 seed** (9 launch entries).
+
+Rationale: each PR has a distinct risk profile (static / form-write / read-with-seed). Merging in dependency order let me catch the PR-B test-cleanup bug (`sql\`ANY(${[...]})\`` tuple-vs-array gotcha) on its own PR's CI without contaminating PR C's CI signal. PR #245 surfaced an Integration-tests failure; PR #246 force-pushed clean after rebase, never breaking with that signal.
+
+### Decision B — Per-PR rebase + force-push pattern (working through dependency conflicts)
+
+The three branches were created off `main` sequentially, but committed in parallel before merges landed. PR #246 (last) hit a schema-conflict on rebase because PR #245 also extended `apps/api/src/db/schema/index.ts` at the same end-of-file region — both adding new `pgTable` exports.
+
+Resolution pattern: I kept PR #245's `contactSubmissions` from `main` (the side that had merged) and **re-added the changelogEntries export below it**. Force-with-lease pushed the rebased PR #246 branch; CI re-ran clean.
+
+**Generalisation:** when multi-PR sequences both append to a single schema file, the second/third PRs **MUST** rebase + manually merge instead of letting git auto-resolve; auto-resolution often picks one side and silently drops the other table export, which typechecks (no consumer yet) but breaks at runtime. The conflict markers + manual merge is the safe pattern.
+
+### Decision C — Pricing calculator: server-rendered bigint paisa math with a drift-guard test
+
+The /pricing page renders four-mode fee scenarios at the v1.0 launch bKash rate. **The api workspace cannot be imported from web per §3.2**, so the canonical `apps/api/src/domain/payments/fee-calculator.ts` is inaccessible. Two choices:
+
+1. **Server Action wiring to the real calculator** — type-correct but adds Server-Action infrastructure to a marketing page.
+2. **Inline bigint-paisa mirror with a drift-guard test** — duplicates ~15 lines of arithmetic; pins both sides to hand-computed canonical values via a `pricing.test.ts` (7 tests) that would fail if either side drifted.
+
+**Chose option 2.** The 7 drift-guard tests pin specific numbers from §14.2-shape worked examples (face=BDT-1000, platform=25bps, bKash=175bps) including the §14.2 Mode-C `1025.00` arithmetic (per Day-38 EPS-base rule lock). Any future PR that changes the canonical calculator's order of operations on `eps_capture_base` would surface as a test failure on the api side; any independent drift in the marketing mirror would surface here. Trade-off accepted: prefer simple-page-with-drift-guard over Server-Action-infrastructure-for-a-static-page.
+
+Worth noting: this is **not** a new "money math source." The marketing page is for **display only** (calculator-as-visualizer, not order-creation path). Real money math at request time still runs through `fee-calculator.ts` exclusively per §1.3 R2.
+
+### Decision D — Contact form: three defence layers (honeypot + per-IP rate-limit + zod)
+
+POST /api/v1/public/contact carries three independent gates:
+
+1. **Honeypot `website` field** — hidden from humans via `tabIndex={-1}` + `className=hidden`. Bots fill it. Non-empty submissions return a **success-shaped** envelope with a placeholder UUID so attackers can't probe the heuristic. Logged as `contact.honeypot.tripped` with IP `/16` prefix only.
+2. **Per-IP rate limit** — 3 submissions/hour/IP per §22.1 using `createRateLimiter` (the existing fixed-window in-memory limiter shared with the EPS webhook). Returns 429 with `RATE_LIMITED` envelope.
+3. **Zod payload validation** — types + length bounds + email shape + topic enum (7 cases: sales/support/legal/partnership/press/security/other).
+
+The honeypot-as-silent-success pattern (not 4xx) is deliberate. Returning 400/422 on honeypot trip leaks the heuristic; legitimate humans never see the field; an attacker who can't tell the difference between "spam ignored" and "spam accepted" wastes their time. Logged distinctly so ops can monitor honeypot trip rate.
+
+### Decision E — Changelog body sanitization: re-use the Trust Center pipeline (Decision J), NOT a new sanitizer
+
+The changelog `body_html` is rendered at seed/publish time via `renderLegalMarkdown()` — **the same** `rehype-sanitize` + `defaultSchema` pipeline that produces Trust Center document body_html (Decision J 2026-05-19). Both call sites (index page + per-version page) carry a `ChangelogBody` component with JSDoc explaining the trust boundary + `eslint-disable react/no-danger` inline rationale. The pattern **mirrors verbatim** `apps/web/src/components/legal/document-page.tsx:71` (the existing Trust Center `BodyHtml` renderer).
+
+Rationale: the project's security-guidance plugin flagged `dangerouslySetInnerHTML`; the correct response is to channel changelog content through the already-existing sanitization pipeline, not add a second sanitizer (DOMPurify / sanitize-html etc.). Decision J is explicit: "Widening the allowlist requires its own decisions.md entry" — this PR does **not** widen anything; it consumes the existing pipeline.
+
+### Decision F — Build-time-fetch-failure tolerance: pattern duplicated from `lib/legal.ts`
+
+Next.js prerenders marketing pages at build time, which calls `fetchChangelogIndex()` → which fetches from the api → which isn't running during `next build`. The Trust Center solved this by branching on `NEXT_PHASE === 'phase-production-build'` and returning empty/null on fetch failure (with structured stderr logging so the failure remains visible).
+
+The changelog lib (`apps/web/src/lib/changelog.ts`) mirrors this verbatim. Both `fetchChangelogIndex` and `fetchChangelogByVersion` log on fetch failure and return `[]`, distinguishing build-phase ("fetchChangelogIndex (build)") from request-phase. Pages handle empty arrays gracefully (empty-state card on index; `notFound()` on per-version detail). At request time the page revalidates every 5 minutes.
+
+**Pattern is now established for any future Server-Component-that-fetches-the-api:** clone the legal lib's `isBuildPhase()` + `logFetchFailure()` + try/catch shape. Don't crash the build.
+
+### Decision G — Seed file pattern: dynamic-import after DATABASE_URL guard
+
+`seed-changelog-v1.ts` mirrors the established `seed-buyer-terms-v1.ts` shape: `run()` is exported; top of function renders the body_html (catches markdown-parse failures BEFORE any DB write); `DATABASE_URL` absent → log + early return; DB-dependent imports (`withSuperAdmin`, `drizzle-orm/sql`) loaded **dynamically** so the body-validation path stays cheap (no `pg` + drizzle pull when running in dev / CI without a DB). CLI shim at bottom: `import.meta.url === \`file://${process.argv[1]}\``.
+
+Wired into `infra/deploy/deploy.sh` post-migrate, pre-pm2-reload, joining the existing `db:seed:legal-documents` + `db:seed:buyer-terms-v1` line. All three are idempotent — re-running on each deploy is a no-op for unchanged content, an UPDATE for edited content (changelog ON CONFLICT (slug) DO UPDATE), or skip-existing (buyer-terms ON CONFLICT (document_id, version) DO NOTHING).
+
+### Decision H — v1.0 launch changelog: 9 entries by audience
+
+The seed ships 9 v1.0 entries dated 2026-06-10. Audience splits roughly half/half:
+
+| Entry | Audience |
+|---|---|
+| Event Pulse v1.0 — launch | public + tenant |
+| bKash checkout at launch | public + tenant |
+| Refund flow: tenant request, super-admin approval | tenant |
+| Trust Center: 6 legal contracts + 12 trust artefacts | public + tenant |
+| Web QR check-in — no app required | tenant |
+| Attendee CRM with search, filter, and CSV export | tenant |
+| Sales dashboard + payouts view | tenant |
+| Buyer Terms Lite consent at checkout | public |
+| Bounce + complaint suppression-list | tenant (categorised `security`) |
+
+Rationale per audience split: public visitors don't care about back-office mechanics (CSV exports, dashboards); tenants don't need consent-mechanic explanations exposed to their dashboard. The `audience` array filter at the read layer (`$audience = ANY(audience)`) makes the split mechanical.
+
+### Decision I — Conventional-commits PR title length: per-PR titles trimmed by hand
+
+Day 39 codified the conventional-commits CI gate that caps PR titles at ~100 chars. Day-42's three PR titles (`feat(marketing): ... (§26.1 Day 9, part 1 of 3)`) were all hand-tuned to fit. Confirmation: CI's "PR title is Conventional Commits" check passed on all three without rewrites. **Pattern continues:** every PR title trimmed at author time.
+
+### Consequences
+
+- **§26.1 Day 9 marketing pages = SHIPPED.** Apex + /features + /pricing + /contact + /legal/changelog all live; production build prerenders all 5 routes as static (`○`).
+- **Sprint 4 §26.1 plan is now ~80% shipped.** Days 1-2 (attendees) ✓, 3-4 (check-in) ✓, 5 (sales dashboard) ✓, 6 (super-admin revenue) ✓, 7-8 (refund flow) ✓, **9 (marketing pages) ✓ today**. Day 10 (launch readiness — AUP review, first paying tenant, prod EC2 cutover) remains.
+- **Migration ladder advances to 0018.** Drizzle migration count on staging: was 16 post-Day-41, now 18 post-Day-42 (0017 contact + 0018 changelog).
+- **Build-time-fetch-failure-tolerance pattern is canonical for marketing/public-facing Server Components.** Future fetch-from-api pages clone the `lib/legal.ts` shape (`isBuildPhase` + `logFetchFailure` + try/catch with empty fallback).
+- **Pricing-page drift-guard test is the canonical pattern for cross-workspace money-math mirrors.** When a workspace needs to reproduce arithmetic from `fee-calculator.ts` for display purposes, mirror the math + pin both sides to hand-computed canonical values via a test in the consuming workspace.
+- **`dangerouslySetInnerHTML` in this project goes through `renderLegalMarkdown` + Decision J always.** Adding a new sanitizer (DOMPurify, etc.) is forbidden without a decisions.md entry that supersedes Decision J.
+- **The contact-form honeypot + rate-limit pattern is canonical for any future public-write endpoint** (event reports, security disclosure, etc.). Three layers: hidden honeypot + per-IP rate limit + zod payload validation; honeypot returns success-shaped envelope (silent reject); rate limit returns 429.
+- **Multi-PR-touching-same-schema-file pattern:** rebase the second/third PR manually, never trust auto-merge for schema-file end-of-file appends. Document the resolution in the PR body.
+
+### Pointers
+
+- PR #244 `2cff5fb` — `feat(marketing): apex home + /features + /pricing pages (§26.1 Day 9, part 1 of 3)`
+- PR #245 `bbf6730` — `feat(marketing): /contact page + form + API endpoint (§26.1 Day 9, part 2 of 3)`
+- PR #246 `6ff4f9b` — `feat(marketing): /legal/changelog + v1.0 seed (§26.1 Day 9, part 3 of 3)`
+- Drift guard — `apps/web/src/app/(public)/pricing/pricing.test.ts`
+- Honest copy strings (still load-bearing) — `docs/copy/bkash-only-launch.md`
+- Trust-model rationale — `decisions.md` 2026-05-19 "Items 14+15 Trust Center scaffolding — Decision J"
+- Hotfix gotcha — drizzle's `sql\`ANY(${[...emails]})\`` produces tuple syntax; use `inArray()`. Codified in gotchas.md.
+
+---
+
 ## 2026-06-01 · Day 41 EOD — Sprint 4 §26.1 Day 7-8 refund flow SHIPPED v1.0 + CW CPU alarm + MAIL_DRY_RUN=0 staging flip
 
 ### Context
