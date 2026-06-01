@@ -922,7 +922,24 @@ export const refunds = pgTable(
       .notNull()
       .references(() => users.id),
     status: text().notNull().default('pending'),
+    // Day 41 Sprint 4 — approval workflow columns (migration 0016).
+    // Lifecycle: pending → approved → processed (happy path);
+    //            pending → rejected (decline path).
+    // approved_at + rejected_at are mutually exclusive by CHECK
+    // refunds_approve_reject_exclusive_chk.
+    approvedBy: uuid('approved_by').references(() => users.id),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    rejectedBy: uuid('rejected_by').references(() => users.id),
+    rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+    processedBy: uuid('processed_by').references(() => users.id),
     processedAt: timestamp('processed_at', { withTimezone: true }),
+    // Categorical reason taxonomy (existing `reason` column stays as
+    // the free-text justification). Default 'tenant_requested'
+    // matches the Day 41 default service path; Phase 2b
+    // markDisputedOrderRefunded callers are backfilled to
+    // 'disputed_manual' in migration 0016.
+    reasonCode: text('reason_code').notNull().default('tenant_requested'),
+    superAdminNotes: text('super_admin_notes'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -931,7 +948,17 @@ export const refunds = pgTable(
       'refunds_status_chk',
       sql`${t.status} IN ('pending','approved','rejected','processed','failed')`,
     ),
+    check(
+      'refunds_reason_code_chk',
+      sql`${t.reasonCode} IN ('tenant_requested','disputed_manual','reconciliation_correction','other')`,
+    ),
+    check(
+      'refunds_approve_reject_exclusive_chk',
+      sql`NOT (${t.approvedAt} IS NOT NULL AND ${t.rejectedAt} IS NOT NULL)`,
+    ),
     index('idx_refunds_order').on(t.orderId, t.createdAt),
+    index('idx_refunds_status_created').on(t.status, t.createdAt),
+    index('idx_refunds_tenant_status').on(t.tenantId, t.status),
   ],
 )
 

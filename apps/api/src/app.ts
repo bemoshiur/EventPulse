@@ -16,6 +16,7 @@ import { feeConfigRoutes } from './routes/super-admin/fee-config.js'
 import { adminKycRoutes } from './routes/super-admin/kyc.js'
 import { adminLegalRoutes } from './routes/super-admin/legal.js'
 import { adminOrdersRoutes } from './routes/super-admin/orders.js'
+import { adminRefundsRoutes } from './routes/super-admin/refunds.js'
 import { adminRevenueRoutes } from './routes/super-admin/revenue.js'
 import { adminTicketTiersRoutes } from './routes/super-admin/ticket-tiers.js'
 import { accountTypeRoutes } from './routes/tenant/account-type.js'
@@ -26,6 +27,7 @@ import { kycDraftRoutes } from './routes/tenant/kyc-drafts.js'
 import { kycRoutes } from './routes/tenant/kyc.js'
 import { meRoutes } from './routes/tenant/me.js'
 import { tenantReportsRoutes } from './routes/tenant/reports.js'
+import { tenantOrderRefundRoutes, tenantRefundRoutes } from './routes/tenant/refunds.js'
 import { tenantTicketTiersRoutes } from './routes/tenant/ticket-tiers.js'
 
 /**
@@ -168,6 +170,12 @@ export function createApp() {
   // an unscoped SUM accidentally crossing tenants would leak
   // another tenant's revenue.
   app.route('/api/v1/tenant/reports', tenantReportsRoutes)
+  // Day 41 Sprint 4 refund-flow routes per §10.2 + §26.1 Day 7-8.
+  // Tenant-initiated refund request mounts under /tenant/orders/:id/refund;
+  // listing + detail live under /tenant/refunds. Two routers because the
+  // spec spreads the routes across two top-level namespaces.
+  app.route('/api/v1/tenant/orders', tenantOrderRefundRoutes)
+  app.route('/api/v1/tenant/refunds', tenantRefundRoutes)
 
   // Super admin routes — Sprint 2 Day 18 Item 13 + Day 19 Item 15.
   // Mounted under /api/v1/admin/* per §10.4. requireSuperAdminAuth
@@ -206,6 +214,12 @@ export function createApp() {
   // posture: lightweight endpoint only; React UI follow-up deferred
   // per Day 38 Phase 2 sub-decision A.
   app.route('/api/v1/admin/orders', adminOrdersRoutes)
+  // Day 41 Sprint 4 super-admin refund-flow routes per §10.4 + §26.1 Day 7-8:
+  // queue + detail + approve/reject/mark-processed. Tenant-initiated refund
+  // requests land in the pending queue here for super-admin review. The
+  // actual EPS refund happens out-of-band via the merchant dashboard
+  // between approve and mark-processed (§11.4 — V5 has no public refund API).
+  app.route('/api/v1/admin/refunds', adminRefundsRoutes)
 
   return app
 }
