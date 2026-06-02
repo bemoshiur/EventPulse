@@ -12,7 +12,10 @@ import { decideAudience, type AudienceGrants } from './audience-grant.js'
 
 const NONE: AudienceGrants = { isSuperAdmin: false, tenantIds: [] }
 const SUPER: AudienceGrants = { isSuperAdmin: true, tenantIds: [] }
-const MEMBER: AudienceGrants = { isSuperAdmin: false, tenantIds: ['11111111-1111-1111-1111-111111111111'] }
+const MEMBER: AudienceGrants = {
+  isSuperAdmin: false,
+  tenantIds: ['11111111-1111-1111-1111-111111111111'],
+}
 
 describe('decideAudience', () => {
   it('always allows attendee regardless of grants', () => {

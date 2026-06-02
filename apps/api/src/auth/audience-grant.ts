@@ -54,8 +54,14 @@ export function decideAudience(
 export async function fetchAudienceGrants(userId: string): Promise<AudienceGrants> {
   return withSuperAdmin(async (db) => {
     const [superRows, tenantRows] = await Promise.all([
-      db.select({ userId: superAdmins.userId }).from(superAdmins).where(eq(superAdmins.userId, userId)),
-      db.select({ tenantId: tenantUsers.tenantId }).from(tenantUsers).where(eq(tenantUsers.userId, userId)),
+      db
+        .select({ userId: superAdmins.userId })
+        .from(superAdmins)
+        .where(eq(superAdmins.userId, userId)),
+      db
+        .select({ tenantId: tenantUsers.tenantId })
+        .from(tenantUsers)
+        .where(eq(tenantUsers.userId, userId)),
     ])
     return {
       isSuperAdmin: superRows.length > 0,
