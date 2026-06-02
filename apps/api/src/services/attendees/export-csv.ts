@@ -84,16 +84,28 @@ export interface ExportAttendeesResult {
   filename: string
 }
 
-// ─── CSV escaping (RFC 4180) ────────────────────────────────────────
+// ─── CSV escaping (RFC 4180 + OWASP formula-injection guard) ───────
 
 const QUOTABLE = /[,"\r\n]/
 
+// Excel + LibreOffice + Sheets evaluate a cell as a formula when the
+// first character is `=` `+` `-` `@`, or a leading TAB / CR. Attendee
+// names are user-controlled — a malicious attendee could register as
+// `=HYPERLINK(...)` and the formula fires when the tenant downloads
+// + opens this CSV in Excel (the UTF-8 BOM we emit opts INTO the
+// spreadsheet renderer rather than plain text). Same fix as PR #258
+// (disbursement-export) — see gotchas.md "CSV exports with UTF-8 BOM
+// + user-controlled cells = formula-injection vector" for the rule.
+// Per OWASP "Failure to Sanitize CSV Output" / CWE-1236.
+const FORMULA_PREFIXES = /^[=+\-@\t\r]/
+
 export function csvEscape(value: string | null | undefined): string {
   if (value == null || value === '') return ''
-  if (QUOTABLE.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`
+  const safe = FORMULA_PREFIXES.test(value) ? `'${value}` : value
+  if (QUOTABLE.test(safe)) {
+    return `"${safe.replace(/"/g, '""')}"`
   }
-  return value
+  return safe
 }
 
 /** Build a CSV row from an array of cell values; never throws on null/undef. */

