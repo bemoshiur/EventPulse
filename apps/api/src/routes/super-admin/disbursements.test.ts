@@ -402,16 +402,17 @@ describeIfDb('GET /api/v1/admin/disbursements/export', () => {
       /^tenant_id,tenant_name,tenant_slug,period_start,period_end,paid_order_count,gross_paisa,platform_fee_paisa,eps_fee_paisa,refunds_paisa,withholding_tax_paisa,net_paisa,currency/,
     )
     const lines = body.trim().split('\n')
-    expect(lines).toHaveLength(3) // header + 2 tenant rows
+    // Header + AT LEAST our 2 fixture rows. Other test files (revenue.
+    // test.ts seeds `recentPaidAt = now - 2h`) may have leftover orders
+    // in the same window — we scope assertions to OUR tenants only.
+    expect(lines.length).toBeGreaterThanOrEqual(3)
 
     // Tenant A row: 3 orders, gross=300000, refunds=20000, net=280000
     const tenantALine = lines.find((l) => l.includes('Disb Tenant A'))
     expect(tenantALine).toBeDefined()
     const aFields = tenantALine!.split(',')
     expect(aFields[5]).toBe('3') // paid_order_count
-    expect(aFields[6]).toBe('100000') // gross (wait — single order is 1_000_00n = 100000 paisa)
-    // Recompute the expected: 3 orders × 1_000_00n = 3_000_00n = 300000 paisa
-    expect(aFields[6]).toBe('300000') // gross_paisa
+    expect(aFields[6]).toBe('300000') // gross_paisa: 3 orders × 100000
     expect(aFields[9]).toBe('20000') // refunds_paisa
     expect(aFields[11]).toBe('280000') // net_paisa (= 300000 − 20000)
 
