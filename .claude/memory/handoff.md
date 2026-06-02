@@ -1,12 +1,12 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-06-02 — **Day 43 EOD** of 47-day Phase 1 MVP runway. **Sprint 4 §26.1 Day 10 launch readiness (build-track half) SHIPPED end-to-end — 5 PRs (§24.4 fully delivered).**
-**LAUNCH TARGET: 2026-06-10** (8 days out — runway healthy; build-track work is closing out).
+**Last update:** 2026-06-02 — **Day 44 EOD** of 47-day Phase 1 MVP runway. **§26.1 Day 10 operator-facing launch artefacts SHIPPED end-to-end — 4 PRs (one with a security review fix bundled + same-class follow-up).**
+**LAUNCH TARGET: 2026-06-10** (8 days out — runway healthy; ALL Claude-Code build-track is closed).
 **Driver:** Claude Code (Opus 4.7).
-**🛑 LOAD-BEARING (carry from Day 42):** Operator set hard ceiling — total monthly AWS spend below **\$30/month** for the project. Every AWS-write STOP-ASK now includes "monthly cost delta + running total" before proceeding. **Live AWS audit Day-42 EOD: current spend ~\$26/month — UNDER ceiling by ~\$4/mo.** Day-43 added zero AWS resources (no AWS-write sessions). **Next AWS-write window: AWS Budget alarm (\$25 actual / \$30 forecast)** — free resource; lands as the structural enforcement of the ceiling.
-**Today's headline:** Day 43 closed the §26.1 Day 10 build-track half via 5 PRs. Resumed from Day-42 EOD pause (PR #252 was mid-CI overnight) — opened with 2 failures (PR title `audit(...)` not in commitlint type-list; runbook prettier regression from PR #251's docs-only-skip). Fixed both via PR #252 follow-up (retitle to `docs(security):...` + runbook prettier). **PR #252** `c49a2c7` security audit + nginx snippets restored to git. **PR #253** `9a0322e` `pnpm audit --prod --audit-level high` CI gate — LIVE (§24.4 first half). **PR #254** `21a48ec` stale TODO sweep — magic-link form finally wired to existing endpoint + KYC JSDoc updated. **PR #255** k6 load-test scaffold (§24.4 second half) — workflow_dispatch-only pending operator baseline. **§24.4 Sprint-4-close fully delivered.** All 3 standing invariants intact across all 4 deploys.
+**🛑 LOAD-BEARING (carry from Day 42):** Operator set hard ceiling — total monthly AWS spend below **\$30/month** for the project. Every AWS-write STOP-ASK now includes "monthly cost delta + running total" before proceeding. **Live AWS audit Day-42 EOD: current spend ~\$26/month — UNDER ceiling by ~\$4/mo.** Day-43 + Day-44 added zero AWS resources (no AWS-write sessions). **Next AWS-write window: AWS Budget alarm (\$25 actual / \$30 forecast)** — free resource; lands as the structural enforcement of the ceiling.
+**Today's headline:** Day 44 picked up the "Day 44 first-thing options" from Day 43 EOD handoff. Two natural buildable items shipped + a security finding + same-class fix. **PR #257** `4af2e26` first-paying-tenant onboarding pack (~388 LOC, 9 sections — initial outreach + 72h nudge + discovery call + partnership terms + welcome 10-step onboarding + day-1 hourly monitoring + comms cadence + "anything goes wrong" matrix + retro). **PR #258** `410356b` disbursement CSV export (~1003 LOC: service + first super-admin audit helper + route + 21 tests; `GET /api/v1/admin/disbursements/export?period_start&period_end[&tenant_id]` bridges manual T+5 disbursement until Sprint 7). Automated security review caught **MEDIUM CWE-1236 CSV Formula Injection** (BOM + user-controlled tenant.name); fixed inline via FORMULA_PREFIXES guard + 12 unit tests. **PR #259** `8053ed2` `memory: codify CSV-formula-injection rule + flag attendee-export same-vuln carry`. **PR #260** attendee-export same-class fix — applied identical guard to Day-32 attendee CSV export + 9 matching tests (from security finding → codified rule → same-day same-class fix in one cycle). All 3 standing invariants intact post-deploy.
 
-**Day 43 AWS billing tally:** ~$0 net new. No AWS-side writes; 4 deploy runs (~$0 — within free tier).
+**Day 44 AWS billing tally:** ~$0 net new. No AWS-side writes; 3 deploy runs (~$0 — within free tier).
 
 **Carryover:** Day 41 closed the Sprint 4 Day 7-8 refund flow + CW CPU 85% alarm + MAIL_DRY_RUN=0 staging flip. Day 40 closed Phase 4 SNS bounce/complaint AWS-side wiring end-to-end. Day 39 closed the legal track entirely (Buyer-Terms-Lite v1.0 live in checkout 2026-06-01T10:32:57Z). Sprint 4 §26.1 plan now **~80% shipped** (Days 1-2 attendees ✓, 3-4 check-in ✓, 5 sales dashboard ✓, 6 super-admin revenue ✓, 7-8 refund flow first-half ✓, **9 marketing pages ✓ today**; Day 10 launch readiness + Day 7-8 second-half manual-disbursement adapters PENDING/DEFERRED).
 
@@ -47,14 +47,41 @@
 | Pvt Ltd target completion (RJSC certificate issued; new Organiser Agreements against Pvt Ltd) | **2026-07-22** outer boundary | PENDING |
 | v2.4 playbook bump backlog update | Pre-launch nice-to-have; post-launch firm | TRACKED |
 
-## ⚠️ TL;DR for next session (Day 43)
+## ⚠️ TL;DR for next session (Day 45)
 
-- **First-thing-tomorrow (Day 44):** All Claude-Code build-track items for §26.1 are now closed. The remaining surface is operator-driven — see Pre-launch tracks table above. Two natural next-picks if operator returns build-track work: (a) re-review the prod-cutover plan against the cost-aware deltas one more time before EPS prod credentials arrive; (b) build an operator-facing first-paying-tenant onboarding-email template (concrete artefact; runbook §5 has the 13-item checklist but the email-to-send draft isn't shipped). Or pick up a Sprint-7 backlog item early if operator wants to get ahead.
-- **Then (Day 44+):** Prod-cutover sub-items as standalone STOP-ASK sessions. Each remaining §17.11 alarm is a ~5-min AWS-write task — ASK-FIRST with monthly cost delta. CloudWatch memory >90%/5min is the natural next-pick after CPU 85% (already on staging). Per the cost-aware §17.11 amendment in launch-readiness runbook §6: staging caps at 2 alarms (CPU + memory); prod gets the full 7-alarm set at cutover.
+- **First-thing-tomorrow (Day 45):** All Claude-Code build-track items for §26.1 + operator-launch artefacts are now closed. The remaining surface is operator-driven — see Pre-launch tracks table. If operator returns build-track work, candidate items: (a) sliding-window rate-limiter migration to fix the pre-existing flaky `eps.test.ts` IP rate-limit test (filed Day-44; mechanical refactor + clock-injection); (b) operator-facing super-admin UI button that calls the Day-44 disbursement export endpoint (currently endpoint exists but operator hits via curl/browser); (c) pick up a Sprint-7 backlog item early (e.g. `tenant_payout_accounts` schema + RLS) if operator wants to get ahead. Or sit at zero-build until EPS prod creds arrive.
+- **Then (Day 45+):** Prod-cutover sub-items as standalone STOP-ASK sessions. Each remaining §17.11 alarm is a ~5-min AWS-write task — ASK-FIRST with monthly cost delta. CloudWatch memory >90%/5min is the natural next-pick after CPU 85% (already on staging). Per the cost-aware §17.11 amendment in launch-readiness runbook §6: staging caps at 2 alarms (CPU + memory); prod gets the full 7-alarm set at cutover.
 - **EPS prod credentials arrival:** still external clock. When credentials land, BDT-100 production smoke per `docs/runbooks/production-smoke.md` runs as its own gated session. Precondition #2 (`eventpulse/prod/eps`) already SATISFIED.
 - **k6 baseline (operator-action):** `gh workflow run "Load test (k6 staging)" -f base_url=https://api.staging.eventpulse.com.bd` → read summary p95s → write to `infra/load-tests/budgets.json` → flip `load-test.yml` trigger to `pull_request`. After that, every PR enforces the §24.4 "p95 regress > 20%" gate.
 
-## ⚠️ Day 43 deliverables shipped (this session)
+## ⚠️ Day 44 deliverables shipped (this session)
+
+- **PR #257 `docs(ops): first paying tenant onboarding pack — operator-runnable`** merged as `4af2e26`:
+  - 9 sections (~388 LOC) operationalising the §5 13-item checklist from launch-readiness.md
+  - Initial outreach + 72h nudge + discovery-call agenda with notes template + partnership-terms one-pager with Path-B novation acknowledgement + welcome 10-step onboarding email + day-1-of-sales monitoring hourly template + comms cadence + "anything goes wrong" matrix + retro template
+  - Drafts ready for operator review; tenant-specific personalisation via `{{placeholders}}`
+- **PR #258 `feat(admin): disbursement CSV export — T+5 manual-bridge until Sprint 7`** merged as `410356b`:
+  - 5 new files (~1003 LOC): service + first super-admin audit helper + route + 9 DB-gated route tests + 12 pure-function csvEscape tests
+  - `GET /api/v1/admin/disbursements/export?period_start=YYYY-MM-DD&period_end=YYYY-MM-DD[&tenant_id=<uuid>]`
+  - Read-only super-admin endpoint; per-tenant aggregate over orders + processed-refunds in window
+  - End-exclusive `[periodStart, periodEnd)` window matching §14.5 cron convention
+  - Money-truth discipline: reads snapshotted columns ONLY (Decision-N pattern from Day-35 revenue dashboard)
+  - Refund deduction inline: sums `refunds.amountPaisa WHERE status='processed' AND processedAt IN window`
+  - Negative-net surfaces as negative number (debit-carry-forward signal)
+  - **Automated security review caught CWE-1236 CSV Formula Injection** on initial csvEscape (BOM + user-controlled tenant.name); fixed inline + 12 unit tests + bundled flake-related test-fix commits
+- **PR #259 `memory: codify CSV-formula-injection rule + flag attendee-export same-vuln carry`** merged as `8053ed2`:
+  - Top-of-log gotchas.md entry establishing the rule
+  - Canonical fix pattern + detection signals + greppable rules
+  - Pre-existing same-vuln in `apps/api/src/services/attendees/export-csv.ts` (Day-32) explicitly flagged for follow-up
+- **PR #260 `fix(attendees-export): CSV formula-injection guard — same-class as PR #258`** (in CI as session closes):
+  - Applies identical FORMULA_PREFIXES guard to attendee-export csvEscape
+  - +9 matching formula-injection tests in existing test file (20 tests total in file; was 11)
+  - **From security finding → codified rule → same-day same-class fix in one cycle**
+- **`decisions.md` 2026-06-02 Day 44 EOD entry** — Decisions A–F codified
+- **`progress.md` Day 44 entry** — §26.1 plan now ~90% shipped (all build-track closed)
+- **`handoff.md`** — rewritten to Day 44 EOD state (this file)
+
+## ⚠️ Day 43 deliverables shipped (carryover record)
 
 - **PR #252 `docs(security): pre-cutover security checklist sweep — Day 42 staging audit`** merged as `c49a2c7`:
   - 225-line audit findings doc at `docs/audits/security-checklist-2026-06-01.md` covering 6 categories (auth/authz, money, data, webhooks, transport, compliance) — live SSM + aws CLI + curl audit; PASS w/ 1 operational finding
@@ -116,7 +143,7 @@ main HEAD: <after-hotfix-merge> (target — pending PR #248 merge)
 
 Staging EC2 at HEAD `6ff4f9b`; will advance to hotfix HEAD after PR #248 merges + re-deploys. Migration ladder at 0018. pm2 web + api online + restart counts steady. /health db=ok 11ms. **changelog_entries currently 0 rows on staging** (seed failed); SSM manual re-seed runs after #248 merges and bumps to 9 rows. /legal/changelog page returns 200 but renders empty-state card until then.
 
-## ⚠️ The launch gate state — 12 ✅ RESOLVED items (carryover + Day 42 + Day 43)
+## ⚠️ The launch gate state — 14 ✅ RESOLVED items (carryover + Day 42 + Day 43 + Day 44)
 
 1. ~~EPS sandbox credentials~~ ✅ 2026-05-26
 2. ~~SES out-of-sandbox~~ ✅ 2026-05-31 (case 177899559700777)
@@ -130,6 +157,8 @@ Staging EC2 at HEAD `6ff4f9b`; will advance to hotfix HEAD after PR #248 merges 
 10. ~~§26.1 Day 9 marketing pages (apex + features + pricing + contact + changelog)~~ ✅ 2026-06-01 Day 42
 11. ~~§26.1 Day 10 launch-readiness umbrella runbook + security audit (PASS w/ 1 ops finding fixed) + AUP/Terms host-liability spot check~~ ✅ 2026-06-01 + 2026-06-02 (Day 42 + Day 43)
 12. ~~§24.4 Sprint-4-close CI hardening: `pnpm audit` prod-only HIGH+CRITICAL gate LIVE + k6 load-test scaffold (workflow_dispatch-only pending operator baseline)~~ ✅ 2026-06-02 Day 43
+13. ~~First-paying-tenant operator artefacts: onboarding pack (9 sections) + super-admin disbursement CSV export endpoint~~ ✅ 2026-06-02 Day 44
+14. ~~CSV-formula-injection class CLOSED across both code paths (disbursement + attendees) + rule codified in gotchas.md~~ ✅ 2026-06-02 Day 44
 
 **§29 Open Decisions tracking:**
 
@@ -209,5 +238,9 @@ All amounts paisa. §14.10 Invariant-1 PASS across all 4. The only fully-clean f
 - **k6 load-test gate posture (Day 43):** scaffold lives at `infra/load-tests/`; workflow_dispatch-only pending operator baseline. Once activated (operator runs the workflow, writes p95 to `budgets.json`, flips trigger to `pull_request`), every PR enforces §24.4's "p95 regress > 20%" cap.
 - **Magic-link form trusts API contract (Day 43):** shows "Check your email" on any non-network-error response per the API's anti-enumeration 202-always design. Future client code MUST NOT branch on response body to discriminate account-exists vs not-exists.
 - **JSDoc-TODO validity rule (Day 43 codified):** every TODO comment older than 2 weeks should be re-validated against the actual code. Stale "TODO" comments documenting features that already exist mislead reviewers + lead to false assumptions about system state.
+- **BOM + formula-guard must ship together (Day 44 codified):** any CSV output that emits UTF-8 BOM opts INTO the spreadsheet renderer; without the leading-character formula-prefix guard, user-controlled strings starting with `=` / `+` / `-` / `@` / TAB / CR fire as formulas in Excel/Sheets/LibreOffice. Canonical fix pattern in `apps/api/src/services/admin/disbursement-export.ts:122` + `apps/api/src/services/attendees/export-csv.ts:89`. Future CSV-export PRs that don't include `FORMULA_PREFIXES` get flagged at review. gotchas.md top entry codifies the rule + detection signals.
+- **Bridge-not-engine for Sprint-7-scope artefacts (Day 44 codified):** when Sprint-7-scoped tables/state machines/cron jobs don't exist yet but the operator needs a launch-day artefact, ship a READ-ONLY bridge (CSV export, ad-hoc query, etc.) that consumes the same money-truth-snapshotted columns the Sprint-7 engine will eventually write. The bridge stays as a shadow-reconciliation check when the engine lands. Disbursement export (PR #258) is the canonical example: no `disbursement_batches` writes, no BEFTN format invented, snapshotted columns only.
+- **Same-day same-class fix preferred over deferring (Day 44 codified):** when a gotcha codification surfaces a known same-class vulnerability elsewhere, fix it in the same session unless the fix is genuinely complex. The 20-minute write-+-test cost is negligible against the carry-it-forward operational risk. PR #260 (attendees-export fix) shipped same-day after PR #259's gotcha flagged it.
+- **First super-admin domain audit helper file pattern (Day 44 established):** `apps/api/src/services/audit/admin.ts` joins the one-per-domain convention. Future super-admin endpoint audit helpers belong here. Posture: `actor_type='super_admin'`, `entity_type='platform'` (global action), `tenant_id NULL` (cross-tenant by design), one row per discrete operational event (not per-PII-row).
 - **Method-agnostic-calculator discipline (Day 38).**
 - **Build-time-fetch-failure tolerance pattern (Day 42 codified for lib/changelog; carries forward for any new Server Component fetching the api).**
