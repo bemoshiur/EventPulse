@@ -53,16 +53,17 @@ export function decideAudience(
 /** Fetch a user's audience grants from the DB (super_admins + tenant_users). */
 export async function fetchAudienceGrants(userId: string): Promise<AudienceGrants> {
   return withSuperAdmin(async (db) => {
-    const [superRows, tenantRows] = await Promise.all([
-      db
-        .select({ userId: superAdmins.userId })
-        .from(superAdmins)
-        .where(eq(superAdmins.userId, userId)),
-      db
-        .select({ tenantId: tenantUsers.tenantId })
-        .from(tenantUsers)
-        .where(eq(tenantUsers.userId, userId)),
-    ])
+    // Sequential, NOT Promise.all: withSuperAdmin hands back a single pooled
+    // pg connection, and node-postgres cannot run two queries concurrently
+    // on one connection (the second errors mid-flight). Await in turn.
+    const superRows = await db
+      .select({ userId: superAdmins.userId })
+      .from(superAdmins)
+      .where(eq(superAdmins.userId, userId))
+    const tenantRows = await db
+      .select({ tenantId: tenantUsers.tenantId })
+      .from(tenantUsers)
+      .where(eq(tenantUsers.userId, userId))
     return {
       isSuperAdmin: superRows.length > 0,
       tenantIds: tenantRows.map((r) => r.tenantId),
