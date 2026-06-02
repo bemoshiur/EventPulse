@@ -48,9 +48,16 @@
  * Backed by the composite index on audit_logs(entity_type, entity_id,
  * actor_id) added in migration 0007.
  *
- * Subdomain provisioning on approve: TODO-stubbed per Day 18 brief
- * §2.5; the route fires the approval notification stub but does NOT
- * call SSM for Nginx vhost generation (Item 16 / Day 20).
+ * Subdomain provisioning on approve: WIRED (Sprint 3 Day 22 Workstream 2,
+ * Decision O.1 — wildcard cert + wildcard DNS, no per-tenant certbot).
+ * The approve path fires `provisionTenantSubdomain()` fire-and-forget
+ * after the audit + transition tx commits; the provisioner records its
+ * own audit row (success or failure) and updates
+ * `tenants.subdomain_provisioned_at`. KYC is the contract;
+ * provisioning is the operational layer; provisioning failures leave
+ * the tenant `kyc_status='approved'` and surface via the
+ * super-admin queue's "approved but provisioning failed" marker
+ * (`audit_logs.action='tenant.subdomain_provisioning_failed'`).
  */
 
 import { Hono } from 'hono'
