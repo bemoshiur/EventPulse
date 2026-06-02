@@ -4,6 +4,90 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-02 · Day 45 (execution) — Prod EC2 cutover sub-item #1 + #4 + #6 done; clean-scripted-build path; 3 script bugs fixed
+
+### Context
+
+After confirming EPS prod creds (see entry below), the session executed the production EC2 cutover ceremony. Operator chose the **clean-scripted-build** path (write reproducible IaC for the OS stack rather than golden-AMI-from-staging) — the right call for a money + KYC-PII box: no inherited staging state, auditable, recreatable. Prod box launched + provisioned + verified; the deploy OIDC role (#4) and KYC bucket (#6) also landed (operator chose to do the two no-merge-needed steps in parallel). Full resource inventory in handoff.md.
+
+### Decision A — Clean scripted build, mirroring staging's *real* stack (not §17.3's claims)
+
+`infra/scripts/provision-prod.sh` (new) codifies the OS stack that was never committed (the §17.3 `infra/ansible/` playbook does not exist in-repo). Stack captured from the live staging box via read-only SSM probe. Mirrored divergences from §17.3, intentionally: Node system-wide (not nvm), Redis 8 (not 7), certbot snap (not apt), ufw inactive (SG is the firewall), CW agent not installed (default metrics; mem/disk alarms need it at #8). Reproduces the exact 3-role Postgres model with a self-check that fails the run on any RLS-bypass-unsafe role attribute. `bootstrap-prod.sh` (new) mirrors bootstrap-staging.sh with the current org + `eventpulse/prod` secrets + `.env.production` + a per-box `.eventpulse-env` marker that `deploy.sh` now reads (backward-compatible).
+
+### Decision B — Cutover ordering corrected: KMS CMKs before IAM + instance
+
+The runbook numbered KMS as #6 (after #1c/#1d), but the prod IAM policy references KMS key ARNs AND the instance's EBS is encrypted with the general CMK — so KMS must come first. Created 2 fresh prod CMKs (`alias/eventpulse-prod` + `alias/eventpulse-kyc-prod`, rotation on) before the IAM role + instance. Future cutovers / env-recreations: KMS first.
+
+### Decision C — Secrets Manager: per-purpose (not consolidated), because decommission-staging makes it cost-neutral
+
+Earlier plan floated consolidating prod app secrets into `eventpulse/prod/all`. Revised: since staging is decommissioned at launch, prod's per-purpose secrets simply replace staging's (~7 secrets, cost-neutral). Mirroring staging's per-purpose layout keeps `bootstrap-prod.sh` a clean low-risk clone. `database` (provision-created) + `eps` (pre-existing) stay standalone; jwt-* auto-created by bootstrap; oauth/kyc/porichoy populated by their own scripts/operator.
+
+### Decision D — Three latent script bugs codified as fixes (PR #262)
+
+All three only fire on the prod/recreate path (staging took the other branch). Full detail in gotchas.md top entry. Summary:
+
+1. provision-prod.sh installs AWS CLI v2 (fresh Ubuntu 24.04 has none; SSM agent ≠ aws CLI).
+2. setup-github-oidc.sh: `GH_ENVIRONMENT` decouples the workflow's `environment: name:` (prod = `production`) from the role/file suffix (`prod`); + python3/`tr` replace bash-4 `${VAR^}`/`${VAR^^}` for macOS bash 3.2.
+3. setup-kyc-bucket.sh: `render_template` must `export` vars — `envsubst` (child) only sees exported vars, while the `${!v}` guard sees non-exported ones (false confidence → empty KMSMasterKeyID).
+
+**FLAG (open):** staging `eventpulse-kyc-staging` bucket encryption may have the same latent miss (empty key → SSE-S3/aws-managed fallback) — verify before relying on staging KYC encryption. Low urgency (staging test-only + slated for decommission).
+
+### Decision E — Prod deploy role is created but deploys stay OFF until ready
+
+`eventpulse-deploy-prod` trust = `environment:production` + `deploy-prod.yml@refs/heads/prod` + SSM dual-ARN (verified, matches §17.9.1). GH secrets `AWS_OIDC_ROLE_PROD` + `PROD_EC2_INSTANCE_ID` set. `PROD_DEPLOY_ENABLED` deliberately left unset — and `deploy-prod.yml` lives on `main` not the `prod` branch yet, so real CI deploys need #7 (prod-branch ff-merge) first. The #1e first deploy runs via SSM directly, not via this role.
+
+### Consequences
+
+- Cutover sub-item #1 (prod EC2) DONE + verified; #4 + #6 DONE. #1e-app BLOCKED on PR #262 merge.
+- Running AWS spend ~$45/mo (overlap); settles ~$26-28 after staging decommission (post-smoke).
+- 3 infra scripts are now prod-ready + more portable + more robust for any future env recreation.
+
+### Pointers
+
+- PR #262 (feat/prod-cutover-iac) commits: `b7c7ff1` IaC, `369c2e6` aws-cli, `c0459f7` oidc, `b20ec0d` kyc-render.
+- handoff.md (full resource inventory + next steps), gotchas.md (the 3 bugs), launch-readiness.md §2/§4.
+
+---
+
+## 2026-06-02 · Day 45 — EPS prod creds confirmed (Open #1 CLOSED) + cutover cost-ceiling decision (decommission staging at prod launch)
+
+### Context
+
+Operator returned with "start working — EPS production credentials already added on secret manager." Verified read-only via `aws secretsmanager describe-secret --secret-id eventpulse/prod/eps --profile eventpulse`: secret exists in account 739275468267 (ARN `...secret:eventpulse/prod/eps-eTZqD2`), LastChangedDate **2026-05-31T16:00 (+06)**, described "Event Pulse production EPS credentials. Received from EPS 2026-05-31." Secret VALUE not read (no need — the BDT-100 smoke validates the creds; printing creds violates §1.3 R5 + secret hygiene).
+
+The Day-44 handoff still listed "EPS production credentials arrival" as a pending external-clock blocker (#1). **That was stale** — creds have been present since 2026-05-31.
+
+Creds alone do NOT unblock the BDT-100 smoke: per `launch-readiness.md` §4 the smoke is gated on §1 (creds ✅) + §2 (prod EC2 cutover) + §3 (Phase 4 prod wiring). No production environment exists yet — all infra is the staging box (`i-02e4fddeb923c14f9`). So the launch critical path is now the production EC2 cutover ceremony (8 sub-items), then the smoke.
+
+### Decision A — Open #1 (EPS production credentials) CLOSED
+
+EPS production credentials confirmed present in Secrets Manager at `eventpulse/prod/eps` (account 739275468267), received 2026-05-31. `launch-readiness.md` §1 transitions PENDING → DONE. This was the last external-clock launch blocker; all remaining launch work is operator-led infra cutover + the gated smoke.
+
+### Decision B — Cutover cost-ceiling stance: decommission staging at prod launch
+
+The prod cutover at cost-aware defaults projects ~$43-45/mo (prod t3.small +$15 on top of current ~$26/mo), over the $30/mo hard ceiling (standing constraint). Operator chose: **decommission staging when prod launches.** Prod replaces staging; steady-state returns to ~$26/mo, under ceiling.
+
+Implications:
+
+- Staging is NOT torn down until prod is fully cut over AND the BDT-100 smoke passes (staging is the only working env until then). A transient overlap (~$41/mo) is expected during cutover week — bounded + intentional; the budget alarm WILL fire on it and that is correct/expected behaviour, resolving when staging is decommissioned.
+- AWS Budget alarm thresholds stay **$25 (actual) / $30 (forecast)**. Notifications to `moshiur@publicpulse.com.bd`.
+- Post-launch: a cheap staging env can be recreated on demand (`bootstrap-staging.sh`) if needed; not maintained always-on for MVP.
+- **Staging decommission becomes a NEW explicit cutover step**, appended after smoke-pass.
+
+### Consequences
+
+- Launch critical path = production EC2 cutover ceremony (8 STOP-ASK sub-items per `launch-readiness.md` §2) → Phase 4 prod wiring (§3) → BDT-100 smoke (§4) → first-paying-tenant onboarding (§5) → staging decommission.
+- First AWS-write this session: AWS Budget alarm (free; ~$0 cost delta; running total stays ~$26/mo).
+- §29 Open Decisions unchanged. No legal blockers remain.
+
+### Pointers
+
+- Secret: `arn:aws:secretsmanager:ap-southeast-1:739275468267:secret:eventpulse/prod/eps-eTZqD2` (LastChanged 2026-05-31)
+- `launch-readiness.md` §1 (now DONE), §2 (cutover), §4 (smoke), §6 (cost ceiling)
+- Supersedes the Day-44 handoff "EPS prod credentials — still external clock" framing
+
+---
+
 ## 2026-06-02 · Day 44 EOD — Operator-facing launch artefacts + security-fixed disbursement bridge (4 PRs)
 
 ### Context
