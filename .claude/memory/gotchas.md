@@ -4,6 +4,28 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## 🔴 Login trusted a client-supplied `audience` → privilege escalation + cross-tenant (Day 45 / PR #267)
+
+**Symptom.** Found while setting up a super-admin for the prod smoke: `/api/v1/auth/password/login` (and `/magic-link/consume`) read `audience` straight from the request body and minted the session with it — **no `super_admins` / `tenant_users` membership check**. `requireSuperAdminAuth` only checks `aud === 'super-admin'`. So any user who can log in could:
+
+- pass `audience: 'super-admin'` → full `/api/v1/admin/*` (all tenants' KYC PII, fee overrides, disbursements), or
+- pass `audience: 'tenant'` + ANY `tenantId` → another tenant's data via RLS (the JWT's tenant_id scopes the session).
+
+Signup is open + public, so anyone could sign up → escalate. Prod was live + public (0 data at the time, so not yet a breach).
+
+**Why it happened.** Auth was shipped early-stage ("accept any valid JWT … tighten in Day 9-10" comment in `middleware.ts`); the audience-grant enforcement was never added. The client was trusted for a security-critical claim.
+
+**Fix.** `apps/api/src/auth/audience-grant.ts`: `decideAudience` (pure) + `fetchAudienceGrants` (DB). Both login handlers now fetch grants + decide, returning **403** on denial. super-admin requires a `super_admins` row; tenant requires `tenant_users` membership for that tenantId; super-admin does NOT auto-grant tenant access.
+
+**How to avoid.** NEVER derive a session's audience/privilege from client input. The server resolves it from the user's actual grants. Any new audience/role/scope param on an auth endpoint needs a server-side membership check + a negative test (self-grant → 403).
+
+### Two sub-gotchas surfaced fixing it
+
+1. **`Promise.all` of two queries on ONE `withSuperAdmin` connection fails.** `withSuperAdmin` hands back a single pooled pg client; node-postgres can't run concurrent queries on one connection (the second errors mid-flight) → `fetchAudienceGrants` threw → login 500. **Await the queries sequentially** inside a single `withSuperAdmin`. (Same applies to `withTenant`.)
+2. **vitest's 5000ms default timeout flakes argon2-heavy integration tests.** A password-login test does TWO argon2 ops (signup hash + login verify, ~2.5s each on CI) + DB → ~5.3s → timed out. The magic-link path (one argon2) passed. Raised `apps/api/vitest.config.ts` `testTimeout` to 20000. Any test doing ≥2 argon2 ops needs headroom.
+
+---
+
 ## Three prod-cutover infra-script bugs that only fire on the prod/recreate path (Day 45 / PR #262)
 
 The clean-scripted-build prod cutover (Day 45) exercised three scripts on a fresh box / reuse path that staging never hit. All three passed on staging by luck of which branch they took; all three broke on prod. Caught + fixed pre/mid-run; fixes in PR #262.
