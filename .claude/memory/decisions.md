@@ -4,6 +4,45 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-02 · Day 45 — EPS prod creds confirmed (Open #1 CLOSED) + cutover cost-ceiling decision (decommission staging at prod launch)
+
+### Context
+
+Operator returned with "start working — EPS production credentials already added on secret manager." Verified read-only via `aws secretsmanager describe-secret --secret-id eventpulse/prod/eps --profile eventpulse`: secret exists in account 739275468267 (ARN `...secret:eventpulse/prod/eps-eTZqD2`), LastChangedDate **2026-05-31T16:00 (+06)**, described "Event Pulse production EPS credentials. Received from EPS 2026-05-31." Secret VALUE not read (no need — the BDT-100 smoke validates the creds; printing creds violates §1.3 R5 + secret hygiene).
+
+The Day-44 handoff still listed "EPS production credentials arrival" as a pending external-clock blocker (#1). **That was stale** — creds have been present since 2026-05-31.
+
+Creds alone do NOT unblock the BDT-100 smoke: per `launch-readiness.md` §4 the smoke is gated on §1 (creds ✅) + §2 (prod EC2 cutover) + §3 (Phase 4 prod wiring). No production environment exists yet — all infra is the staging box (`i-02e4fddeb923c14f9`). So the launch critical path is now the production EC2 cutover ceremony (8 sub-items), then the smoke.
+
+### Decision A — Open #1 (EPS production credentials) CLOSED
+
+EPS production credentials confirmed present in Secrets Manager at `eventpulse/prod/eps` (account 739275468267), received 2026-05-31. `launch-readiness.md` §1 transitions PENDING → DONE. This was the last external-clock launch blocker; all remaining launch work is operator-led infra cutover + the gated smoke.
+
+### Decision B — Cutover cost-ceiling stance: decommission staging at prod launch
+
+The prod cutover at cost-aware defaults projects ~$43-45/mo (prod t3.small +$15 on top of current ~$26/mo), over the $30/mo hard ceiling (standing constraint). Operator chose: **decommission staging when prod launches.** Prod replaces staging; steady-state returns to ~$26/mo, under ceiling.
+
+Implications:
+
+- Staging is NOT torn down until prod is fully cut over AND the BDT-100 smoke passes (staging is the only working env until then). A transient overlap (~$41/mo) is expected during cutover week — bounded + intentional; the budget alarm WILL fire on it and that is correct/expected behaviour, resolving when staging is decommissioned.
+- AWS Budget alarm thresholds stay **$25 (actual) / $30 (forecast)**. Notifications to `moshiur@publicpulse.com.bd`.
+- Post-launch: a cheap staging env can be recreated on demand (`bootstrap-staging.sh`) if needed; not maintained always-on for MVP.
+- **Staging decommission becomes a NEW explicit cutover step**, appended after smoke-pass.
+
+### Consequences
+
+- Launch critical path = production EC2 cutover ceremony (8 STOP-ASK sub-items per `launch-readiness.md` §2) → Phase 4 prod wiring (§3) → BDT-100 smoke (§4) → first-paying-tenant onboarding (§5) → staging decommission.
+- First AWS-write this session: AWS Budget alarm (free; ~$0 cost delta; running total stays ~$26/mo).
+- §29 Open Decisions unchanged. No legal blockers remain.
+
+### Pointers
+
+- Secret: `arn:aws:secretsmanager:ap-southeast-1:739275468267:secret:eventpulse/prod/eps-eTZqD2` (LastChanged 2026-05-31)
+- `launch-readiness.md` §1 (now DONE), §2 (cutover), §4 (smoke), §6 (cost ceiling)
+- Supersedes the Day-44 handoff "EPS prod credentials — still external clock" framing
+
+---
+
 ## 2026-06-02 · Day 44 EOD — Operator-facing launch artefacts + security-fixed disbursement bridge (4 PRs)
 
 ### Context
