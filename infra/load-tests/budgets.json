@@ -1,0 +1,19 @@
+{
+  "_description": "Per-endpoint p95 + error rate budgets for the load-test gate. p95_ms = 0 means 'no baseline yet — fail open'; the workflow's check step detects this and emits a ::warning:: instead of failing the PR. Once the operator runs a baseline (see README.md), update the values + flip load-test.yml's trigger to pull_request.",
+  "events_list": {
+    "p95_ms": 0,
+    "error_rate_pct": 0.0,
+    "throughput_rps_target": 14
+  },
+  "changelog": {
+    "p95_ms": 0,
+    "error_rate_pct": 0.0,
+    "throughput_rps_target": 6
+  },
+  "_thresholds_per_24_4": {
+    "_description": "CLAUDE.md §24.4 — 'fail PR if p95 regresses > 20%'. Mapping:",
+    "p95_regression_max_pct": 20,
+    "error_rate_absolute_increase_max_pct": 0.5,
+    "throughput_drop_max_pct": 5
+  }
+}
