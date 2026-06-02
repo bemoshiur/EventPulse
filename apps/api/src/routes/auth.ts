@@ -20,6 +20,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 
+import { decideAudience, fetchAudienceGrants } from '../auth/audience-grant.js'
 import { hashPassword, verifyPassword } from '../auth/hash.js'
 import { signTokens } from '../auth/jwt.js'
 import { consumeMagicLink, requestMagicLink, type MagicLinkPurpose } from '../auth/magic-link.js'
@@ -106,6 +107,16 @@ auth.post('/password/login', zValidator('json', loginSchema), async (c) => {
     return c.json(
       { error: { code: 'VALIDATION_ERROR', message: 'tenantId required for tenant audience' } },
       400,
+    )
+  }
+  // Audience-grant authority: never trust the client's requested audience.
+  // super-admin requires a super_admins row; tenant requires tenant_users
+  // membership for the requested tenantId (Day-45 critical auth fix).
+  const grant = decideAudience(audience, await fetchAudienceGrants(user.id), input.tenantId)
+  if (!grant.allowed) {
+    return c.json(
+      { error: { code: 'FORBIDDEN', message: grant.reason ?? 'audience not granted' } },
+      403,
     )
   }
   const { token } = await createSession({
@@ -210,6 +221,15 @@ auth.post('/magic-link/consume', zValidator('json', magicConsumeSchema), async (
   await markEmailVerified(user.id)
 
   const audience = input.audience as SessionAudience['audience']
+  // Audience-grant authority (Day-45 critical auth fix): same enforcement as
+  // /password/login — the magic-link path must not trust the client audience.
+  const grant = decideAudience(audience, await fetchAudienceGrants(user.id), input.tenantId)
+  if (!grant.allowed) {
+    return c.json(
+      { error: { code: 'FORBIDDEN', message: grant.reason ?? 'audience not granted' } },
+      403,
+    )
+  }
   const { token } = await createSession({
     userId: user.id,
     audience,

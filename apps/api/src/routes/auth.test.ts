@@ -9,8 +9,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createApp } from '../app.js'
 import { resetPool, withSuperAdmin } from '../db/client.js'
-import { users } from '../db/schema/index.js'
-import { eq } from 'drizzle-orm'
+import { superAdmins, tenantUsers, tenants, users } from '../db/schema/index.js'
+import { eq, inArray } from 'drizzle-orm'
 
 const HAS_DB = Boolean(process.env['DATABASE_URL'])
 const describeIfDb = HAS_DB ? describe : describe.skip
@@ -18,7 +18,22 @@ const describeIfDb = HAS_DB ? describe : describe.skip
 describeIfDb('auth routes (integration)', () => {
   const app = createApp()
   const cleanup: string[] = []
+  const userIdCleanup: string[] = []
+  const tenantIdCleanup: string[] = []
   const stamp = Date.now()
+
+  // Signup helper: returns the created user's id + records it for cleanup.
+  async function signup(email: string, fullName = 'Grant Test'): Promise<string> {
+    cleanup.push(email)
+    const res = await app.request('/api/v1/auth/password/signup', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password: 'correcthorse123', fullName }),
+    })
+    const body = (await res.json()) as { data: { user: { id: string } } }
+    userIdCleanup.push(body.data.user.id)
+    return body.data.user.id
+  }
 
   beforeAll(() => {
     process.env['JWT_ACCESS_SECRET'] = 'a'.repeat(64)
@@ -28,13 +43,20 @@ describeIfDb('auth routes (integration)', () => {
   })
 
   afterAll(async () => {
-    if (cleanup.length > 0) {
-      await withSuperAdmin(async (db) => {
-        for (const email of cleanup) {
-          await db.delete(users).where(eq(users.email, email))
-        }
-      })
-    }
+    await withSuperAdmin(async (db) => {
+      // FK order: tenant_users + super_admins reference users; tenants is referenced
+      // by tenant_users. Delete children before parents.
+      if (userIdCleanup.length > 0) {
+        await db.delete(tenantUsers).where(inArray(tenantUsers.userId, userIdCleanup))
+        await db.delete(superAdmins).where(inArray(superAdmins.userId, userIdCleanup))
+      }
+      if (tenantIdCleanup.length > 0) {
+        await db.delete(tenants).where(inArray(tenants.id, tenantIdCleanup))
+      }
+      for (const email of cleanup) {
+        await db.delete(users).where(eq(users.email, email))
+      }
+    })
     await resetPool()
   })
 
@@ -176,5 +198,88 @@ describeIfDb('auth routes (integration)', () => {
       body: JSON.stringify({ token: data.session.token }),
     })
     expect(logoutRes.status).toBe(200)
+  })
+
+  // ─── audience-grant enforcement (Day-45 critical auth fix) ──────────────
+  // Login/consume must NOT trust a client-supplied audience: super-admin
+  // requires a super_admins row; tenant requires a tenant_users row for that
+  // tenantId. Negatives below fail (return 200) against the pre-fix code.
+
+  it('login with audience=super-admin for a NON-super-admin user → 403', async () => {
+    const email = `grant-sa-neg-${stamp}@test.local`
+    await signup(email)
+    const res = await app.request('/api/v1/auth/password/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password: 'correcthorse123', audience: 'super-admin' }),
+    })
+    expect(res.status).toBe(403)
+  })
+
+  it('login with audience=super-admin for a super_admins member → 200', async () => {
+    const email = `grant-sa-pos-${stamp}@test.local`
+    const userId = await signup(email)
+    await withSuperAdmin(async (db) => {
+      await db.insert(superAdmins).values({ userId })
+    })
+    const res = await app.request('/api/v1/auth/password/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password: 'correcthorse123', audience: 'super-admin' }),
+    })
+    expect(res.status).toBe(200)
+  })
+
+  it('login with audience=tenant for a tenant the user is NOT a member of → 403', async () => {
+    const email = `grant-tn-neg-${stamp}@test.local`
+    await signup(email)
+    const res = await app.request('/api/v1/auth/password/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        password: 'correcthorse123',
+        audience: 'tenant',
+        tenantId: '99999999-9999-9999-9999-999999999999',
+      }),
+    })
+    expect(res.status).toBe(403)
+  })
+
+  it('login with audience=tenant for a tenant the user IS a member of → 200', async () => {
+    const email = `grant-tn-pos-${stamp}@test.local`
+    const userId = await signup(email)
+    const tenantId = await withSuperAdmin(async (db) => {
+      const [t] = await db
+        .insert(tenants)
+        .values({ name: 'Grant Test Tenant', slug: `agtest-${stamp}` })
+        .returning({ id: tenants.id })
+      await db.insert(tenantUsers).values({ tenantId: t!.id, userId, role: 'owner' })
+      return t!.id
+    })
+    tenantIdCleanup.push(tenantId)
+    const res = await app.request('/api/v1/auth/password/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password: 'correcthorse123', audience: 'tenant', tenantId }),
+    })
+    expect(res.status).toBe(200)
+  })
+
+  it('magic-link consume with audience=super-admin for a NON-super-admin → 403', async () => {
+    const email = `grant-magic-${stamp}@test.local`
+    await signup(email)
+    const reqRes = await app.request('/api/v1/auth/magic-link/request', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, purpose: 'signin' }),
+    })
+    const reqBody = (await reqRes.json()) as { data: { _debug_token: string } }
+    const res = await app.request('/api/v1/auth/magic-link/consume', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: reqBody.data._debug_token, audience: 'super-admin' }),
+    })
+    expect(res.status).toBe(403)
   })
 })
