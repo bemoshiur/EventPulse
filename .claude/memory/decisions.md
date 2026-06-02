@@ -4,6 +4,41 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-02 · Day 45 (go-live) — Production PUBLICLY LIVE: #1e-app deployed + #2 DNS + #3 cert
+
+### Context
+
+Operator merged PR #262 + #263, then directed "continue working" + chose "go public now." Completed the cutover through to a publicly-serving production environment.
+
+### What shipped
+
+- **#1e-app:** generated a prod GitHub deploy key (`eventpulse-prod-deploy-key`, read-only, new org) → ran `bootstrap-prod.sh` (checkout main, `.env.production`, `.eventpulse-env=production`, prod vhost symlink, pm2) → **first prod deploy** `deploy.sh main` (build + migrate + seed + pm2). Verified: pm2 web+api online, `/health` db=ok, **27 tables / 23 RLS-forced**, audit_logs append-only enforced, legal_documents seeded (19).
+- **#2 DNS:** 8 prod A records (apex + www + app + admin + my + api + customers + wildcard) → EIP 52.76.69.96 in zone Z003493917KJX7VCR8ZMR. Apex TXT/SPF/DKIM/DMARC + all `.staging.` records untouched; staging still resolves to 18.141.7.246 (explicit records beat the prod wildcard).
+- **#3 cert:** certbot DNS-01 wildcard cert (`eventpulse.com.bd` + `*.eventpulse.com.bd`), valid → 2026-08-31, auto-renew via snap timer. All public HTTPS endpoints 200; `/health` db=ok.
+
+### Decision F — `bootstrap-prod.sh` must remove the stock nginx default site (4th gotcha, NOT yet codified)
+
+The first `nginx -t` after cert issuance failed: **duplicate `default_server` for :80** — the stock Ubuntu `/etc/nginx/sites-enabled/default` collided with the prod vhost. Fixed live (`rm -f` the default site + reload). bootstrap-prod.sh should `rm -f /etc/nginx/sites-enabled/default` (it already removes the staging vhost). Tracked as a follow-up; non-blocking (running box is fixed). Same class as the other 3 prod-path-only script gaps.
+
+### Decision G — legal/changelog static pages need a post-DNS re-deploy
+
+The first deploy ran pre-DNS, so the Server-Component build-time fetches to `https://api.eventpulse.com.bd/...` failed (tolerated → empty-state per the documented pattern). Now that DNS + API are reachable, a re-deploy repopulates them. Low priority — v0.1 placeholders pending counsel anyway. Tracked.
+
+### Decision H — staging KYC encryption verified CLEAN
+
+Read-only check: `eventpulse-kyc-staging` bucket encryption uses the dedicated CMK (`761fc958…`), not a fallback. The render_template export bug (Decision D / gotchas) did NOT affect staging. Flag cleared; no remediation.
+
+### Consequences
+
+- **Production is publicly live** on `eventpulse.com.bd` behind `STAGING_PAYMENT_BLOCK=1` + `MAIL_DRY_RUN=1` (no tenants/events). Cost ~$45/mo (overlap).
+- Remaining cutover: 2 codify-follow-ups, #8 alarms (+CW agent) / Phase 4 SNS / MAIL_DRY_RUN=0, #7 prod-branch ff-merge, #5 oauth, §7 security sweep, BDT-100 smoke (gated), decommission staging (restores ceiling).
+
+### Pointers
+
+- handoff.md (current state + remaining steps), launch-readiness.md §4 (smoke) / §3 (Phase 4 prod wiring).
+
+---
+
 ## 2026-06-02 · Day 45 (execution) — Prod EC2 cutover sub-item #1 + #4 + #6 done; clean-scripted-build path; 3 script bugs fixed
 
 ### Context
