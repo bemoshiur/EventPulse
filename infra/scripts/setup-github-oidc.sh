@@ -67,7 +67,14 @@
 #                   `prod` for production)
 #   INSTANCE_ID   — EC2 instance id the role can SSM-SendCommand to
 # Optional env:
-#   AWS_REGION    — default ap-southeast-1
+#   AWS_REGION     — default ap-southeast-1
+#   GH_ENVIRONMENT — GitHub deployment-environment name as it appears in the
+#                    workflow's `environment: name:` block (this is what GitHub
+#                    puts in the OIDC `sub` claim). Defaults to ENVIRONMENT.
+#                    MUST be `production` for prod: deploy-prod.yml declares
+#                    `environment: name: production`, NOT `prod`, while the
+#                    role name + workflow filename use `prod`. Mismatch =>
+#                    "Not authorized to perform sts:AssumeRoleWithWebIdentity".
 #
 # Required IAM (on the user running this script):
 #   iam:CreateOpenIDConnectProvider, GetOpenIDConnectProvider,
@@ -88,6 +95,19 @@ if [[ "$ENVIRONMENT" != "staging" && "$ENVIRONMENT" != "prod" ]]; then
   echo "ERROR: ENVIRONMENT must be 'staging' or 'prod' (got '$ENVIRONMENT')"
   exit 1
 fi
+
+# The GitHub deployment-environment name in the OIDC `sub` claim can differ
+# from the role/file suffix. staging declares `environment: name: staging`
+# (default matches); prod declares `environment: name: production`, so prod
+# callers MUST pass GH_ENVIRONMENT=production or the trust policy won't match.
+GH_ENVIRONMENT="${GH_ENVIRONMENT:-$ENVIRONMENT}"
+
+# Portable first-letter capitalisation for the cosmetic IAM Sids. macOS ships
+# bash 3.2, which lacks the ${VAR^} operator (bash 4+); python3 is already a
+# hard dependency of this script, so use it.
+ENV_CAP="$(python3 -c 'import sys;print(sys.argv[1][:1].upper()+sys.argv[1][1:])' "$ENVIRONMENT")"
+BRANCH_CAP="$(python3 -c 'import sys;print(sys.argv[1][:1].upper()+sys.argv[1][1:])' "$BRANCH")"
+ENV_UPPER="$(printf '%s' "$ENVIRONMENT" | tr '[:lower:]' '[:upper:]')"
 
 ROLE_NAME="eventpulse-deploy-${ENVIRONMENT}"
 ROLE_PATH="/eventpulse-deploy/"
@@ -136,7 +156,7 @@ cat > "$WORK_DIR/trust-policy.json" <<EOF
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "GitHubActionsOIDC${ENVIRONMENT^}DeployWorkflowOn${BRANCH^}",
+      "Sid": "GitHubActionsOIDC${ENV_CAP}DeployWorkflowOn${BRANCH_CAP}",
       "Effect": "Allow",
       "Principal": {
         "Federated": "${OIDC_ARN}"
@@ -145,7 +165,7 @@ cat > "$WORK_DIR/trust-policy.json" <<EOF
       "Condition": {
         "StringEquals": {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-          "token.actions.githubusercontent.com:sub": "repo:${GITHUB_REPO}:environment:${ENVIRONMENT}",
+          "token.actions.githubusercontent.com:sub": "repo:${GITHUB_REPO}:environment:${GH_ENVIRONMENT}",
           "token.actions.githubusercontent.com:job_workflow_ref": "${GITHUB_REPO}/.github/workflows/deploy-${ENVIRONMENT}.yml@refs/heads/${BRANCH}"
         }
       }
@@ -185,7 +205,7 @@ cat > "$WORK_DIR/inline-policy.json" <<EOF
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "SsmSendCommandTo${ENVIRONMENT^}EC2OnlyViaRunShellScript",
+      "Sid": "SsmSendCommandTo${ENV_CAP}EC2OnlyViaRunShellScript",
       "Effect": "Allow",
       "Action": "ssm:SendCommand",
       "Resource": [
@@ -195,13 +215,13 @@ cat > "$WORK_DIR/inline-policy.json" <<EOF
       ]
     },
     {
-      "Sid": "SsmReadCommandResultsOn${ENVIRONMENT^}EC2",
+      "Sid": "SsmReadCommandResultsOn${ENV_CAP}EC2",
       "Effect": "Allow",
       "Action": "ssm:GetCommandInvocation",
       "Resource": "arn:aws:ssm:${AWS_REGION}:${AWS_ACCOUNT_ID}:*"
     },
     {
-      "Sid": "SsmListCommandInvocations${ENVIRONMENT^}RegionScoped",
+      "Sid": "SsmListCommandInvocations${ENV_CAP}RegionScoped",
       "Effect": "Allow",
       "Action": "ssm:ListCommandInvocations",
       "Resource": "*",
@@ -228,8 +248,8 @@ log "done."
 log "  Role ARN: $ROLE_ARN"
 log "  OIDC ARN: $OIDC_ARN"
 log ""
-log "Next: register the role ARN as the GitHub secret AWS_OIDC_ROLE_${ENVIRONMENT^^}"
-log "  gh secret set AWS_OIDC_ROLE_${ENVIRONMENT^^} --body \"$ROLE_ARN\" --repo $GITHUB_REPO"
+log "Next: register the role ARN as the GitHub secret AWS_OIDC_ROLE_${ENV_UPPER}"
+log "  gh secret set AWS_OIDC_ROLE_${ENV_UPPER} --body \"$ROLE_ARN\" --repo $GITHUB_REPO"
 log ""
 log "Then flip the gate:"
-log "  gh variable set ${ENVIRONMENT^^}_DEPLOY_ENABLED --body true --repo $GITHUB_REPO"
+log "  gh variable set ${ENV_UPPER}_DEPLOY_ENABLED --body true --repo $GITHUB_REPO"

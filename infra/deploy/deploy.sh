@@ -31,7 +31,13 @@ PM2="/usr/bin/pm2"
 PNPM="/usr/bin/pnpm"
 LOG_DIR="/home/eventpulse/logs"
 DEPLOY_LOG="$LOG_DIR/deploy.log"
-ENV_FILE="/home/eventpulse/.env.staging"
+# Per-box environment marker, written once at bootstrap.
+# bootstrap-prod.sh writes "production"; the existing staging box has no
+# marker file and falls through to "staging" — so this change is fully
+# backward-compatible with staging. This is the ONLY env-specific line in
+# deploy.sh (the nginx reload + pm2 ecosystem steps are env-agnostic).
+EVENTPULSE_ENV="$(cat /home/eventpulse/.eventpulse-env 2>/dev/null || echo staging)"
+ENV_FILE="/home/eventpulse/.env.${EVENTPULSE_ENV}"
 
 mkdir -p "$LOG_DIR"
 exec > >(tee -a "$DEPLOY_LOG") 2>&1
@@ -42,7 +48,7 @@ echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] deploy start ref=$REF"
 # If it's missing, fail loudly BEFORE running pnpm — much clearer than a
 # midway db:migrate "DATABASE_URL not set" error.
 if [[ ! -f "$ENV_FILE" ]]; then
-  echo "ERROR: $ENV_FILE not found. Run infra/scripts/bootstrap-staging.sh first."
+  echo "ERROR: $ENV_FILE not found (env=$EVENTPULSE_ENV). Run the matching bootstrap script (infra/scripts/bootstrap-*.sh) first."
   exit 1
 fi
 # shellcheck disable=SC1090
