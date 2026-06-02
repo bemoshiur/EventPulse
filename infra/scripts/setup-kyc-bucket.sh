@@ -88,6 +88,12 @@ render_template() {
       echo "ERROR: render_template called with empty \$$v (src=$src)" >&2
       return 1
     fi
+    # envsubst is a child process — it only substitutes EXPORTED variables.
+    # The `${!v}` check above sees non-exported shell vars, so without this
+    # export a set-but-unexported var (e.g. KYC_KMS_KEY_ARN on the alias-reuse
+    # path) passes the guard yet renders EMPTY, producing invalid JSON
+    # (e.g. an empty KMSMasterKeyID). Export so envsubst actually sees it.
+    export "${v?}"
     subst+="\${$v} "
   done
   envsubst "$subst" < "$src" > "$dst"
