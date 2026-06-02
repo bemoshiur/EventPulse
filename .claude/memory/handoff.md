@@ -1,6 +1,8 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-06-02 — **Day 45** of 47-day Phase 1 MVP runway. **Production EC2 cutover STARTED + provisioned end-to-end. Cutover sub-item #1 (prod EC2) DONE; #4 (deploy OIDC role) + #6 (KYC bucket) DONE.**
+**Last update:** 2026-06-02 — **Day 45** of 47-day Phase 1 MVP runway. **🚀 PRODUCTION IS PUBLICLY LIVE over HTTPS.** Cutover #1 (EC2 provision + app deploy) + #2 (DNS) + #3 (wildcard cert) + #4 (deploy OIDC role) + #6 (KYC bucket) all DONE + verified. App serving on the real domain behind STAGING_PAYMENT_BLOCK=1 + MAIL_DRY_RUN=1 (no tenants/events yet).
+
+**Verified public (2026-06-02 ~11:02 UTC):** `https://eventpulse.com.bd` + www/app/admin/my → 200; `https://api.eventpulse.com.bd/health` → 200 `{db:ok}`; wildcard tenant subdomain → 200; LE cert `CN=eventpulse.com.bd` SAN `*.eventpulse.com.bd + eventpulse.com.bd` valid → 2026-08-31. Prod DB schema: 27 tables, 23 RLS-forced, audit_logs append-only enforced, legal_documents seeded (19). pm2 web+api online 0 restarts.
 **LAUNCH TARGET: 2026-06-10** (8 days out).
 **Driver:** Claude Code (Opus 4.8 1M).
 **🛑 LOAD-BEARING — $30/mo AWS ceiling.** Resolved this session: **decommission staging at prod launch** keeps steady-state ~$26/mo. **Current spend ~$45/mo (cutover-week OVERLAP — bounded + intentional; settles to ~$26-28 after staging is decommissioned post-smoke).** Budget alarm $25/$30 live → fires on the overlap, expected. Every AWS-write STOP-ASK still includes cost delta.
@@ -25,33 +27,46 @@
 
 **Prod OS provisioning VERIFIED:** Node 22.22.2 / PG 16.14 / Redis 8.8 / nginx 1.24 / certbot 5.6 / aws-cli 2.34 / pnpm 9.15.9 / pm2 7.0.1. Postgres roles exact: `eventpulse_app` non-super/non-BYPASSRLS, `eventpulse_admin` BYPASSRLS, pool-owner non-super. DB `eventpulse_prod` + citext/pgcrypto. Services active; swap 2G/swappiness10.
 
-## 🟡 Open PRs (review + merge to unblock)
+## 🟢 PRs merged
 
-- **PR #262** `feat(infra): prod EC2 provisioning IaC` (feat/prod-cutover-iac) — provision-prod.sh + bootstrap-prod.sh + eventpulse-prod.conf + deploy.sh env-marker + the **3 bug-fix commits** (AWS-CLI install, OIDC env-name/portability, render_template export). **MUST MERGE before #1e-app** (the prod box `git fetch origin main`es bootstrap-prod.sh + the nginx vhost).
-- **PR #263** `memory: Day 45 …` (this branch) — decisions.md + this handoff + progress + gotchas.
+- **PR #262** `feat(infra): prod EC2 provisioning IaC` MERGED (`17394f7`) — provision/bootstrap/nginx-vhost/deploy-marker + 3 bug-fix commits.
+- **PR #263** `memory: Day 45 …` MERGED (`69a261d`).
+- **This session's prod-LIVE memory** → its own new PR (`memory/day45-prod-live`).
 
 ## ⚠️ 3 latent script bugs caught + fixed this session (all in PR #262)
 
 1. **provision-prod.sh** called `aws secretsmanager` but Ubuntu 24.04 ships no AWS CLI → added AWS CLI v2 install (`369c2e6`).
 2. **setup-github-oidc.sh** (a) conflated the GitHub env-name with the role/file suffix — prod's `deploy-prod.yml` declares `environment: name: production` but role/file use `prod`; added `GH_ENVIRONMENT` (pass `production` for prod). (b) used bash-4 `${VAR^}`/`${VAR^^}` → broke on macOS bash 3.2; made portable via python3/tr (`c0459f7`).
-3. **setup-kyc-bucket.sh** `render_template` checked vars via `${!v}` (sees non-exported) then ran `envsubst` (child — needs EXPORTED) → KYC_KMS_KEY_ARN rendered empty on the alias-reuse path → empty KMSMasterKeyID. Added `export` in the loop (`b20ec0d`). **FLAG: staging KYC bucket encryption may have the same latent miss — verify staging's get-bucket-encryption uses the dedicated CMK, not SSE-S3/AWS-managed.** (Staging is test-only + slated for decommission, low urgency.)
+3. **setup-kyc-bucket.sh** `render_template` checked vars via `${!v}` (sees non-exported) then ran `envsubst` (child — needs EXPORTED) → KYC_KMS_KEY_ARN rendered empty on the alias-reuse path → empty KMSMasterKeyID. Added `export` in the loop (`b20ec0d`). **Staging KYC encryption VERIFIED CORRECT** (uses dedicated CMK `761fc958…` = `alias/eventpulse-kyc-staging`) — flag CLEARED, no remediation. A 4th gap found post-merge (non-blocking, not yet codified): **`bootstrap-prod.sh` should `rm -f /etc/nginx/sites-enabled/default`** — the stock Ubuntu site collided with the prod vhost's `default_server` (fixed live on the box; a fresh re-run would hit it).
 
-## 🎯 Next session — resume the cutover
+## ✅ Day-45 continued (this session, post-go-live)
 
-**First action: merge PR #262 + #263.** Then, in dependency order:
-1. **#1e-app** (BLOCKED on #262 merge): SSM-run `bootstrap-prod.sh` on `i-0c41fae1286527654` (git checkout main + materialise `.env.production` + write `.eventpulse-env=production` + symlink prod vhost + pm2), then `deploy.sh main`. nginx -t will fail until #3 cert — expected.
-2. **#7 prod-branch ff-merge** (`origin/prod` @ `21dad2cc` → main) — needed so `deploy-prod.yml` exists on the prod branch for the OIDC job_workflow_ref to match on real CI deploys.
-3. **#2 Route 53** 8-record set → EIP 52.76.69.96 + **#3 wildcard cert** (DNS-01, `eventpulse.com.bd` + `*.eventpulse.com.bd`) — do close to go-live (makes prod publicly resolvable).
-4. **#8 §17.11 alarms** (7 on prod; CW agent NOT installed → mem/disk alarms need it) + **Phase 4 SNS prod wiring** + **MAIL_DRY_RUN=0 prod flip**.
-5. **#5 remaining secrets** — oauth-google/apple optional (else clean 503); jwt auto.
-6. **§7 security checklist sweep**, then **BDT-100 smoke** (lift STAGING_PAYMENT_BLOCK on prod per runbook §4; the prod .env boots it =1), then **decommission staging**.
+- **#8 alarms (infra DONE):** SNS topic `eventpulse-prod-alerts` + email sub to moshiur@ (**click the confirm link**) + 3 alarms wired & OK: **CPU** >85%/10min, **mem** >90%/5min, **disk** >80% (mem/disk via the now-installed CloudWatch agent → CWAgent namespace, InstanceId-aggregated). **App-level alarms NOT creatable — `apps/api` emits NO custom CW metrics** (no PutMetricData); needs app instrumentation (code feature) first.
+- **✅ Phase 4 SNS prod wiring + `MAIL_DRY_RUN=0` COMPLETE + VERIFIED.** Created `eventpulse-ses-bounces-prod` + `eventpulse-ses-complaints-prod` (SignatureVersion=2 + SES-publish policy), set `SES_*_TOPIC_ARNS` allowlist + `AWS_SES_CONFIGURATION_SET=eventpulse-prod` on the box, subscribed both webhook URLs (auto-confirmed), created SES config set `eventpulse-prod` + bounce/complaint event destinations. Mailbox-simulator round-trip verified: suppression rows written (hard_bounce + complaint, permanent), api log `*.suppressed`. Test rows cleaned up. **`MAIL_DRY_RUN=0` flipped** — prod now sends real email (suppression-guarded). (2 transient `message_unparseable` on the pre-reload pid during the config-set reload window — SNS retry delivered cleanly; non-issue.)
+- **bootstrap default-site fix → PR #265** (`fix/bootstrap-prod-nginx-default`) — codifies `rm -f /etc/nginx/sites-enabled/default`. Open.
+- **§7 security sweep (prod):** PASS on TLS 1.3, security headers (HSTS/XFO/XCTO/RP on proxied paths), RLS roles, append-only audit_logs, KYC bucket encryption, port-22-closed, IMDSv2, STAGING_PAYMENT_BLOCK=1, MAIL_DRY_RUN=1, cert→Aug31, JWT secrets present.
+  - ✅ **DB BACKUPS — FIXED → PR #266.** `eventpulse-prod-backups` bucket (SSE-KMS, PAB, versioning, 90-day lifecycle) + `pg-backup.sh` (env-aware; maps `production` marker → `prod` suffix) at `/usr/local/bin/eventpulse-pg-backup.sh` + root cron 19:00 UTC; bootstrap-prod.sh step 5 codifies it. **Test-verified** (23.4 KiB encrypted dump in S3). Logical (pg_dump) only — WAL/PITR + EBS snapshots still follow-up layers.
+  - 🟡 **GAP — no CloudTrail** in the account (§7 item; ~$0 management events). Account is shared with TenderPulse → operator decision before creating an account-level trail.
 
-**Cutover-cost note:** remaining steps are ~$0 except whatever the alarms add (~$0.70). Steady-state lands ~$26-28/mo only AFTER staging decommission (post-smoke).
+## 🎯 Next session — remaining cutover (prod is already LIVE)
+
+Done: #1-#4-#6 (prod live), DNS+cert, Phase 4 SNS + `MAIL_DRY_RUN=0`, budget alarm, CPU+mem+disk alarms (CW agent), **DB backups (PR #266)**, §7 sweep. Remaining:
+
+1. **Open PRs to merge:** #264 (go-live memory), #265 (bootstrap default-site fix), #266 (DB backups). All pushed, CI-green expected.
+2. **App-level alarms** (error rate / payment success / disbursement-batch / reconciliation) — BLOCKED on app emitting custom CW metrics (`apps/api` has none). Code feature; defer.
+3. **CloudTrail** — account-level, shared with TenderPulse → operator decision.
+4. **re-deploy** (`deploy.sh main` via SSM) to populate legal/changelog static pages (build-time fetch failed pre-DNS; harness gates prod deploys). Low priority (v0.1 placeholders).
+5. **#7 prod-branch ff-merge** — DEFERRED: clean ff (prod 209 behind main, not GitHub-protected) but the **husky pre-push hook blocked** it; §18.3 says prod updates via tag/dispatch not direct push. Decide mechanism (override w/ `--no-verify`+log, PR, or tag). Non-blocking (deploy via SSM works; `deploy-prod.yml` already exists on prod@21dad2c, just stale).
+6. **#5 oauth secrets** — optional (clean 503 without); jwt auto.
+7. **BDT-100 prod EPS smoke** — 🛑 GATED: operator on-call + lift `STAGING_PAYMENT_BLOCK` per runbook §4, real bKash BDT-100 + refund, confirm 175bps. Harness gates prod deploys/payments → explicit per-step auth.
+8. **Decommission staging** (only after smoke) — restores ~$26-28/mo steady-state.
+
+**Cost now ~$45/mo (overlap).** Remaining steps ~$0 except CW agent metrics + ~7 alarms (~$0.70). Decommission staging is what restores the ceiling.
 
 ## Standing invariants (unchanged)
 
 - $30/mo ceiling; decommission-staging-at-launch is the plan to hold it.
-- prod `.env.production` boots `STAGING_PAYMENT_BLOCK=1` + `MAIL_DRY_RUN=1` (deliberate; lifted at smoke/Phase-4 respectively).
+- prod `.env.production`: `STAGING_PAYMENT_BLOCK=1` still held (lifts only for the BDT-100 smoke). **`MAIL_DRY_RUN=0` as of Day 45** (Phase 4 verified) — prod sends real email, suppression-guarded.
 - `EPS_MODE=production` (from eventpulse/prod/eps).
 - Money math only via fee-calculator.ts. RLS roles via the exact 3-role model (self-checked by provision-prod.sh).
 - Memory commits via PRs, separate from feature commits. Branch protection on main.

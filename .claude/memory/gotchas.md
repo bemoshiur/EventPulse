@@ -22,7 +22,12 @@ The clean-scripted-build prod cutover (Day 45) exercised three scripts on a fres
 **3. `setup-kyc-bucket.sh render_template` validated vars with `${!v}` but rendered with `envsubst` (export gap).**
 - *Why.* `${!v}` (shell indirect expansion) sees non-exported shell vars, so the non-empty guard PASSED; but `envsubst` is a child process and substitutes only **exported** env vars → `KYC_KMS_KEY_ARN` (set, not exported, on the alias-reuse path) rendered EMPTY → `PutBucketEncryption` rejected "KMSMasterKeyID must be non-empty". Prod hits the reuse path because the CMK was pre-created; staging took the create path. (False-confidence: the guard made the empty look impossible.)
 - *Fix.* `export "${v?}"` in the render loop before envsubst. Commit `b20ec0d`. Prod KYC bucket now SSE-KMS with the dedicated CMK (verified).
-- *Avoid.* `envsubst` only sees exported vars — `export` everything you hand it, or the `${!v}` guard lies. **FLAG: staging's KYC bucket encryption may have silently fallen back (empty key) — verify `get-bucket-encryption` on `eventpulse-kyc-staging` points at the dedicated CMK, not SSE-S3/aws-managed.**
+- *Avoid.* `envsubst` only sees exported vars — `export` everything you hand it, or the `${!v}` guard lies. (Staging's KYC bucket encryption was checked post-fix and is CLEAN — uses the dedicated CMK; the bug did not affect it.)
+
+**4. (post-merge) `bootstrap-prod.sh` left the stock Ubuntu nginx default site enabled → duplicate `default_server`.**
+- *Why.* `apt install nginx` ships `/etc/nginx/sites-enabled/default` with `listen 80 default_server`. bootstrap-prod.sh symlinks the prod vhost (also `default_server` on :80) + removes the staging vhost, but NOT the stock default → `nginx -t` failed `duplicate default server for 0.0.0.0:80` right after the cert was issued.
+- *Fix.* `rm -f /etc/nginx/sites-enabled/default` on the box + reload (done live). Codify in bootstrap-prod.sh next to the staging-vhost removal (tracked follow-up, not yet committed).
+- *Avoid.* Any bootstrap that symlinks a `default_server` vhost must first remove the stock `sites-enabled/default`.
 
 **General lesson.** "Idempotent + works on staging" ≠ "works on prod." The prod cutover takes branches (fresh OS, alias-reuse, full-word environment name) staging never exercised. Run cutover scripts with eyes open for path-divergence.
 
