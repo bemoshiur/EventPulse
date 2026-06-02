@@ -291,6 +291,11 @@ log "step 3: Nginx vhost"
 # Remove staging vhost if present on this box (it never should be, but a
 # rebuilt-from-staging box might carry it). Prod serves only the prod vhost.
 rm -f /etc/nginx/sites-enabled/eventpulse-staging.conf
+# Remove the stock Ubuntu default site — `apt install nginx` ships
+# /etc/nginx/sites-enabled/default with its own `listen 80 default_server`,
+# which collides with the prod vhost's default_server and fails `nginx -t`
+# with "duplicate default server for 0.0.0.0:80" (Day-45 cutover gotcha).
+rm -f /etc/nginx/sites-enabled/default
 ln -sf "$NGINX_SOURCE" "$NGINX_TARGET"
 if [[ ! -f /etc/nginx/snippets/ep-security-headers.conf ]]; then
   log "  creating ep-security-headers snippet"
