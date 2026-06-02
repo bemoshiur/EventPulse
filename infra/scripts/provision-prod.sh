@@ -85,8 +85,22 @@ CODENAME="$(. /etc/os-release && echo "$VERSION_CODENAME")"   # noble
 log "apt update + base packages"
 apt-get update -y
 apt-get install -y \
-  ca-certificates curl gnupg lsb-release acl \
+  ca-certificates curl gnupg lsb-release acl unzip \
   ufw fail2ban unattended-upgrades
+
+# AWS CLI v2 — Ubuntu does NOT ship it, but both this script (the DB-password
+# step below) and bootstrap-prod.sh call `aws secretsmanager`. The SSM agent
+# is a separate snap and does not provide the `aws` CLI. Idempotent:
+# `--update` refreshes an existing install.
+if ! command -v aws >/dev/null 2>&1; then
+  log "AWS CLI v2"
+  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+  unzip -q -o /tmp/awscliv2.zip -d /tmp
+  /tmp/aws/install --update
+  rm -rf /tmp/aws /tmp/awscliv2.zip
+else
+  log "AWS CLI already present: $(aws --version 2>&1)"
+fi
 
 log "swap: 2 GB swapfile + swappiness=10 (Day-34 OOM fix, mirrored from staging)"
 if ! swapon --show 2>/dev/null | grep -q '/swapfile'; then
