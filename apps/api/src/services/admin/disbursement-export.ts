@@ -118,14 +118,30 @@ export interface DisbursementExportResult {
   filename: string
 }
 
-// ─── CSV helpers (RFC 4180 — same shape as attendee export) ────────
+// ─── CSV helpers (RFC 4180 + OWASP formula-injection guard) ────────
 
 const QUOTABLE = /[,"\r\n]/
 
+// Excel + LibreOffice + Google Sheets evaluate a cell as a formula
+// when the first character is `=` `+` `-` `@`, or a leading TAB / CR.
+// `tenant.name` is user-controllable (set at tenant signup) — a
+// malicious tenant could name themselves `=HYPERLINK(...)` and the
+// formula fires the first time the operator opens this CSV in Excel
+// (the UTF-8 BOM we emit specifically opts INTO the spreadsheet
+// renderer rather than plain text).
+//
+// Neutralise by prefixing the cell value with a single quote `'`
+// (Excel treats it as a display-only prefix; the apostrophe doesn't
+// appear in the rendered cell) when the first character would
+// otherwise trigger formula evaluation. Per OWASP "Failure to Sanitize
+// CSV Output" / CWE-1236.
+const FORMULA_PREFIXES = /^[=+\-@\t\r]/
+
 export function csvEscape(value: string | null | undefined): string {
   if (value == null || value === '') return ''
-  if (QUOTABLE.test(value)) return `"${value.replace(/"/g, '""')}"`
-  return value
+  const safe = FORMULA_PREFIXES.test(value) ? `'${value}` : value
+  if (QUOTABLE.test(safe)) return `"${safe.replace(/"/g, '""')}"`
+  return safe
 }
 
 function csvRow(cells: Array<string | number | bigint | null | undefined>): string {
@@ -269,8 +285,12 @@ export async function exportDisbursementsCsv(
 }
 
 function renderCsv(rows: DisbursementRow[]): string {
-  // UTF-8 BOM (﻿) so Excel-on-Windows opens Bangla tenant names
-  // correctly — same precedent as the attendee CSV export.
+  // UTF-8 BOM so Excel-on-Windows opens Bangla tenant names correctly —
+  // same precedent as the attendee CSV export. Using the explicit
+  // ﻿ escape (NOT a literal U+FEFF char) so the source file
+  // encoding doesn't subtly drop the byte during prettier/editor
+  // passes — CI on Day 44 caught this when the response body didn't
+  // start with BOM despite the source appearing to.
   const BOM = '﻿'
   const headers = CSV_HEADERS.join(',')
   const dataLines = rows.map((r) =>

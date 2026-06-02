@@ -386,12 +386,22 @@ describeIfDb('GET /api/v1/admin/disbursements/export', () => {
     expect(r.status).toBe(200)
     expect(r.headers.get('content-type')).toContain('text/csv')
     expect(r.headers.get('content-disposition')).toContain('attachment')
-    const body = await r.text()
-    // BOM + header row + 2 data rows = 3 newline-separated lines + trailing newline
+
+    // Read as raw bytes to verify BOM survival in transit. `r.text()`
+    // would strip the BOM per WHATWG TextDecoder default; we want to
+    // assert the on-wire bytes include it so Excel-on-Windows renders
+    // Bangla correctly when the operator opens the file.
+    const rawBuf = new Uint8Array(await r.arrayBuffer())
+    expect(rawBuf[0]).toBe(0xef)
+    expect(rawBuf[1]).toBe(0xbb)
+    expect(rawBuf[2]).toBe(0xbf)
+
+    // Subsequent assertions use a BOM-stripped string for readability.
+    const body = new TextDecoder('utf-8').decode(rawBuf).replace(/^﻿/, '')
     expect(body).toMatch(
-      /^﻿tenant_id,tenant_name,tenant_slug,period_start,period_end,paid_order_count,gross_paisa,platform_fee_paisa,eps_fee_paisa,refunds_paisa,withholding_tax_paisa,net_paisa,currency/,
+      /^tenant_id,tenant_name,tenant_slug,period_start,period_end,paid_order_count,gross_paisa,platform_fee_paisa,eps_fee_paisa,refunds_paisa,withholding_tax_paisa,net_paisa,currency/,
     )
-    const lines = body.replace(/﻿/g, '').trim().split('\n')
+    const lines = body.trim().split('\n')
     expect(lines).toHaveLength(3) // header + 2 tenant rows
 
     // Tenant A row: 3 orders, gross=300000, refunds=20000, net=280000
