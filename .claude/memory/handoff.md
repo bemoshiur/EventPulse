@@ -39,16 +39,26 @@
 2. **setup-github-oidc.sh** (a) conflated the GitHub env-name with the role/file suffix — prod's `deploy-prod.yml` declares `environment: name: production` but role/file use `prod`; added `GH_ENVIRONMENT` (pass `production` for prod). (b) used bash-4 `${VAR^}`/`${VAR^^}` → broke on macOS bash 3.2; made portable via python3/tr (`c0459f7`).
 3. **setup-kyc-bucket.sh** `render_template` checked vars via `${!v}` (sees non-exported) then ran `envsubst` (child — needs EXPORTED) → KYC_KMS_KEY_ARN rendered empty on the alias-reuse path → empty KMSMasterKeyID. Added `export` in the loop (`b20ec0d`). **Staging KYC encryption VERIFIED CORRECT** (uses dedicated CMK `761fc958…` = `alias/eventpulse-kyc-staging`) — flag CLEARED, no remediation. A 4th gap found post-merge (non-blocking, not yet codified): **`bootstrap-prod.sh` should `rm -f /etc/nginx/sites-enabled/default`** — the stock Ubuntu site collided with the prod vhost's `default_server` (fixed live on the box; a fresh re-run would hit it).
 
+## ✅ Day-45 continued (this session, post-go-live)
+
+- **#8 alarms (partial):** created SNS topic `eventpulse-prod-alerts` + email sub to moshiur@ (**operator must click the confirm link**) + **prod CPU alarm** `eventpulse-prod-ec2-cpu-high` (>85%/10min, wired to the topic — unlike staging's action-less one). mem/disk + app-level alarms NOT done (see below).
+- **bootstrap default-site fix → PR #265** (`fix/bootstrap-prod-nginx-default`) — codifies `rm -f /etc/nginx/sites-enabled/default`. Open.
+- **§7 security sweep (prod):** PASS on TLS 1.3, security headers (HSTS/XFO/XCTO/RP on proxied paths), RLS roles, append-only audit_logs, KYC bucket encryption, port-22-closed, IMDSv2, STAGING_PAYMENT_BLOCK=1, MAIL_DRY_RUN=1, cert→Aug31, JWT secrets present.
+  - 🔴 **GAP — NO automated DB backups** (prod AND staging): no pg_dump cron, `archive_mode=off`, empty backups dir, no AWS Backup plan seen. §17.10 (nightly pg_dump→S3 + WAL) was never implemented project-wide. **MUST fix before first paying tenant** (real money + KYC PII). Needs design: pg_dump→S3 (backups bucket + lifecycle) and/or EBS snapshot plan + WAL.
+  - 🟡 **GAP — no CloudTrail** in the account (§7 item; ~$0 management events).
+
 ## 🎯 Next session — remaining cutover (prod is already LIVE)
 
-Done: #1 (provision+app), #2 (DNS), #3 (cert), #4 (OIDC), #6 (KYC), budget alarm. Remaining:
+Done: #1 (provision+app), #2 (DNS), #3 (cert), #4 (OIDC), #6 (KYC), budget alarm, prod CPU alarm, bootstrap-fix PR #265, §7 sweep. Remaining:
 
-1. **Codify 2 follow-ups** (small infra PR): (a) `bootstrap-prod.sh` `rm -f /etc/nginx/sites-enabled/default`; (b) re-deploy prod (`deploy.sh main` via SSM) to populate legal/changelog static pages now that `api.eventpulse.com.bd` is reachable (build-time fetch failed pre-DNS).
-2. **#8 §17.11 alarms** — 7 on prod. CPU works on default metrics; **mem>90% / disk>80% need the CloudWatch agent installed** (provision-prod.sh does NOT install it — add it or install ad-hoc). + **Phase 4 SNS prod wiring** (copy Day-40 staging procedure with `-prod` suffixes + `api.eventpulse.com.bd` URLs) → then **flip `MAIL_DRY_RUN=0`** on prod (`.env.production` + `pm2 reload api --update-env`).
-3. **#7 prod-branch ff-merge** (`origin/prod` @ `21dad2cc` → main) — so `deploy-prod.yml` exists on the prod branch for CI-based deploys (the OIDC role `eventpulse-deploy-prod` + GH secrets are already set; `PROD_DEPLOY_ENABLED` is OFF).
-4. **#5 remaining secrets** — oauth-google/apple optional (else clean 503); jwt auto-created.
-5. **§7 security checklist sweep** (launch-readiness.md §7), then **BDT-100 prod EPS smoke** — GATED: operator on-call + lift `STAGING_PAYMENT_BLOCK` on prod per runbook §4 (prod `.env` boots it =1), real bKash BDT-100 + refund, confirm 175bps. **High-severity — needs explicit per-step authorization (harness gates prod deploys/payments).**
-6. **Decommission staging** (only after smoke passes) — drops cost back to ~$26-28/mo and resolves the ceiling overlap.
+1. 🔴 **DB backups** (top priority pre-tenant) — implement pg_dump→S3 nightly + retention (+ decide WAL / EBS snapshots) per §17.10. Project-wide gap.
+2. **Open PRs to merge:** #264 (this go-live memory), #265 (bootstrap default-site fix).
+3. **#8 finish:** CloudWatch agent install (mem>90% / disk>80% alarms) + the 4 app-level alarms (need the app to emit custom metrics — verify it does) + **Phase 4 SNS prod wiring** (copy Day-40 staging, `-prod` suffixes + `api.eventpulse.com.bd`) → **flip `MAIL_DRY_RUN=0`** (needed before first paying tenant for order-confirmation emails). + CloudTrail.
+4. **re-deploy** (`deploy.sh main` via SSM) to populate legal/changelog static pages (build-time fetch failed pre-DNS; harness gates prod deploys).
+5. **#7 prod-branch ff-merge** — DEFERRED: clean ff (prod 209 behind main, not GitHub-protected) but the **husky pre-push hook blocked** it; §18.3 says prod updates via tag/dispatch not direct push. Decide mechanism (override w/ `--no-verify`+log, PR, or tag). Non-blocking (deploy via SSM works; `deploy-prod.yml` already exists on prod@21dad2c, just stale).
+6. **#5 oauth secrets** — optional (clean 503 without); jwt auto.
+7. **BDT-100 prod EPS smoke** — 🛑 GATED: operator on-call + lift `STAGING_PAYMENT_BLOCK` per runbook §4, real bKash BDT-100 + refund, confirm 175bps. Harness gates prod deploys/payments → explicit per-step auth.
+8. **Decommission staging** (only after smoke) — restores ~$26-28/mo steady-state.
 
 **Cost now ~$45/mo (overlap).** Remaining steps ~$0 except CW agent metrics + ~7 alarms (~$0.70). Decommission staging is what restores the ceiling.
 
