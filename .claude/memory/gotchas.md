@@ -4,6 +4,30 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## Three prod-cutover infra-script bugs that only fire on the prod/recreate path (Day 45 / PR #262)
+
+The clean-scripted-build prod cutover (Day 45) exercised three scripts on a fresh box / reuse path that staging never hit. All three passed on staging by luck of which branch they took; all three broke on prod. Caught + fixed pre/mid-run; fixes in PR #262.
+
+**1. Fresh Ubuntu 24.04 EC2 ships NO `aws` CLI — but provision/bootstrap call it.**
+- *Why.* `provision-prod.sh` calls `aws secretsmanager` for the DB-password step; the SSM agent is a separate **snap** and does not provide the `aws` binary. Staging's box had aws CLI from the original manual setup, so the script never needed to install it.
+- *Fix.* Install AWS CLI v2 (+`unzip`) in provision before the first `aws` call. `provision-prod.sh` commit `369c2e6`.
+- *Avoid.* Any provisioning script that calls `aws` on a fresh Ubuntu host must install the CLI itself; don't assume it's present.
+
+**2. `setup-github-oidc.sh` conflated the GitHub environment-name with the role/file suffix + used bash-4 syntax.**
+- *Why (a).* The trust `sub` is `...:environment:${ENVIRONMENT}`. For staging that's fine (`deploy-staging.yml` declares `environment: name: staging`). For prod, `deploy-prod.yml` declares `environment: name: **production**` while the role is `eventpulse-deploy-prod` + file `deploy-prod.yml` — one var can't be both. Running as-is mints a trust policy expecting `environment:prod` → GitHub sends `environment:production` → `Not authorized to perform sts:AssumeRoleWithWebIdentity`.
+- *Why (b).* The cosmetic Sids used bash-4 `${VAR^}` / `${VAR^^}`; macOS ships bash 3.2 → `bad substitution`.
+- *Fix.* Added `GH_ENVIRONMENT` (defaults to ENVIRONMENT; pass `production` for prod) used only in the `sub` claim; replaced `${VAR^}`/`${VAR^^}` with python3/`tr`. Commit `c0459f7`. Verified trust policy matches §17.9.1 exactly.
+- *Avoid.* The OIDC `sub` environment segment must equal the workflow's `environment: name:` literally; the role name / workflow filename are independent.
+
+**3. `setup-kyc-bucket.sh render_template` validated vars with `${!v}` but rendered with `envsubst` (export gap).**
+- *Why.* `${!v}` (shell indirect expansion) sees non-exported shell vars, so the non-empty guard PASSED; but `envsubst` is a child process and substitutes only **exported** env vars → `KYC_KMS_KEY_ARN` (set, not exported, on the alias-reuse path) rendered EMPTY → `PutBucketEncryption` rejected "KMSMasterKeyID must be non-empty". Prod hits the reuse path because the CMK was pre-created; staging took the create path. (False-confidence: the guard made the empty look impossible.)
+- *Fix.* `export "${v?}"` in the render loop before envsubst. Commit `b20ec0d`. Prod KYC bucket now SSE-KMS with the dedicated CMK (verified).
+- *Avoid.* `envsubst` only sees exported vars — `export` everything you hand it, or the `${!v}` guard lies. **FLAG: staging's KYC bucket encryption may have silently fallen back (empty key) — verify `get-bucket-encryption` on `eventpulse-kyc-staging` points at the dedicated CMK, not SSE-S3/aws-managed.**
+
+**General lesson.** "Idempotent + works on staging" ≠ "works on prod." The prod cutover takes branches (fresh OS, alias-reuse, full-word environment name) staging never exercised. Run cutover scripts with eyes open for path-divergence.
+
+---
+
 ## CSV exports with UTF-8 BOM + user-controlled cells = formula-injection vector (Day 44 / PR #258 security review)
 
 **Symptom.** Day 44 PR #258 (super-admin disbursement CSV export) was flagged by automated security review with a MEDIUM CSV Formula Injection finding (CWE-1236) on the `csvEscape` helper. Fixed in PR #258 + 12 unit tests added.
