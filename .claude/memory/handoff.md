@@ -1,28 +1,31 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-06-01 — **Day 42 EOD + cost-ceiling addendum** of 47-day Phase 1 MVP runway. **Sprint 4 §26.1 Day 9 marketing pages SHIPPED end-to-end (3 PRs + 1 hotfix). NEW STANDING CONSTRAINT: AWS spend < \$30/month total (both envs combined).**
-**LAUNCH TARGET: 2026-06-10** (9 days out — runway healthy).
+**Last update:** 2026-06-02 — **Day 43 EOD** of 47-day Phase 1 MVP runway. **Sprint 4 §26.1 Day 10 launch readiness (build-track half) SHIPPED end-to-end — 5 PRs (§24.4 fully delivered).**
+**LAUNCH TARGET: 2026-06-10** (8 days out — runway healthy; build-track work is closing out).
 **Driver:** Claude Code (Opus 4.7).
-**🛑 LOAD-BEARING:** Operator set hard ceiling — total monthly AWS spend below **\$30/month** for the project. Every AWS-write STOP-ASK now includes "monthly cost delta + running total" before proceeding. **Live AWS audit Day-42 EOD: current spend is ~\$26/month — UNDER ceiling by ~\$4/mo.** Future risk is the prod cutover (~\$98/mo at §17.x defaults; needs cost-aware cuts to fit). Cost-aware defaults codified in decisions.md 2026-06-01 "STANDING CONSTRAINT" entry (top of log): prod EC2 = t3.small (NOT t3.large); 1-2 consolidated Secrets Manager JSON blobs per env (NOT 11 per-purpose); 3 KMS CMKs max for MVP; staging gets 2 alarms, prod gets the §17.11 set; 14-day log retention; weekly EBS snapshots. **Next AWS-write window: AWS Budget alarm (\$25 actual / \$30 forecast) is the meta-cost-guard** — free resource; lands as the structural enforcement of the ceiling.
-**Today's headline:** Day 42 ran the full §26.1 Day 9 marketing-pages workstream as a three-PR sequence in one continuous "work continue" session. **PR #244** (apex home + /features + /pricing) replaces the Day-1 scaffold and ships a server-rendered four-mode bigint-paisa fee calculator at v1.0 bKash 175bps with a 7-test drift guard pinning canonical §14.2-shape values. **PR #245** (/contact + form + API + migration 0017 contact_submissions) ships a 3-defence-layer endpoint (honeypot + per-IP rate limit + zod). **PR #246** (/legal/changelog + migration 0018 changelog_entries + v1.0 seed) lands the changelog scaffold but the seed itself failed at deploy time due to the drizzle array-tuple gotcha (same root cause as PR #245's afterAll test bug from Day 41). **PR #248 hotfix** switches the seed from raw `sql` template to drizzle's builder; after merge + re-deploy + manual re-seed, the 9 v1.0 launch entries populate. All 3 standing invariants intact post-deploy.
+**🛑 LOAD-BEARING (carry from Day 42):** Operator set hard ceiling — total monthly AWS spend below **\$30/month** for the project. Every AWS-write STOP-ASK now includes "monthly cost delta + running total" before proceeding. **Live AWS audit Day-42 EOD: current spend ~\$26/month — UNDER ceiling by ~\$4/mo.** Day-43 added zero AWS resources (no AWS-write sessions). **Next AWS-write window: AWS Budget alarm (\$25 actual / \$30 forecast)** — free resource; lands as the structural enforcement of the ceiling.
+**Today's headline:** Day 43 closed the §26.1 Day 10 build-track half via 5 PRs. Resumed from Day-42 EOD pause (PR #252 was mid-CI overnight) — opened with 2 failures (PR title `audit(...)` not in commitlint type-list; runbook prettier regression from PR #251's docs-only-skip). Fixed both via PR #252 follow-up (retitle to `docs(security):...` + runbook prettier). **PR #252** `c49a2c7` security audit + nginx snippets restored to git. **PR #253** `9a0322e` `pnpm audit --prod --audit-level high` CI gate — LIVE (§24.4 first half). **PR #254** `21a48ec` stale TODO sweep — magic-link form finally wired to existing endpoint + KYC JSDoc updated. **PR #255** k6 load-test scaffold (§24.4 second half) — workflow_dispatch-only pending operator baseline. **§24.4 Sprint-4-close fully delivered.** All 3 standing invariants intact across all 4 deploys.
 
-**Day 42 AWS billing tally:** ~$0 net new. No AWS-side writes; one extra deploy run (~$0.00) plus a single SSM SendCommand for the manual changelog seed (~$0.00).
+**Day 43 AWS billing tally:** ~$0 net new. No AWS-side writes; 4 deploy runs (~$0 — within free tier).
 
 **Carryover:** Day 41 closed the Sprint 4 Day 7-8 refund flow + CW CPU 85% alarm + MAIL_DRY_RUN=0 staging flip. Day 40 closed Phase 4 SNS bounce/complaint AWS-side wiring end-to-end. Day 39 closed the legal track entirely (Buyer-Terms-Lite v1.0 live in checkout 2026-06-01T10:32:57Z). Sprint 4 §26.1 plan now **~80% shipped** (Days 1-2 attendees ✓, 3-4 check-in ✓, 5 sales dashboard ✓, 6 super-admin revenue ✓, 7-8 refund flow first-half ✓, **9 marketing pages ✓ today**; Day 10 launch readiness + Day 7-8 second-half manual-disbursement adapters PENDING/DEFERRED).
 
 ## 🎯 Pre-launch tracks — remaining work
 
-§26.1 Day 9 (marketing pages) is now ✅ CLOSED. The remaining pre-launch surface is **infrastructure ceremony + Day 10 launch readiness + external-clock**:
+§26.1 Day 9 (marketing pages) ✅ CLOSED Day 42. §26.1 Day 10 build-track half ✅ CLOSED Day 43 (runbook + security audit + audit gate + k6 scaffold + TODO sweep). §24.4 Sprint-4-close ✅ FULLY DELIVERED Day 43. The remaining pre-launch surface is **all operator-driven**:
 
 | # | Item | Gate | Owner |
 |---|---|---|---|
 | 1 | EPS production credentials arrival | External clock; gates step #2 | Operator-action |
 | 2 | Production EPS BDT-100 smoke per `docs/runbooks/production-smoke.md` | Gated on #1 + production EC2 cutover (#4 sub-items) | Operator + Claude Code |
-| 3 | §26.1 Day 10 launch readiness — AUP review, first paying tenant identification | None for AUP review; operator-led for first tenant | Claude Code + Operator |
-| 4 | Production EC2 cutover ceremony — 8 sub-items (Day-37 audit critical-path step [14]) | Multiple STOP-ASK gates per sub-item | Operator + Claude Code |
+| 3 | AWS Budget alarm (\$25 actual / \$30 forecast) — meta-cost-guard before cutover ceremony | Operator confirms notification email | Operator |
+| 4 | Production EC2 cutover ceremony — 8 sub-items per `docs/runbooks/launch-readiness.md` §2 | Multiple STOP-ASK gates per sub-item; each AWS-write includes cost delta | Operator + Claude Code |
 | 5 | Phase 4 AWS-side wiring on PROD (when prod EC2 lands) | Sub-step of cutover ceremony | Operator-authorised |
 | 6 | `MAIL_DRY_RUN=0` prod flip | Sub-step of cutover (not standalone) | Operator |
-| 7 | Manual disbursement second half (BEFTN file gen + bKash B2C + Nagad + Rocket adapters per §14.8) | DEFERRED to Sprint 7 settlement engine | Sprint 7 |
+| 7 | First paying tenant identification + onboarding (13-item checklist per launch-readiness runbook §5) | Operator-led | Operator-led |
+| 8 | k6 baseline + activation PR (run workflow_dispatch, record p95 in budgets.json, flip trigger to pull_request) | Operator runs against staging | Operator |
+| 9 | 5 counsel-doc bodies (Refund Policy, AUP, Cookies, DPA, EULA) | Counsel timing | Operator coordinates |
+| 10 | Manual disbursement second half (BEFTN file gen + bKash B2C + Nagad + Rocket adapters per §14.8) | DEFERRED to Sprint 7 settlement engine | Sprint 7 |
 
 ### Production EC2 cutover — 8 sub-items (unchanged)
 
@@ -46,11 +49,35 @@
 
 ## ⚠️ TL;DR for next session (Day 43)
 
-- **First-thing-tomorrow (Day 43):** §26.1 Day 10 launch readiness scope. Two natural next-picks: (a) AUP review — sweep `apps/api/src/services/aup/` (if any) + the public `event_reports` surface + the `/admin/aup-reports` triage queue against §21.5; (b) first-paying-tenant identification surface (operator-led; Claude Code can prep the onboarding checklist runbook). Pick whichever is "in by lunch".
-- **Then (Day 43+):** Prod-cutover sub-items as standalone tasks. Each remaining §17.11 alarm is a ~5-min AWS-write task — ASK-FIRST. CloudWatch memory >90%/5min is the natural next-pick after CPU 85%. Each landed on staging first; staged on prod under cutover ceremony.
+- **First-thing-tomorrow (Day 44):** All Claude-Code build-track items for §26.1 are now closed. The remaining surface is operator-driven — see Pre-launch tracks table above. Two natural next-picks if operator returns build-track work: (a) re-review the prod-cutover plan against the cost-aware deltas one more time before EPS prod credentials arrive; (b) build an operator-facing first-paying-tenant onboarding-email template (concrete artefact; runbook §5 has the 13-item checklist but the email-to-send draft isn't shipped). Or pick up a Sprint-7 backlog item early if operator wants to get ahead.
+- **Then (Day 44+):** Prod-cutover sub-items as standalone STOP-ASK sessions. Each remaining §17.11 alarm is a ~5-min AWS-write task — ASK-FIRST with monthly cost delta. CloudWatch memory >90%/5min is the natural next-pick after CPU 85% (already on staging). Per the cost-aware §17.11 amendment in launch-readiness runbook §6: staging caps at 2 alarms (CPU + memory); prod gets the full 7-alarm set at cutover.
 - **EPS prod credentials arrival:** still external clock. When credentials land, BDT-100 production smoke per `docs/runbooks/production-smoke.md` runs as its own gated session. Precondition #2 (`eventpulse/prod/eps`) already SATISFIED.
+- **k6 baseline (operator-action):** `gh workflow run "Load test (k6 staging)" -f base_url=https://api.staging.eventpulse.com.bd` → read summary p95s → write to `infra/load-tests/budgets.json` → flip `load-test.yml` trigger to `pull_request`. After that, every PR enforces the §24.4 "p95 regress > 20%" gate.
 
-## ⚠️ Day 42 deliverables shipped (this session)
+## ⚠️ Day 43 deliverables shipped (this session)
+
+- **PR #252 `docs(security): pre-cutover security checklist sweep — Day 42 staging audit`** merged as `c49a2c7`:
+  - 225-line audit findings doc at `docs/audits/security-checklist-2026-06-01.md` covering 6 categories (auth/authz, money, data, webhooks, transport, compliance) — live SSM + aws CLI + curl audit; PASS w/ 1 operational finding
+  - Restored 2 nginx snippets (`ep-security-headers.conf` + `ep-proxy-headers.conf`) to `infra/nginx/snippets/` — drift from staging (correct headers existed live but not in git); fix prevents prod cutover bootstrap from missing them
+  - Bundled prettier follow-up on the Day-42 launch-readiness runbook (PR #251 docs-only-skipped the lint job; the regression surfaced on PR #252's non-docs diff)
+- **PR #253 `ci(audit): add dependency-audit job — gate on prod high+critical (§24.4)`** merged as `9a0322e`:
+  - New `dependency-audit` CI job between `lint-and-typecheck` and `unit-tests`
+  - Runs `pnpm audit --prod --audit-level high --ignore-registry-errors` (5-min timeout)
+  - **LIVE gate** — already exercised on PR #253 itself + PR #254 + PR #255 — no false positives
+  - Dev-only HIGH+CRITICAL (vitest UI server, tmp transitive) intentionally excluded via `--prod` scope; handled by Dependabot bumps
+- **PR #254 `chore(cleanup): clear two stale TODOs — magic-link wired + KYC doc updated`** merged as `21a48ec`:
+  - `magic-link-form.tsx:20` wired to `/api/v1/auth/magic-link/request` (Day-1 scaffold finally connected); contact-form-pattern submitting/error UX
+  - `kyc.ts:51` JSDoc rewrite — the TODO comment was outdated (`provisionTenantSubdomain()` actually shipped Sprint 3 Day 22 Workstream 2); no code change, doc-only fix
+- **PR #255 `ci(load-test): k6 scaffold targeting public reads (§24.4 second half)`** merged:
+  - `infra/load-tests/{README.md,events-list.js,budgets.json}` + `.github/workflows/load-test.yml` workflow_dispatch-only
+  - 2 scenarios (events_list 14 RPS, changelog 6 RPS, 30s each, constant-arrival-rate executor)
+  - Workflow installs k6, runs script, uploads JSON artefact (14-day retention), compares against `budgets.json` with the §24.4 verbatim "p95 regress > 20%" cap
+  - `p95_ms=0` placeholder triggers `::warning::` instead of failure (operator-baseline-pending) — matches the build-track-owns-drafts pattern from Day-35
+- **`decisions.md` 2026-06-02 Day 43 EOD entry** — Decisions A-G codified
+- **`progress.md` Day 43 entry** — Sprint 4 §26.1 plan progress update (~85% shipped; §26.1 Day 10 build-track ✅)
+- **`handoff.md`** — rewritten to Day 43 EOD state (this file)
+
+## ⚠️ Day 42 deliverables shipped (carryover record)
 
 - **PR #244 `feat(marketing): apex home + /features + /pricing pages (§26.1 Day 9, part 1 of 3)`** merged as `2cff5fb`:
   - Apex marketing home (replaces Day-1 scaffold) + 6 value-prop cards + use-cases panel
@@ -89,7 +116,7 @@ main HEAD: <after-hotfix-merge> (target — pending PR #248 merge)
 
 Staging EC2 at HEAD `6ff4f9b`; will advance to hotfix HEAD after PR #248 merges + re-deploys. Migration ladder at 0018. pm2 web + api online + restart counts steady. /health db=ok 11ms. **changelog_entries currently 0 rows on staging** (seed failed); SSM manual re-seed runs after #248 merges and bumps to 9 rows. /legal/changelog page returns 200 but renders empty-state card until then.
 
-## ⚠️ The launch gate state — 10 ✅ RESOLVED items (carryover + Day 42)
+## ⚠️ The launch gate state — 12 ✅ RESOLVED items (carryover + Day 42 + Day 43)
 
 1. ~~EPS sandbox credentials~~ ✅ 2026-05-26
 2. ~~SES out-of-sandbox~~ ✅ 2026-05-31 (case 177899559700777)
@@ -101,6 +128,8 @@ Staging EC2 at HEAD `6ff4f9b`; will advance to hotfix HEAD after PR #248 merges 
 8. ~~Buyer-Terms-Lite v1.0 wire-in~~ ✅ 2026-05-31 Day 39 PM
 9. ~~Phase 4 SNS bounce/complaint suppression-list AWS-side wiring~~ ✅ 2026-06-01 Day 40
 10. ~~§26.1 Day 9 marketing pages (apex + features + pricing + contact + changelog)~~ ✅ 2026-06-01 Day 42
+11. ~~§26.1 Day 10 launch-readiness umbrella runbook + security audit (PASS w/ 1 ops finding fixed) + AUP/Terms host-liability spot check~~ ✅ 2026-06-01 + 2026-06-02 (Day 42 + Day 43)
+12. ~~§24.4 Sprint-4-close CI hardening: `pnpm audit` prod-only HIGH+CRITICAL gate LIVE + k6 load-test scaffold (workflow_dispatch-only pending operator baseline)~~ ✅ 2026-06-02 Day 43
 
 **§29 Open Decisions tracking:**
 
@@ -173,6 +202,12 @@ All amounts paisa. §14.10 Invariant-1 PASS across all 4. The only fully-clean f
 - Auth-gate-is-the-entire-security-model for `/api/v1/admin/*` (Day-35).
 - Build-track owns surfacing what's draftable for the launch gate (Day-35).
 - Wire-protocol diagnostic logging (PR #217) — keep ON permanently.
-- **Prod branch tracking discipline (Day 37):** `origin/prod` at `21dad2cc`; `main` at `6ff4f9b` (+ pending #248); divergence now ~105+ commits.
+- **Prod branch tracking discipline (Day 37):** `origin/prod` at `21dad2cc`; `main` at `0d8d8cd`; divergence now ~110+ commits.
+- **PR-title type-list locked (Day 43 codified):** `build | chore | ci | docs | feat | fix | memory | perf | refactor | revert | style | test`. No expansion without commitlint config + decisions.md entry. Audit/findings/review work maps to `docs(...)`.
+- **Docs-only CI-skip trade-off (Day 43 codified):** docs-only PRs trade prettier validation for CI speed. The next mixed PR enforces. Authors of docs-only PRs may run `pnpm format:check` locally at their discretion.
+- **`pnpm audit` CI gate live (Day 43):** prod-only at HIGH+CRITICAL via `pnpm audit --prod --audit-level high --ignore-registry-errors`. No allowlist. Dev-only HIGH+CRITICAL (vitest UI server, tmp transitive) handled by Dependabot cadence. Any new HIGH/CRITICAL in a prod dep blocks all PRs until fixed.
+- **k6 load-test gate posture (Day 43):** scaffold lives at `infra/load-tests/`; workflow_dispatch-only pending operator baseline. Once activated (operator runs the workflow, writes p95 to `budgets.json`, flips trigger to `pull_request`), every PR enforces §24.4's "p95 regress > 20%" cap.
+- **Magic-link form trusts API contract (Day 43):** shows "Check your email" on any non-network-error response per the API's anti-enumeration 202-always design. Future client code MUST NOT branch on response body to discriminate account-exists vs not-exists.
+- **JSDoc-TODO validity rule (Day 43 codified):** every TODO comment older than 2 weeks should be re-validated against the actual code. Stale "TODO" comments documenting features that already exist mislead reviewers + lead to false assumptions about system state.
 - **Method-agnostic-calculator discipline (Day 38).**
 - **Build-time-fetch-failure tolerance pattern (Day 42 codified for lib/changelog; carries forward for any new Server Component fetching the api).**
