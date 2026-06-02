@@ -14,6 +14,7 @@ import { publicOrdersRoutes } from './routes/public/orders.js'
 import { epsWebhookRoutes } from './routes/webhooks/eps.js'
 import { sesBounceRoutes } from './routes/webhooks/ses-bounce.js'
 import { sesComplaintRoutes } from './routes/webhooks/ses-complaint.js'
+import { adminDisbursementsRoutes } from './routes/super-admin/disbursements.js'
 import { feeConfigRoutes } from './routes/super-admin/fee-config.js'
 import { adminKycRoutes } from './routes/super-admin/kyc.js'
 import { adminLegalRoutes } from './routes/super-admin/legal.js'
@@ -231,6 +232,13 @@ export function createApp() {
   // actual EPS refund happens out-of-band via the merchant dashboard
   // between approve and mark-processed (§11.4 — V5 has no public refund API).
   app.route('/api/v1/admin/refunds', adminRefundsRoutes)
+  // Day 44 manual-disbursement bridge — read-only CSV export of
+  // per-tenant disbursement obligations for a date window. Operator
+  // uses this to manually populate the bank's BEFTN form on T+5 until
+  // Sprint 7's automated settlement engine lands. Same auth posture
+  // as revenue dashboard (cross-tenant by design under super-admin
+  // gate; one audit_logs row per export).
+  app.route('/api/v1/admin/disbursements', adminDisbursementsRoutes)
 
   return app
 }
