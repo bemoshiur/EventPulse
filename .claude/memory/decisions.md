@@ -4,6 +4,29 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-02 · Day 45 (security) — CRITICAL auth bypass found + fixed before first tenant (PR #267)
+
+### Context
+
+Setting up the first super-admin for the BDT-100 smoke surfaced a critical auth flaw: `/password/login` + `/magic-link/consume` trusted a **client-supplied `audience`** and minted the session with it, with no `super_admins` / `tenant_users` membership check. Any user could self-grant `super-admin` (full `/api/v1/admin/*`) or scope a `tenant` session to an arbitrary `tenantId` (cross-tenant via RLS). Prod was live + public (0 data at the time). The smoke was **halted** — onboarding a real tenant onto this would be reckless.
+
+### Decision — fix now (TDD) + deploy before resuming the smoke
+
+Operator chose fix-now over document-only. Implemented `audience-grant.ts`: pure `decideAudience` (8-case unit test, locally red→green) + `fetchAudienceGrants` (DB). Both login handlers enforce it (403 on denial). super-admin ⇒ `super_admins` row; tenant ⇒ `tenant_users` membership for that tenantId; super-admin does NOT auto-grant tenant access. Integration tests assert self-grant → 403, legit member → 200 (CI red on the pre-wiring commit, green after). PR #267 merged `2c9fb37`.
+
+### Consequences
+
+- **Server-side audience authority is now the rule:** never trust client audience/role/scope on auth endpoints. New such params need a membership check + a self-grant→403 negative test. (Codified in gotchas.md.)
+- Two fix-time gotchas codified: `Promise.all` on one `withSuperAdmin`/`withTenant` connection fails (await sequentially); vitest 5000ms default flakes argon2-heavy integration tests (`testTimeout` raised to 20000).
+- BDT-100 smoke resumes only after this deploys to prod + the bypass is verified closed (login `audience: super-admin` for a non-admin → 403).
+- The smoke's full-UI path (operator's choice) still needs a first super-admin created (DB) to approve KYC — now safe to do.
+
+### Pointers
+
+- PR #267 `2c9fb37`. `apps/api/src/auth/audience-grant.ts`, `auth.ts`, `auth.test.ts`. gotchas.md top entry.
+
+---
+
 ## 2026-06-02 · Day 45 (go-live) — Production PUBLICLY LIVE: #1e-app deployed + #2 DNS + #3 cert
 
 ### Context
