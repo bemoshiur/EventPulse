@@ -6,19 +6,48 @@ import { ArrowRight, Mail } from 'lucide-react'
 /**
  * Magic-link email form for sign-in / sign-up (§5.2, §19.2).
  *
- * Day 1-2: client-side only. Submission swaps to the "Check your email" state
- * but does not yet call the API — that wiring lands in Sprint 1 Day 7–8 when
- * the magic_links table and the issuance endpoint exist.
+ * POSTs the email to `/api/v1/auth/magic-link/request`. The endpoint
+ * ALWAYS responds 202 to avoid email-enumeration regardless of whether
+ * the account exists (see `apps/api/src/routes/auth.ts:137`), so the
+ * UI shows "Check your email" identically for any non-network-error
+ * response.
+ *
+ * No idempotency key — magic-link issuance is one-token-per-request
+ * by design (no money moves; collisions are benign).
  */
 export function MagicLinkForm() {
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!email.trim()) return
-    // TODO(Sprint 1 Day 7-8): POST /api/v1/tenant/auth/magic-link with idempotency
-    setSubmitted(true)
+    const trimmed = email.trim()
+    if (!trimmed) return
+
+    setSubmitting(true)
+    setErrorMessage(null)
+
+    try {
+      const r = await fetch('/api/v1/auth/magic-link/request', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: trimmed, purpose: 'signin' }),
+      })
+      // 2xx (including 202) → success. The endpoint never reveals
+      // account existence, so we surface "Check your email" identically.
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}))
+        setErrorMessage(body?.error?.message ?? 'Something went wrong. Please try again.')
+        return
+      }
+      setSubmitted(true)
+    } catch {
+      setErrorMessage('Network error. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (submitted) {
@@ -31,7 +60,10 @@ export function MagicLinkForm() {
         </p>
         <button
           type="button"
-          onClick={() => setSubmitted(false)}
+          onClick={() => {
+            setSubmitted(false)
+            setErrorMessage(null)
+          }}
           className="text-ep-violet mt-3 text-xs font-medium hover:underline"
         >
           Use a different email
@@ -51,14 +83,21 @@ export function MagicLinkForm() {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           placeholder="you@company.com"
-          className="border-ep-line text-ep-ink placeholder:text-ep-graphite/50 focus:border-ep-cerulean h-12 w-full rounded-md border bg-white pr-3 pl-9 text-sm focus:outline-none"
+          disabled={submitting}
+          className="border-ep-line text-ep-ink placeholder:text-ep-graphite/50 focus:border-ep-cerulean h-12 w-full rounded-md border bg-white pr-3 pl-9 text-sm focus:outline-none disabled:opacity-60"
         />
+        {errorMessage && (
+          <p role="alert" className="text-ep-rose mt-2 text-xs">
+            {errorMessage}
+          </p>
+        )}
       </div>
       <button
         type="submit"
-        className="grad-primary inline-flex h-12 items-center justify-center gap-2 rounded-md px-5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+        disabled={submitting}
+        className="grad-primary inline-flex h-12 items-center justify-center gap-2 rounded-md px-5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
       >
-        Continue
+        {submitting ? 'Sending…' : 'Continue'}
         <ArrowRight className="h-4 w-4" />
       </button>
     </form>
