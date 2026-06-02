@@ -328,4 +328,14 @@ else
   log "  pm2 systemd unit already present"
 fi
 
+# ─── 5) Nightly DB backup (pg-backup.sh -> S3, §17.10) ───────────────────
+# Installs the env-aware backup script + a root cron at 19:00 UTC (01:00 BDT).
+# Requires the eventpulse-<env>-backups bucket to already exist (created
+# out-of-band, like the KYC bucket). Logical (pg_dump) backups only; WAL/PITR
+# + EBS snapshots are separate layers.
+log "step 5: pg-backup.sh + nightly cron"
+install -m 0755 "$APP_DIR/infra/scripts/pg-backup.sh" /usr/local/bin/eventpulse-pg-backup.sh
+( crontab -l 2>/dev/null | grep -v eventpulse-pg-backup; echo '0 19 * * * /usr/local/bin/eventpulse-pg-backup.sh' ) | crontab -
+log "  backup cron installed (19:00 UTC daily -> eventpulse-<env>-backups)"
+
 log "bootstrap-prod complete. Next: sudo -u $EVENTPULSE_USER $APP_DIR/infra/deploy/deploy.sh main"
