@@ -18,18 +18,18 @@
 
 10 launch-gate items ✅ resolved:
 
-| # | Item | Resolved | Pointer |
-|---|---|---|---|
-| 1 | EPS sandbox credentials | 2026-05-26 | `eventpulse/staging/eps-sandbox` |
-| 2 | SES out-of-sandbox approval | 2026-05-31 | AWS case 177899559700777 |
-| 3 | EPS fee-model structural decision | 2026-05-31 (Option 3 chosen) | Day 38 PRs #227-#230 |
-| 4 | §29 #9 AIT classification | 2026-05-26 | CA Jannatul Maoua opinion |
-| 5 | §29 #10 NBR/VAT registration model | 2026-05-31 | CA Jannatul Maoua opinion |
-| 6 | Salehin: Buyer Terms framing | 2026-05-31 | Reading (a) primary |
-| 7 | Salehin: Incorporation path | 2026-05-31 | Path B LOCKED |
-| 8 | Buyer-Terms-Lite v1.0 wire-in | 2026-05-31 (PR #237) | `consent_records` at checkout |
-| 9 | Phase 4 SNS bounce/complaint AWS wiring | 2026-06-01 (Day 40) | Staging confirmed end-to-end |
-| 10 | §26.1 Day 9 marketing pages | 2026-06-01 (Day 42) | PRs #244-#246 + hotfix #248 |
+| #   | Item                                    | Resolved                     | Pointer                          |
+| --- | --------------------------------------- | ---------------------------- | -------------------------------- |
+| 1   | EPS sandbox credentials                 | 2026-05-26                   | `eventpulse/staging/eps-sandbox` |
+| 2   | SES out-of-sandbox approval             | 2026-05-31                   | AWS case 177899559700777         |
+| 3   | EPS fee-model structural decision       | 2026-05-31 (Option 3 chosen) | Day 38 PRs #227-#230             |
+| 4   | §29 #9 AIT classification               | 2026-05-26                   | CA Jannatul Maoua opinion        |
+| 5   | §29 #10 NBR/VAT registration model      | 2026-05-31                   | CA Jannatul Maoua opinion        |
+| 6   | Salehin: Buyer Terms framing            | 2026-05-31                   | Reading (a) primary              |
+| 7   | Salehin: Incorporation path             | 2026-05-31                   | Path B LOCKED                    |
+| 8   | Buyer-Terms-Lite v1.0 wire-in           | 2026-05-31 (PR #237)         | `consent_records` at checkout    |
+| 9   | Phase 4 SNS bounce/complaint AWS wiring | 2026-06-01 (Day 40)          | Staging confirmed end-to-end     |
+| 10  | §26.1 Day 9 marketing pages             | 2026-06-01 (Day 42)          | PRs #244-#246 + hotfix #248      |
 
 §29 Open Decisions tracking:
 
@@ -39,17 +39,17 @@
 
 ## Pre-launch operational gates (this runbook tracks each)
 
-| Gate | Owner | Gate type | This runbook section |
-|---|---|---|---|
-| EPS production credentials arrival | Operator (external clock) | EPS-side | §1 |
-| Production EC2 + cutover ceremony | Operator + Claude Code | Multi-session, STOP-ASK | §2 |
-| Phase 4 production-side AWS wiring | Operator-authorised | Sub-step of #2 | §3 |
-| `MAIL_DRY_RUN=0` prod flip | Operator | Sub-step of #2 | §3 |
-| BDT-100 production EPS smoke | Operator + Claude Code | Gated on #1 + #2 | §4 |
-| First paying tenant identification + onboarding | Operator-led | Final step | §5 |
-| Cost ceiling enforcement | Both | Standing — checked at every AWS-write | §6 |
-| Security checklist sweep | Claude Code | Pre-cutover audit | §7 |
-| AUP + Terms host-liability spot check | Claude Code + Counsel | Pre-cutover audit | §8 |
+| Gate                                            | Owner                     | Gate type                             | This runbook section |
+| ----------------------------------------------- | ------------------------- | ------------------------------------- | -------------------- |
+| EPS production credentials arrival              | Operator (external clock) | EPS-side                              | §1                   |
+| Production EC2 + cutover ceremony               | Operator + Claude Code    | Multi-session, STOP-ASK               | §2                   |
+| Phase 4 production-side AWS wiring              | Operator-authorised       | Sub-step of #2                        | §3                   |
+| `MAIL_DRY_RUN=0` prod flip                      | Operator                  | Sub-step of #2                        | §3                   |
+| BDT-100 production EPS smoke                    | Operator + Claude Code    | Gated on #1 + #2                      | §4                   |
+| First paying tenant identification + onboarding | Operator-led              | Final step                            | §5                   |
+| Cost ceiling enforcement                        | Both                      | Standing — checked at every AWS-write | §6                   |
+| Security checklist sweep                        | Claude Code               | Pre-cutover audit                     | §7                   |
+| AUP + Terms host-liability spot check           | Claude Code + Counsel     | Pre-cutover audit                     | §8                   |
 
 ## §1 — EPS production credentials arrival (external clock)
 
@@ -92,16 +92,16 @@ The decisions.md "STANDING CONSTRAINT: AWS spend hard ceiling = $30/month" entry
 
 Each sub-item is a separate operator-authorised session. Do NOT batch.
 
-| # | Sub-item | Est. monthly cost delta | Reference |
-|---|---|---|---|
-| 1 | Prod EC2 t3.small + Ansible bootstrap | +$15.00 | `docs/runbooks/staging-bootstrap.md` (template) |
-| 2 | Prod Route 53 records (8-record set per §17.6 production-target block — apex, www, api, app, admin, my, customers, wildcard) | +$0 (in existing zone) | CLAUDE.md §17.6 |
-| 3 | Prod wildcard cert via DNS-01 (`*.eventpulse.com.bd` + `eventpulse.com.bd` SANs) | $0 (Let's Encrypt) | §17.7 |
-| 4 | `eventpulse-deploy-prod` GitHub-OIDC role (canonical three-claim trust pattern per §17.9.1) | $0 | `infra/scripts/setup-github-oidc.sh` |
-| 5 | Secrets Manager prod entries — **consolidated JSON blob pattern, NOT per-purpose** | +$0.40-0.80 | This runbook §6 |
-| 6 | 1 prod KMS CMK (`alias/eventpulse-kyc-prod`) — general prod uses existing `alias/eventpulse-staging` rotated to a new alias `eventpulse-prod` or kept dual-purpose for MVP | +$1-2 | Cost-aware §17.9 amendment |
-| 7 | Prod-branch ff-merge (`origin/prod` at `21dad2cc` → current main; ~105+ commits) | $0 | git |
-| 8 | §17.11 alarm catalogue copy to prod (7 alarms) | +$0.70 | Day-41 CW CPU alarm as template |
+| #   | Sub-item                                                                                                                                                                   | Est. monthly cost delta | Reference                                       |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ----------------------------------------------- |
+| 1   | Prod EC2 t3.small + Ansible bootstrap                                                                                                                                      | +$15.00                 | `docs/runbooks/staging-bootstrap.md` (template) |
+| 2   | Prod Route 53 records (8-record set per §17.6 production-target block — apex, www, api, app, admin, my, customers, wildcard)                                               | +$0 (in existing zone)  | CLAUDE.md §17.6                                 |
+| 3   | Prod wildcard cert via DNS-01 (`*.eventpulse.com.bd` + `eventpulse.com.bd` SANs)                                                                                           | $0 (Let's Encrypt)      | §17.7                                           |
+| 4   | `eventpulse-deploy-prod` GitHub-OIDC role (canonical three-claim trust pattern per §17.9.1)                                                                                | $0                      | `infra/scripts/setup-github-oidc.sh`            |
+| 5   | Secrets Manager prod entries — **consolidated JSON blob pattern, NOT per-purpose**                                                                                         | +$0.40-0.80             | This runbook §6                                 |
+| 6   | 1 prod KMS CMK (`alias/eventpulse-kyc-prod`) — general prod uses existing `alias/eventpulse-staging` rotated to a new alias `eventpulse-prod` or kept dual-purpose for MVP | +$1-2                   | Cost-aware §17.9 amendment                      |
+| 7   | Prod-branch ff-merge (`origin/prod` at `21dad2cc` → current main; ~105+ commits)                                                                                           | $0                      | git                                             |
+| 8   | §17.11 alarm catalogue copy to prod (7 alarms)                                                                                                                             | +$0.70                  | Day-41 CW CPU alarm as template                 |
 
 **Total cutover cost delta: ~$17-19/month** (additive to current $26/mo = ~$43-45/mo unless additional trims land — see §6 of this runbook).
 
@@ -214,13 +214,13 @@ The first paying tenant must satisfy ALL:
 
 ### Trims available if trajectory threatens to exceed ceiling
 
-| Trim | Saving | Cost |
-|---|---|---|
-| Switch staging EC2 to spot instances for non-business hours | ~$5-7/mo | Loses persistence; revisit post-launch |
-| Drop staging KYC CMK; use AWS-managed for staging KYC bucket | $1/mo | Staging KYC data is test-only |
-| Reduce EBS snapshot retention to 2 weeks | $0.10-0.30/mo | Reduces restore window |
-| Reduce SES sending IP pool size (default 1 — already minimal) | $0 | No further trim |
-| Consolidate staging + prod CloudWatch Logs into a single log group | $0.50-1/mo | Loses env-scoped log queries |
+| Trim                                                               | Saving        | Cost                                   |
+| ------------------------------------------------------------------ | ------------- | -------------------------------------- |
+| Switch staging EC2 to spot instances for non-business hours        | ~$5-7/mo      | Loses persistence; revisit post-launch |
+| Drop staging KYC CMK; use AWS-managed for staging KYC bucket       | $1/mo         | Staging KYC data is test-only          |
+| Reduce EBS snapshot retention to 2 weeks                           | $0.10-0.30/mo | Reduces restore window                 |
+| Reduce SES sending IP pool size (default 1 — already minimal)      | $0            | No further trim                        |
+| Consolidate staging + prod CloudWatch Logs into a single log group | $0.50-1/mo    | Loses env-scoped log queries           |
 
 **If all trims applied at peak load: ceiling has $5-8/mo additional headroom.**
 
