@@ -4,6 +4,33 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-02 · Day 45 (blocker) — Browser-auth integration scoped; BDT-100 smoke re-deferred
+
+### Context
+
+Right after deploying + verifying the PR #267 audience-grant fix on prod (self-grant → 403, cross-tenant → 403, legit → 200), continued the smoke setup by bootstrapping the first super-admin. That surfaced a far larger gap: the **authenticated browser flow was never wired end-to-end**. Four independent breakages (no CORS; web sends cookies but API reads only Bearer and nothing attaches Bearer; no session cookie is ever set; magic-link points to staging + the `/auth/magic` page doesn't exist) — plus no `/refresh` endpoint. Net: there is **no working browser sign-in** to the tenant/admin/attendee portals. The API works; the UIs exist; the browser→API credential path does not. Hidden because tests use `app.request` with hand-made Bearer tokens or guest checkout — never a real browser login. Full detail: gotchas.md Day-45 top entry.
+
+### Decision
+
+1. **Re-defer the BDT-100 prod smoke.** The operator's chosen "full UI flow (sign up + KYC)" needs browser login as both tenant and super-admin, which is impossible until this is wired. `STAGING_PAYMENT_BLOCK=1` was **never lifted** — prod stays in a safe, locked state. (A seeded **guest-checkout** smoke remains available to confirm the EPS rate without login — offered, operator chose to scope auth instead.)
+2. **Scope the integration as a TDD plan, do not implement this session.** Operator chose "skip smoke; scope browser-auth." Plan written: `docs/design/browser-auth-integration.md`.
+3. **Recommend Option B (HttpOnly session-cookie read by the API + CORS-with-credentials)** for the MVP — reuses `resolveSession` + the `sessions` table, no JWT-in-browser, no `/refresh` needed. Option C (Next BFF proxy) documented as the isolation/hardening alternative; Option A (token in JS) rejected. **Credential transport is foundational auth → needs operator/architect sign-off before code** (CLAUDE.md "ask before modifying auth code").
+
+### Consequences
+
+- **Launch posture is now an open decision (June 10).** Logged-in self-serve (tenant onboarding/KYC, admin review, attendee portal) is blocked until this lands. A **guest-checkout-narrow launch** (ops/operator publishes events via API/seed; buyers use guest checkout, which works) is viable independently. Operator to decide narrow-vs-full for June 10 (open decision §4.4 in the design doc).
+- The EPS production-rate confirmation (biggest external unknown) is **not** blocked by this — confirmable now via guest checkout per `docs/runbooks/production-smoke.md` + the seeded-smoke pivot.
+- Four open decisions captured in the design doc (transport B/C; multi-tenant audience at login; cookie scope; launch posture).
+- No prod changes this session beyond the already-deployed auth fix. Cost trajectory unchanged.
+
+### Pointers
+
+- `docs/design/browser-auth-integration.md` (scope + option analysis + TDD task breakdown).
+- gotchas.md Day-45 "Browser-auth flow was never wired end-to-end".
+- Builds on PR #267 (server resolves audience). `apps/api/src/auth/middleware.ts`, `apps/web/src/hooks/*` (`credentials:'include'`), `apps/api/src/routes/auth.ts:159`.
+
+---
+
 ## 2026-06-02 · Day 45 (security) — CRITICAL auth bypass found + fixed before first tenant (PR #267)
 
 ### Context

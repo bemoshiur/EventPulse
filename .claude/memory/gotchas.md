@@ -4,6 +4,27 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## 🔴 Browser-auth flow was never wired end-to-end — logged-in portals can't authenticate (Day 45)
+
+**Symptom.** Bootstrapping the first super-admin for the prod smoke, found there is **no working browser sign-in** to the tenant/admin/attendee portals — on prod or anywhere. The API works (Bearer, integration-tested); the portal UIs exist; but the two never met in a browser.
+
+**The four independent gaps (all verified in-tree on `main`):**
+
+1. **No CORS on the API.** `app.ts`/`index.ts` register zero CORS. Web hooks call `api.eventpulse.com.bd` cross-origin with `credentials:'include'` → browser blocks every authenticated portal→API call at preflight.
+2. **Cookie ↔ Bearer mismatch.** Web sends cookies (`fetchWithCreds`); API middleware (`middleware.ts:41`) reads only `Authorization: Bearer`; nothing in web attaches a Bearer header. The middleware comment (`:55`) admits it: *"accept any valid JWT … tighten in Day 9-10 when we wire the cookie → hash lookup"* — never done.
+3. **No session cookie ever set.** `/magic-link/consume` + `/password/login` return tokens in a JSON body (`auth.ts:135,247`); no consume page, no cookie-setter, no server route persists a session.
+4. **Magic-link doubly broken.** `EVENTPULSE_BASE_URL` unset on prod → link falls back to `staging.eventpulse.com.bd` (`auth.ts:159`); `/auth/magic` page doesn't exist → 404 anyway.
+
+Also: **no `/refresh` endpoint** (tokens issued, never rotated).
+
+**Why it stayed hidden.** Integration tests call the API directly with a Bearer token (`app.request(...)`), bypassing the browser cookie layer. Component tests mock the API. The buyer-journey e2e uses guest checkout (no login). So no test — and no human — ever exercised a real browser login. The "Day 9-10" wiring slipped and nothing caught it.
+
+**Fix.** Not a quick patch — a foundational integration. Scoped in `docs/design/browser-auth-integration.md` (Option B session-cookie+CORS recommended; Option C BFF-proxy alt; Option A token-in-JS rejected) with a TDD task breakdown. **Needs operator/architect sign-off before code** (auth surface).
+
+**How to avoid.** End-to-end auth needs at least one test that goes through the **real transport** the browser uses (cookie/CORS), not just `app.request` with a hand-made Bearer. A green API + a built UI is not a working logged-in product until the browser→API credential path is proven.
+
+---
+
 ## 🔴 Login trusted a client-supplied `audience` → privilege escalation + cross-tenant (Day 45 / PR #267)
 
 **Symptom.** Found while setting up a super-admin for the prod smoke: `/api/v1/auth/password/login` (and `/magic-link/consume`) read `audience` straight from the request body and minted the session with it — **no `super_admins` / `tenant_users` membership check**. `requireSuperAdminAuth` only checks `aud === 'super-admin'`. So any user who can log in could:
