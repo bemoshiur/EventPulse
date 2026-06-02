@@ -42,6 +42,7 @@
 ## ✅ Day-45 continued (this session, post-go-live)
 
 - **#8 alarms (partial):** created SNS topic `eventpulse-prod-alerts` + email sub to moshiur@ (**operator must click the confirm link**) + **prod CPU alarm** `eventpulse-prod-ec2-cpu-high` (>85%/10min, wired to the topic — unlike staging's action-less one). mem/disk + app-level alarms NOT done (see below).
+- **✅ Phase 4 SNS prod wiring + `MAIL_DRY_RUN=0` COMPLETE + VERIFIED.** Created `eventpulse-ses-bounces-prod` + `eventpulse-ses-complaints-prod` (SignatureVersion=2 + SES-publish policy), set `SES_*_TOPIC_ARNS` allowlist + `AWS_SES_CONFIGURATION_SET=eventpulse-prod` on the box, subscribed both webhook URLs (auto-confirmed), created SES config set `eventpulse-prod` + bounce/complaint event destinations. Mailbox-simulator round-trip verified: suppression rows written (hard_bounce + complaint, permanent), api log `*.suppressed`. Test rows cleaned up. **`MAIL_DRY_RUN=0` flipped** — prod now sends real email (suppression-guarded). (2 transient `message_unparseable` on the pre-reload pid during the config-set reload window — SNS retry delivered cleanly; non-issue.)
 - **bootstrap default-site fix → PR #265** (`fix/bootstrap-prod-nginx-default`) — codifies `rm -f /etc/nginx/sites-enabled/default`. Open.
 - **§7 security sweep (prod):** PASS on TLS 1.3, security headers (HSTS/XFO/XCTO/RP on proxied paths), RLS roles, append-only audit_logs, KYC bucket encryption, port-22-closed, IMDSv2, STAGING_PAYMENT_BLOCK=1, MAIL_DRY_RUN=1, cert→Aug31, JWT secrets present.
   - 🔴 **GAP — NO automated DB backups** (prod AND staging): no pg_dump cron, `archive_mode=off`, empty backups dir, no AWS Backup plan seen. §17.10 (nightly pg_dump→S3 + WAL) was never implemented project-wide. **MUST fix before first paying tenant** (real money + KYC PII). Needs design: pg_dump→S3 (backups bucket + lifecycle) and/or EBS snapshot plan + WAL.
@@ -53,7 +54,7 @@ Done: #1 (provision+app), #2 (DNS), #3 (cert), #4 (OIDC), #6 (KYC), budget alarm
 
 1. 🔴 **DB backups** (top priority pre-tenant) — implement pg_dump→S3 nightly + retention (+ decide WAL / EBS snapshots) per §17.10. Project-wide gap.
 2. **Open PRs to merge:** #264 (this go-live memory), #265 (bootstrap default-site fix).
-3. **#8 finish:** CloudWatch agent install (mem>90% / disk>80% alarms) + the 4 app-level alarms (need the app to emit custom metrics — verify it does) + **Phase 4 SNS prod wiring** (copy Day-40 staging, `-prod` suffixes + `api.eventpulse.com.bd`) → **flip `MAIL_DRY_RUN=0`** (needed before first paying tenant for order-confirmation emails). + CloudTrail.
+3. **#8 finish:** CloudWatch agent install (mem>90% / disk>80% alarms) + the 4 app-level alarms (need the app to emit custom metrics — verify it does) + CloudTrail. (Phase 4 SNS + `MAIL_DRY_RUN=0` ✅ DONE this session.)
 4. **re-deploy** (`deploy.sh main` via SSM) to populate legal/changelog static pages (build-time fetch failed pre-DNS; harness gates prod deploys).
 5. **#7 prod-branch ff-merge** — DEFERRED: clean ff (prod 209 behind main, not GitHub-protected) but the **husky pre-push hook blocked** it; §18.3 says prod updates via tag/dispatch not direct push. Decide mechanism (override w/ `--no-verify`+log, PR, or tag). Non-blocking (deploy via SSM works; `deploy-prod.yml` already exists on prod@21dad2c, just stale).
 6. **#5 oauth secrets** — optional (clean 503 without); jwt auto.
@@ -65,7 +66,7 @@ Done: #1 (provision+app), #2 (DNS), #3 (cert), #4 (OIDC), #6 (KYC), budget alarm
 ## Standing invariants (unchanged)
 
 - $30/mo ceiling; decommission-staging-at-launch is the plan to hold it.
-- prod `.env.production` boots `STAGING_PAYMENT_BLOCK=1` + `MAIL_DRY_RUN=1` (deliberate; lifted at smoke/Phase-4 respectively).
+- prod `.env.production`: `STAGING_PAYMENT_BLOCK=1` still held (lifts only for the BDT-100 smoke). **`MAIL_DRY_RUN=0` as of Day 45** (Phase 4 verified) — prod sends real email, suppression-guarded.
 - `EPS_MODE=production` (from eventpulse/prod/eps).
 - Money math only via fee-calculator.ts. RLS roles via the exact 3-role model (self-checked by provision-prod.sh).
 - Memory commits via PRs, separate from feature commits. Branch protection on main.
