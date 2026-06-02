@@ -4,6 +4,126 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-02 · Day 44 EOD — Operator-facing launch artefacts + security-fixed disbursement bridge (4 PRs)
+
+### Context
+
+Day 44 picked up the "Day 44 first-thing options" listed in the Day 43 EOD handoff. Two natural buildable items remained, both directly launch-relevant. The session shipped both + a critical security fix surfaced by automated review + the same-class fix to a pre-existing vulnerability that the review's gotcha-entry flagged.
+
+Four PRs closed today:
+
+- **PR #257** `4af2e26` — `docs(ops): first paying tenant onboarding pack` (~388 LOC). Operationalises the §5 13-item checklist from the Day-42 launch-readiness runbook into actual sendable artefacts (initial outreach email, 72h nudge, discovery-call agenda + notes template, partnership-terms one-pager with Path-B novation acknowledgement, welcome onboarding email — 10-step path from sign-up to retro, day-1 monitoring hourly template, comms cadence table, "anything goes wrong" action matrix, retro template).
+- **PR #258** disbursement CSV export with security fix — ~1003 LOC of code + tests + a security follow-up commit + a test-fix commit. Read-only super-admin endpoint at `GET /api/v1/admin/disbursements/export?period_start&period_end[&tenant_id]` that bridges the manual-disbursement gap until Sprint 7's automated settlement engine lands. Per-tenant aggregate over orders + processed-refunds in window; reads only snapshotted money columns (Decision-N pattern from Day-35 revenue dashboard); 9 DB-gated route tests + 12 pure-function csvEscape tests.
+- **PR #259** `8053ed2` — `memory: codify CSV-formula-injection rule + flag attendee-export same-vuln carry`. Top-of-log gotcha entry establishing the rule + canonical fix pattern + detection signals so future PRs don't recreate the vulnerability.
+- **PR #260** attendee-export same-class fix — closes the carry item PR #259 explicitly flagged. Applied the identical FORMULA_PREFIXES guard to `apps/api/src/services/attendees/export-csv.ts` + extended its existing test file with 9 matching formula-injection cases. From security finding → codified rule → same-day fix in one cycle.
+
+### Decision A — Day-10 buildable items: prioritise concrete launch artefacts over speculative settlement infra
+
+The Day 43 EOD handoff listed three "Day 44 first-thing options". Two were chosen today:
+
+1. **First-paying-tenant onboarding pack (PR #257).** Concrete artefact the operator will use when actually inviting the first paying tenant. Without it the operator has the 13-item checklist but no actual email to send.
+2. **Admin disbursement CSV export (PR #258).** Operator runs T+5 disbursement manually for v1.0; without a structured per-tenant aggregate, the operator has to write ad-hoc SQL each cycle. The CSV bridges the gap until Sprint 7's settlement engine.
+
+The third option ("re-review prod-cutover plan against cost-aware deltas pre-EPS-credentials") was deliberately NOT chosen — the plan already incorporates the cost-aware deltas (per launch-readiness runbook §2 + cost-ceiling decisions.md entry); a re-review would be low-value busywork.
+
+**Generalisation:** at the launch endgame, prefer concrete artefacts the operator can use over speculative documentation refreshes. The cost-aware deltas are already codified; rebuilding them in a new doc adds nothing.
+
+### Decision B — Disbursement CSV: bridge-not-engine (Sprint-7 scope respected)
+
+Sprint 7 ships the full settlement engine: `disbursement_batches` + `tenant_payout_accounts` + cron-triggered batch generation + payout adapters (BEFTN file generator, bKash B2C, Nagad, Rocket). None of that exists today, and shipping any subset of it now would create dual sources of truth that future Sprint 7 work would have to reconcile.
+
+Day-44 PR #258 deliberately stays in the bridge lane:
+
+- **Read-only.** No `disbursement_batches` row writes. The operator tracks "already paid" in private notes for v1.0.
+- **No BEFTN format invented.** Bangladesh bank BEFTN formats vary by bank; without the operator's specific bank's format spec, inventing one risks lock-in to a wrong shape. The CSV is the universal-input fallback — the operator types numbers into the bank's web form.
+- **Snapshotted money columns only.** Reads `orders.subtotalPaisa / platformFeePaisa / epsFeePaisa / netToOrganiserPaisa / withholdingTaxPaisa` directly. NO fee-calculator invocation at export time (Decision-N rule from Day-35 revenue dashboard).
+- **Refund deduction inline.** Sums `refunds.amountPaisa WHERE status='processed' AND processedAt IN window`; subtracts from per-tenant net per §14.5 step 4. Negative-net case surfaces as negative number (debit-carry-forward signal).
+- **End-exclusive window.** `paidAt IN [periodStart, periodEnd)` matches the §14.5 settlement-cron convention so the eventual cron + the manual export read the same data shape.
+
+When Sprint 7 lands, this endpoint stays — it becomes a "shadow reconciliation" check against the automated batches. The mechanism is preserved; the operator-facing UI just gets richer.
+
+### Decision C — Audit posture: first super-admin domain helper, one row per discrete event
+
+PR #258 introduced `apps/api/src/services/audit/admin.ts` — the **first super-admin-domain audit helper file** in the project (sibling to `audit/orders.ts`, `audit/kyc.ts`, `audit/legal.ts`, `audit/attendees.ts`, etc., per the one-per-domain convention codified decisions.md 2026-05-17).
+
+The audit row shape:
+
+- `actor_type = 'super_admin'` (matches the disbursement endpoint's auth gate)
+- `entity_type = 'platform'` (a global action, not scoped to a specific entity row)
+- `tenant_id = NULL` (cross-tenant by design)
+- `entity_id = NULL`
+- `diff` captures: period window (ISO 8601), tenant_id filter (if any), row count, total_net_paisa
+
+**One row per discrete operational event** — same posture as Day-32 attendee export (Decision A from that PR). The list endpoint doesn't audit per row; the export does, because the operational signal "operator pulled a complete disbursement file at time T" is the regulatory question, not "what tenant rows did they read." Per-PII-row audit would violate §1.3 R5 + flood the audit table with no analytic value.
+
+### Decision D — CSV formula injection: BOM + user-controlled cells force the guard
+
+The automated security review on PR #258 surfaced a MEDIUM CWE-1236 CSV Formula Injection finding on the initial `csvEscape` helper (which was a verbatim copy from the Day-32 attendee export). Fixed inline in PR #258; codified the rule in PR #259's gotchas.md; same-class fix to the original attendee-export source landed as PR #260.
+
+**The codified rule (gotchas.md top entry):**
+
+> **BOM and the formula-guard must ship together.** Any CSV output that emits UTF-8 BOM opts INTO the spreadsheet renderer; without the leading-character formula-prefix guard, user-controlled strings starting with `=`, `+`, `-`, `@`, TAB, or CR fire as formulas in Excel/Sheets/LibreOffice on open.
+
+Canonical fix pattern (`apps/api/src/services/admin/disbursement-export.ts:122` + same in `apps/api/src/services/attendees/export-csv.ts:89`):
+
+```typescript
+const FORMULA_PREFIXES = /^[=+\-@\t\r]/
+const QUOTABLE = /[,"\r\n]/
+
+export function csvEscape(value: string | null | undefined): string {
+  if (value == null || value === '') return ''
+  const safe = FORMULA_PREFIXES.test(value) ? `'${value}` : value
+  if (QUOTABLE.test(safe)) return `"${safe.replace(/"/g, '""')}"`
+  return safe
+}
+```
+
+The single-quote prefix is the canonical OWASP recommendation: Excel + Sheets + LibreOffice treat the leading apostrophe as a **display-only prefix** — it doesn't appear in the rendered cell, and the formula never fires.
+
+**Why this is non-obvious enough to need the gotcha:** the UTF-8 BOM was added for legitimate Bangla rendering correctness — it was perceived as a UI improvement, not a security boundary. The same line of reasoning that made the BOM look benign made the formula vector look invisible. Codifying "BOM and formula-guard must ship together" makes the dependency explicit so future PRs see it.
+
+### Decision E — Same-day same-class fix preferred over deferring
+
+PR #259's gotcha entry flagged the pre-existing `apps/api/src/services/attendees/export-csv.ts` as having the identical vulnerability. The follow-up could have been deferred to "next sprint" but **was shipped today** as PR #260 instead. Reasons:
+
+- The fix is mechanical (copy-paste pattern from PR #258 + extend the existing test file)
+- Carrying a known-vulnerable file as backlog is operationally riskier than spending 20 minutes on the fix
+- The fix-cycle (review → rule → same-day-same-class-fix) reinforces the gotchas.md trail discipline — the gotcha doesn't sit as documentation of a known unfixed issue; it sits as documentation of a fixed issue + the rule that prevents recurrence
+
+**Generalisation:** when a gotcha codification surfaces a known same-class vulnerability elsewhere, fix it in the same session unless the fix is genuinely complex. The 20-minute write-+-test cost is negligible against the carry-it-forward operational risk.
+
+### Decision F — Pre-existing flaky test (eps.test.ts IP rate-limit) acknowledged but NOT fixed in PR #258
+
+PR #258's CI Integration job initially failed twice. First failure was my over-strict BOM assertion in `disbursements.test.ts` (fixed in `6eed4ab`). Second failure was an unrelated test in `apps/api/src/routes/webhooks/eps.test.ts` — "webhook route — IP rate-limit > 100 hits from same IP pass; 101st throttled" assertion got 101 passing instead of 100. This is a timing-sensitive **flaky test** caused by the in-memory rate-limit window's fixed-bucket math under CI parallelism: if 100 hits land just before the bucket reset and 1 more lands just after, the count resets and the 101st is allowed.
+
+This is **NOT caused by PR #258**. The test has been flaky pre-existing. Day-44 rerun of failed jobs cleared it.
+
+**Codified follow-up (NOT acted on today):** the rate-limiter under `apps/api/src/lib/rate-limit.ts` is fixed-window; should be migrated to a sliding-window implementation OR the test should be rewritten to use a controllable clock injection so it's deterministic. Filed as a §29-style open work item in the Day-44 handoff "Build-track items still in play" section.
+
+### Consequences
+
+- **§26.1 Day 10 operator-facing artefacts ✅ COMPLETE.** Operator has both: the email pack (PR #257) for inviting the tenant + the disbursement CSV (PR #258) for paying them on T+5.
+- **CSV formula injection class CLOSED across both code paths.** Disbursement export (PR #258), attendee export (PR #260). Future CSV exports follow the canonical fix; gotchas.md establishes the rule + the detection signal.
+- **First super-admin domain audit helper file ships** — sets the pattern for future super-admin endpoints.
+- **§29 Open Decisions tracking unchanged.** No new opens; no closes.
+- **AWS spend trajectory unchanged at ~$26/month** — no AWS-write sessions today (Day 44).
+- **Build-track items still in play:** flaky eps.test.ts IP rate-limit (sliding-window migration OR clock-injection refactor); 5 counsel-doc bodies (operator-led); k6 baseline (operator-led); AWS Budget alarm (operator decision); production EC2 cutover ceremony (operator-led).
+- **Operator-driven half remains the gating critical path** for launch. All Claude-Code build-track is closed.
+
+### Pointers
+
+- PR #257 `4af2e26` — `docs(ops): first paying tenant onboarding pack — operator-runnable`
+- PR #258 `410356b` — `feat(admin): disbursement CSV export — T+5 manual-bridge until Sprint 7`
+- PR #259 `8053ed2` — `memory: codify CSV-formula-injection rule + flag attendee-export same-vuln carry`
+- PR #260 — `fix(attendees-export): CSV formula-injection guard — same-class as PR #258`
+- (this EOD memory PR)
+- Onboarding pack — `docs/ops/first-paying-tenant-onboarding.md`
+- Disbursement export service — `apps/api/src/services/admin/disbursement-export.ts`
+- First super-admin audit helper — `apps/api/src/services/audit/admin.ts`
+- gotchas.md top entry — "CSV exports with UTF-8 BOM + user-controlled cells = formula-injection vector"
+
+---
+
 ## 2026-06-02 · Day 43 EOD — Sprint 4 §26.1 Day 10 launch readiness (build-track half) COMPLETE — 5 PRs
 
 ### Context
