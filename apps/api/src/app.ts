@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 
 import { withSuperAdmin } from './db/client.js'
 import { logger } from './lib/logger.js'
+import { corsMiddleware } from './middleware/cors.js'
 import { authRoutes } from './routes/auth.js'
 import { oauthRoutes } from './routes/oauth-routes.js'
 import { publicChangelogRoutes } from './routes/public/changelog.js'
@@ -39,6 +40,10 @@ import { tenantTicketTiersRoutes } from './routes/tenant/ticket-tiers.js'
  */
 export function createApp() {
   const app = new Hono()
+
+  // App-wide CORS FIRST so preflight works for every route incl. /health
+  // (browser-auth Option B — portals call cross-origin with credentials).
+  app.use('*', corsMiddleware())
 
   // DB-aware /health (Fix 6 of the Day 21 verification deploy sequence).
   // Runs a `SELECT 1` to confirm Postgres is reachable. Returns 200 with

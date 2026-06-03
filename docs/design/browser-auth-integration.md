@@ -13,12 +13,12 @@
 
 ## 1. What works vs. what doesn't (all verified in-tree on `main`)
 
-| Surface | State | Evidence |
-|---|---|---|
-| API (Bearer-authenticated) | ✅ works, integration-tested | `apps/api/src/auth/middleware.ts:40` reads `Authorization: Bearer`; PR #267 audience-grant tests pass |
-| Marketing / public pages | ✅ works (no auth) | `(public)` route group, server-rendered |
-| **Guest checkout** (buy a ticket) | ✅ works (no login) | `POST /api/v1/public/orders`; §2.1 guest buyer |
-| Browser sign-in → tenant/admin/attendee portal | ❌ **non-functional** | four independent gaps, §2 below |
+| Surface                                        | State                        | Evidence                                                                                              |
+| ---------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------- |
+| API (Bearer-authenticated)                     | ✅ works, integration-tested | `apps/api/src/auth/middleware.ts:40` reads `Authorization: Bearer`; PR #267 audience-grant tests pass |
+| Marketing / public pages                       | ✅ works (no auth)           | `(public)` route group, server-rendered                                                               |
+| **Guest checkout** (buy a ticket)              | ✅ works (no login)          | `POST /api/v1/public/orders`; §2.1 guest buyer                                                        |
+| Browser sign-in → tenant/admin/attendee portal | ❌ **non-functional**        | four independent gaps, §2 below                                                                       |
 
 The integration tests pass because they call the API **directly with a Bearer token**
 (`app.request(...)` in `auth.test.ts`), bypassing the browser cookie layer entirely. No
@@ -41,7 +41,7 @@ Web hooks send **cookies** (`fetchWithCreds` = `fetch(..., {credentials:'include
 API auth middleware reads **only** `Authorization: Bearer` (`middleware.ts:41`) and ignores
 cookies. **Nothing in the web app attaches a Bearer header** (`rg -n Authorization apps/web/src`
 → no match). The two halves were never connected — `middleware.ts:55-56` literally says
-*"accept any valid JWT … tighten in Day 9-10 when we wire the cookie → hash lookup."* That
+_"accept any valid JWT … tighten in Day 9-10 when we wire the cookie → hash lookup."_ That
 never happened.
 
 **Gap 3 — No session cookie is ever set.**
@@ -75,8 +75,9 @@ JS-reachable storage; a fetch wrapper attaches `Authorization: Bearer`. API unch
 **HttpOnly** cookie carrying the opaque **session token** (`Domain=.eventpulse.com.bd`,
 `Secure`, `SameSite=Lax`). The browser sends it to `api.eventpulse.com.bd` automatically
 (same-site subdomain). API auth middleware reads the cookie and resolves it via the existing
-`resolveSession(token)` (a *live* session-row check — strictly better than today's "accept
+`resolveSession(token)` (a _live_ session-row check — strictly better than today's "accept
 any JWT"). API adds CORS echoing the **exact** portal origin + `Allow-Credentials: true`.
+
 - ✅ Reuses `sessions` table + `resolveSession`; no JWT-in-browser; no `/refresh` needed
   (session is the 7-day store).
 - ⚠️ Cross-origin credentials + a parent-domain cookie; CORS must echo a specific origin
@@ -88,6 +89,7 @@ any JWT"). API adds CORS echoing the **exact** portal origin + `Allow-Credential
 HttpOnly cookie (`SameSite=Strict` possible). All hooks call same-origin `/api/*`; the proxy
 reads the cookie server-side and forwards `Authorization: Bearer` to the API. **API
 untouched; no CORS.**
+
 - ✅ Strongest isolation — token never in the browser, no cross-origin surface, API
   unchanged. Standard Next pattern.
 - ⚠️ Most web-side build (a proxy layer per portal + refresh handling server-side).
@@ -102,6 +104,7 @@ before code (CLAUDE.md "ask before modifying auth code").**
 
 The consume must derive audience from the **portal it lands on**, never client input
 (consistent with PR #267):
+
 - `admin.eventpulse.com.bd/auth/magic` → `super-admin` (requires `super_admins` row).
 - `my.eventpulse.com.bd/auth/magic` → `attendee`.
 - `app.eventpulse.com.bd/auth/magic` → **attendee session first**, then the §2.3 context
@@ -110,6 +113,7 @@ The consume must derive audience from the **portal it lands on**, never client i
   personal-tenant users can be auto-switched. **Open decision 4.2.**
 
 ### 3.3 Other required pieces
+
 - Set `EVENTPULSE_BASE_URL` per environment (prod → `https://app.eventpulse.com.bd`, or the
   consume host). Fix the magic-link URL builder to target the real consume page.
 - Build `/auth/magic` consume page (the missing route).
@@ -130,7 +134,7 @@ The consume must derive audience from the **portal it lands on**, never client i
    one (personal) tenant; otherwise land on a context-picker. Confirm the MVP UX.
 3. **Cookie scope.** Option B uses `Domain=.eventpulse.com.bd` (shared across subdomains);
    Option C uses per-portal same-origin cookies. Follows from #1.
-4. **Launch posture if this slips past June 10.** A **narrow launch** is possible *today*:
+4. **Launch posture if this slips past June 10.** A **narrow launch** is possible _today_:
    ops/operator publishes events via API/seed, buyers use **guest checkout** (works). Full
    self-serve tenant onboarding requires this integration. Decide whether June 10 is
    guest-checkout-narrow or full-portal.
@@ -163,7 +167,7 @@ code — no production line without a red test first.
 6. **Magic-link URL builder.** RED: unit test — `requestMagicLink` builds the URL from
    `EVENTPULSE_BASE_URL` and targets the real consume path; no staging fallback when the env
    is set. GREEN: fix `auth.ts:159` + set the env per environment (incl. prod `.env.production`
-   + `bootstrap-prod.sh`).
+   - `bootstrap-prod.sh`).
 7. **Layout auth gate.** RED: server-component test — `(tenant)`/`(admin)` layout redirects to
    `/sign-in` when no valid session; renders children when valid. GREEN: read + verify the
    cookie in the layout (or a shared server util).
@@ -184,11 +188,12 @@ runnable (and the seeded guest-checkout smoke is available at any point in the m
   portal) for the June-10 target.
 - It does **not** block the **EPS production rate confirmation** (the biggest external
   unknown), which is doable now via guest checkout — see `docs/runbooks/production-smoke.md`
-  + the seeded-smoke pivot discussed Day 45.
+  - the seeded-smoke pivot discussed Day 45.
 - A guest-checkout-narrow launch (operator-published events) is viable independent of this
   work. Decide the posture (open decision 4.4).
 
 ## 7. Cross-references
+
 - `.claude/memory/gotchas.md` Day-45 "Browser-auth flow was never wired end-to-end".
 - `.claude/memory/decisions.md` Day-45 "Browser-auth integration scoped; smoke re-deferred".
 - PR #267 (audience-grant) — the server-resolves-audience rule this design extends.
