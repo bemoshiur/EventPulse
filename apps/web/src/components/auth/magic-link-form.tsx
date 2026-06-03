@@ -6,16 +6,24 @@ import { ArrowRight, Mail } from 'lucide-react'
 /**
  * Magic-link email form for sign-in / sign-up (§5.2, §19.2).
  *
- * POSTs the email to `/api/v1/auth/magic-link/request`. The endpoint
- * ALWAYS responds 202 to avoid email-enumeration regardless of whether
- * the account exists (see `apps/api/src/routes/auth.ts:137`), so the
- * UI shows "Check your email" identically for any non-network-error
- * response.
+ * POSTs the email to the API's `/api/v1/auth/magic-link/request` (on the
+ * `NEXT_PUBLIC_API_BASE_URL` host — a RELATIVE URL would 404 on prod where the
+ * API is a separate host). The endpoint ALWAYS responds 202 to avoid
+ * email-enumeration, so the UI shows "Check your email" identically for any
+ * non-network-error response.
+ *
+ * `audience` (optional) is forwarded so an admin sign-in can request a
+ * super-admin link; the server's #267 grant check is the authority.
  *
  * No idempotency key — magic-link issuance is one-token-per-request
  * by design (no money moves; collisions are benign).
  */
-export function MagicLinkForm() {
+function apiBase(): string {
+  const fromEnv = process.env['NEXT_PUBLIC_API_BASE_URL']
+  return fromEnv && fromEnv.length > 0 ? fromEnv.replace(/\/$/, '') : ''
+}
+
+export function MagicLinkForm({ audience }: { audience?: 'super-admin' | 'attendee' } = {}) {
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -30,10 +38,14 @@ export function MagicLinkForm() {
     setErrorMessage(null)
 
     try {
-      const r = await fetch('/api/v1/auth/magic-link/request', {
+      const r = await fetch(`${apiBase()}/api/v1/auth/magic-link/request`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: trimmed, purpose: 'signin' }),
+        body: JSON.stringify({
+          email: trimmed,
+          purpose: 'signin',
+          ...(audience ? { audience } : {}),
+        }),
       })
       // 2xx (including 202) → success. The endpoint never reveals
       // account existence, so we surface "Check your email" identically.
