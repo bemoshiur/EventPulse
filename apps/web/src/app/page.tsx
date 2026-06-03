@@ -63,25 +63,22 @@ export default function HomePage() {
 
         <section className="relative">
           <div className="mx-auto flex max-w-5xl flex-col items-center px-6 py-24 text-center md:py-32">
-            <span className="inline-flex items-center gap-2 rounded-full bg-[var(--ep-paper)]/70 px-4 py-1.5 text-xs font-medium text-[var(--ep-graphite)] shadow-sm backdrop-blur">
+            <span className="ep-reveal inline-flex items-center gap-2 rounded-full bg-[var(--ep-paper)]/70 px-4 py-1.5 text-xs font-medium text-[var(--ep-graphite)] shadow-sm backdrop-blur">
               <span aria-hidden="true" className="size-2 rounded-full bg-[var(--ep-mint)]" />
               Built for Bangladesh
             </span>
 
-            <h1 className="font-display mt-6 text-4xl font-semibold tracking-tight text-[var(--ep-ink)] sm:text-5xl md:text-6xl">
-              Run your events.{' '}
-              <span className="bg-gradient-to-r from-[var(--ep-violet)] via-[var(--ep-indigo)] to-[var(--ep-cerulean)] bg-clip-text text-transparent">
-                Get paid in 5 days.
-              </span>
+            <h1 className="ep-reveal ep-reveal-1 text-hero mt-6 text-[var(--ep-ink)]">
+              Run your events. <span className="ep-gradient-text">Get paid in 5 days.</span>
             </h1>
 
-            <p className="mt-6 max-w-2xl text-lg leading-relaxed text-[var(--ep-graphite)]">
+            <p className="ep-reveal ep-reveal-2 mt-6 max-w-2xl text-lg leading-relaxed text-[var(--ep-graphite)]">
               Event Pulse is the multi-tenant ticketing platform for Bangladesh. Branded landing
               pages, custom registration forms, bKash checkout, automated T+5 disbursement — on one
               platform.
             </p>
 
-            <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row">
+            <div className="ep-reveal ep-reveal-3 mt-10 flex flex-col items-center gap-3 sm:flex-row">
               <Link
                 href="/sign-up"
                 className="inline-flex h-12 items-center rounded-md bg-gradient-to-r from-[var(--ep-violet)] to-[var(--ep-indigo)] px-8 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
@@ -96,7 +93,7 @@ export default function HomePage() {
               </Link>
             </div>
 
-            <p className="mt-6 text-xs text-[var(--ep-graphite)]">
+            <p className="ep-reveal ep-reveal-4 mt-6 text-xs text-[var(--ep-graphite)]">
               No setup fee. No monthly minimum. KYC required before selling paid tickets.
             </p>
           </div>
