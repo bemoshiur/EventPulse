@@ -4,6 +4,33 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-04 · Third-party (Google) login REMOVED — email + OTP only
+
+### Context
+
+Operator reported "google login is not working." Systematic debug found a real regression: the OAuth callback set the legacy `eventpulse_session` cookie while #270 renamed the session cookie to `ep_session` (nothing read the OAuth cookie → never authenticated). A fix was prepared (PR #293), but the operator's decision was to **remove third-party login entirely** rather than fix it: "remove all thirdparty login...only email and otp verification will be there."
+
+### Decision
+
+Remove Google/OAuth sign-in completely (PR #294). Email-only auth remains — the one-time magic **link** (treated as the "email + OTP"). PR #293 (the Google cookie fix) closed as moot.
+
+- **Frontend:** sign-in page shows only the email magic-link form; deleted `OAuthButtonGroup` + `provider-icons`.
+- **Backend:** unmounted `/api/v1/auth/oauth/*`; deleted `oauth-routes.ts`, `oauth.ts`, `oauth-state.ts` + tests (−1,365 lines).
+- **Kept** (data layer, harmless): `oauth_identities` table + `users.ts` OAuth helpers for historical rows; no runtime path writes them.
+
+### Consequences
+
+- Apple was already dropped (2026-05-23); with Google gone there is no third-party IdP. Re-introducing OAuth is a deliberate future decision + dedicated PR (restore from git history).
+- "OTP" today = the magic **link** (click to sign in), NOT a numeric code. If a code-based OTP is wanted, that's a separate feature (flagged to operator in #294).
+- Email/password backend routes (`/password/*`) remain but are not surfaced in the sign-in UI (the UI is magic-link only).
+- The OAuth env vars (`GOOGLE_OAUTH_*`) + the `eventpulse/<env>/oauth-google` secret are now unused; left in place (harmless), optional infra cleanup later.
+
+### Pointers
+
+PR #294 (removal), #293 (closed — the cookie fix that became moot). gotchas.md would-be entry: "OAuth callback kept the pre-#270 cookie name; success path was untested" — now obsolete since the path is deleted.
+
+---
+
 ## 2026-06-04 · Day 46 (cont.) — EPS fee estimate set to 200 bps (operator-confirmed); redirect-param bug fixed
 
 Supersedes the "value pending + one real bug remains" decision in the 2026-06-03 entry below.
