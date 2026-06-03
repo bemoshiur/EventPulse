@@ -6,10 +6,13 @@
  *   POST /password/login          — email+password login
  *   POST /magic-link/request      — email a one-time sign-in token
  *   POST /magic-link/consume      — exchange token for session + JWTs
+ *   GET  /session                 — current session identity (layout auth-gate)
  *   POST /logout                  — revoke the session bound to the request
  *
- * OAuth (Google + Apple) routes are wired in `oauth-routes.ts` and
- * folded into this router when the OAuth env is present.
+ * Third-party (Google/OAuth) sign-in was REMOVED 2026-06-04 per product
+ * decision — email-only auth (magic link). See decisions.md "Third-party login
+ * removed — email + OTP only". The oauth_identities table + users.ts OAuth
+ * helpers remain for historical rows but no runtime path writes them.
  *
  * NOTE: Email delivery is stubbed — `requestMagicLink` returns the token
  * inline in the response when `process.env.AUTH_RETURN_MAGIC_LINK === '1'`

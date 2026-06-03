@@ -2,9 +2,10 @@
  * User CRUD helpers used by the auth flows. Kept thin on purpose; full
  * profile management lands in Sprint 2.
  *
- * OAuth identity helpers (findUserByOAuthIdentity, linkOAuthIdentity)
- * added for Sprint 2 Item 4 — see oauth-routes.ts for the auto-link
- * flow they support and decisions.md "OAuth callback security model".
+ * OAuth identity helpers (findUserByOAuthIdentity, linkOAuthIdentity) remain
+ * for the `oauth_identities` table + any historical rows, but third-party
+ * (Google) sign-in was REMOVED 2026-06-04 (email-only auth) — no runtime path
+ * calls them now. See decisions.md "Third-party login removed — email + OTP only".
  */
 
 import { and, eq } from 'drizzle-orm'
