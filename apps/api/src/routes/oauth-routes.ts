@@ -32,9 +32,9 @@
  */
 
 import { Hono } from 'hono'
-import { setCookie } from 'hono/cookie'
 import { generateCodeVerifier, generateState, OAuth2RequestError } from 'arctic'
 
+import { setSessionCookie } from '../auth/cookie.js'
 import { signTokens } from '../auth/jwt.js'
 import { createSession } from '../auth/sessions.js'
 import { hashToken } from '../auth/tokens.js'
@@ -209,16 +209,13 @@ oauth.get('/google/callback', async (c) => {
     },
   })
 
-  // Set the attendee session cookie on the response. The plaintext
-  // token doubles as the cookie value; the existing auth middleware
-  // expects this same cookie name (`eventpulse_session`).
-  setCookie(c, 'eventpulse_session', session.sessionToken, {
-    httpOnly: true,
-    secure: isSecureCookieEnv(),
-    sameSite: 'Lax',
-    path: '/',
-    maxAge: 7 * 24 * 60 * 60,
-  })
+  // Set the canonical session cookie via the shared helper so its name +
+  // attributes stay in lock-step with the auth middleware's readSessionCookie
+  // and the magic-link path. The helper writes `ep_session` (SESSION_COOKIE_NAME).
+  // Before this fix the callback set a legacy `eventpulse_session` that nothing
+  // read — the Day-47 "Google login is not working" regression introduced when
+  // #270 renamed the cookie and updated every path EXCEPT this one.
+  setSessionCookie(c, session.sessionToken, session.expiresAt)
   // 302 to the web vhost rather than 200 JSON. Three reasons:
   //   1. Token leak — returning session/access/refresh tokens in the
   //      JSON response body exposes them via browser history, copy-as-
@@ -256,6 +253,8 @@ interface LoginOrLinkInput {
 
 interface LoginOrLinkResult {
   sessionToken: string
+  /** Session expiry, threaded to setSessionCookie so the cookie matches the row. */
+  expiresAt: Date
   responseBody: {
     user: { id: string; email: string; fullName: string }
     session: {
@@ -325,7 +324,7 @@ async function finalize(
   flow: LoginOrLinkResult['responseBody']['flow'],
   input: LoginOrLinkInput,
 ): Promise<LoginOrLinkResult> {
-  const { token: sessionToken } = await createSession({
+  const { token: sessionToken, expiresAt } = await createSession({
     userId: user.id,
     audience: 'attendee',
     ip: input.ip ?? null,
@@ -339,6 +338,7 @@ async function finalize(
   })
   return {
     sessionToken,
+    expiresAt,
     responseBody: {
       user: { id: user.id, email: user.email, fullName: user.fullName },
       session: { token: sessionToken, ...tokens },
