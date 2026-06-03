@@ -71,6 +71,36 @@ describe('V5_PRODUCTION_PROTOCOL — request shape (§11.4)', () => {
     expect(body['CustomerOrderId']).toBe('ORDER-TXN-AAA-0000000001')
   })
 
+  it('buildInitBody overrides customerName/Email/Phone with the real buyer when supplied', () => {
+    // FOLLOW-UP from #279: EPS records + receipts should carry the actual
+    // buyer, not the neutral placeholder. The address/city/state/postcode/
+    // country/productName fields stay placeholders (we don't collect a buyer
+    // address at checkout); only the identity triplet is threaded.
+    const body = V5_PRODUCTION_PROTOCOL.buildInitBody({
+      ...baseInitArgs,
+      customer: { name: 'Ayesha Rahman', email: 'ayesha@example.test', phone: '01811223344' },
+    })
+    expect(body['customerName']).toBe('Ayesha Rahman')
+    expect(body['customerEmail']).toBe('ayesha@example.test')
+    expect(body['customerPhone']).toBe('01811223344')
+    // Untouched mandatory fields keep their placeholders.
+    expect(body['customerCity']).toBe('Dhaka')
+    expect(body['customerCountry']).toBe('BD')
+    expect(body['productName']).toBe('Event ticket')
+  })
+
+  it('buildInitBody falls back to placeholders for blank/missing buyer fields (EPS rejects empty mandatory fields)', () => {
+    const body = V5_PRODUCTION_PROTOCOL.buildInitBody({
+      ...baseInitArgs,
+      customer: { name: '  ', email: undefined, phone: null },
+    })
+    // A whitespace-only name, an undefined email, and a null phone must NOT
+    // reach EPS as empty mandatory fields — each falls back to the placeholder.
+    expect(body['customerName']).toBe('Event Pulse Buyer')
+    expect(body['customerEmail']).toBe('noreply@eventpulse.com.bd')
+    expect(body['customerPhone']).toBe('01700000000')
+  })
+
   it('buildVerifyRequest emits GET + merchantTransactionId query param (per the V5 guide, NOT POST)', () => {
     const req = V5_PRODUCTION_PROTOCOL.buildVerifyRequest(baseVerifyArgs)
     expect(req.method).toBe('GET')
