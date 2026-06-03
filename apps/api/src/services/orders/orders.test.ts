@@ -289,9 +289,9 @@ describeIfDb('createOrder service — money math + state + block behaviour', () 
       // Mock EPS — the free path STILL goes through initialiseOrder
       // (block-guard only fires on totalPaisa > 0). At totalPaisa=0,
       // the guard PASSES and EPS init is called normally. We mock it.
-      nock(PROD_BASE).post('/api/v1/GetToken').reply(200, { Token: 'jwt-free' })
+      nock(PROD_BASE).post('/v1/Auth/GetToken').reply(200, { Token: 'jwt-free' })
       nock(PROD_BASE)
-        .post('/api/v1/InitializeEPS')
+        .post('/v1/EPSEngine/InitializeEPS')
         .reply(200, { RedirectURL: 'https://test.local/free-checkout' })
 
       // Use a tier with price 0 — none exists in our fixture, but a
@@ -533,7 +533,7 @@ describeIfDb('createOrder service — money math + state + block behaviour', () 
       await defaultTokenCache().set(_accessTokenCacheKey, 'cached-jwt-ord', 60)
 
       nock(PROD_BASE)
-        .post('/api/v1/InitializeEPS')
+        .post('/v1/EPSEngine/InitializeEPS')
         .reply(200, { RedirectURL: 'https://gateway.example/checkout/abc' })
 
       const result = await createOrder({
