@@ -4,6 +4,32 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-03 · Day 46 — EPS production protocol FIXED + real payment VALIDATED on prod (#279)
+
+### Context
+
+After the prod EPS 404 (production never validated), the operator provided the **EPS Merchant API Integration Guide V0.5**. It confirmed 3 divergences in the code's production protocol; fixed all in **PR #279** (TDD, CI green): paths (`/v1/Auth/GetToken` + `/v1/EPSEngine/*`, NOT `/api/v1/*`), InitializeEPS body (added the mandatory customer fields + CustomerOrderId + productName, placeholders for now), verify POST→GET. Deployed to prod (operator-authorized).
+
+### Decision / outcome — payment path WORKS
+
+- **No-charge Initialize validation: SUCCESS.** Block off + order create → EPS returned a real `RedirectURL` (`pg.eps.com.bd/PG?data=…`). GetToken + Initialize confirmed working on production.
+- **Real payment: SUCCESS.** Operator paid **BDT 102.00 via bKash**; EPS charged it. **The launch-critical unknown — can we take a production payment? — is RESOLVED: yes.**
+- **But the order did NOT auto-settle** — two post-payment bugs (gotchas.md Day-46 "EPS production: payment WORKS, but verify + redirect-return…"): (1) verify `GET /v1/EPSEngine/CheckMerchantTransactionStatus` → **404** (likely production verify is POST, or needs EPSTransactionId too); (2) EPS redirect-return doesn't carry `merchantTransactionId` under that name → handler `no_txn_id` → buyer hit `/orders/return/error`.
+- **Block re-locked** (verified =1); **seeded data cleaned** (prod pristine). The EPS transaction `TXN-mpxzcmt4-epsmoke1-i776iw93` stays in EPS for the operator to refund.
+
+### Consequences
+
+- **Rate:** verify 404 means our code couldn't read StoreAmount; the operator reads the actual EPS fee from the **EPS merchant dashboard** (Total − Store) to confirm vs the 175bps calculator assumption. [PENDING operator dashboard report.]
+- **Refund:** operator refunds the BDT 102.00 via the EPS dashboard. [PENDING.]
+- **Launch blockers remaining (both lower-severity than the now-working payment path):** fix verify method (hypothesis: revert V5 verify to POST — testable via the read-only webhook re-trigger, no money) + the redirect-return param names (need EPS's actual return params). Orders won't auto-settle until both land.
+- **Follow-ups:** thread real buyer info into the init body (placeholders shipped); codify EPS_SUCCESS/FAIL/CANCEL_URL into `bootstrap-prod.sh` (added live earlier).
+
+### Pointers
+
+- PR #279 (`9df9a4f`). gotchas.md Day-46 "EPS production: payment WORKS, but verify + redirect-return…". docs/runbooks/production-smoke.md. `apps/api/src/infra/eps/{core,eps-wire-protocol}.ts`, `routes/public/orders-eps-return.ts`.
+
+---
+
 ## 2026-06-03 · Day 46 — EPS-rate smoke ATTEMPTED → BLOCKED on prod EPS endpoint 404 (production never validated)
 
 ### Context

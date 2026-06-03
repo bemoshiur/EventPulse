@@ -4,6 +4,20 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## EPS production: payment WORKS, but verify + redirect-return have post-payment bugs (orders don't auto-settle) (Day 46)
+
+**Context.** After the protocol fix (#279: paths + full init body), the BDT-100 production smoke's **payment succeeded** — real bKash charge of BDT 102.00 went through. GetToken (`/v1/Auth/GetToken`) + InitializeEPS (`/v1/EPSEngine/InitializeEPS` with the full mandatory-field body) both work against production. **The launch-critical unknown (can we take a production payment?) is RESOLVED: yes.** But the order didn't auto-settle — two post-payment bugs:
+
+**Bug 1 — Verify returns HTTP 404.** `verifyOrder` → `GET /v1/EPSEngine/CheckMerchantTransactionStatus?merchantTransactionId=...` → **404**, even though Initialize on the same `/v1/EPSEngine/` prefix works. The guide (V0.5 API 03) says GET; the *original* (pre-#279) code used **POST**. So production verify is likely **POST** (the guide may be wrong/outdated, like its `Transection`/`PaymentReferance` typos), OR it needs BOTH `merchantTransactionId` **and** `EPSTransactionId` query params. Verify is read-only + NOT block-guarded, so this is testable WITHOUT money (re-trigger `POST /api/v1/webhooks/eps/callback {merchantTransactionId}` after a code change). **Hypothesis to test first: revert V5 verify to POST.**
+
+**Bug 2 — EPS redirect-return param mismatch (`redirect.malformed.no_txn_id`).** When EPS redirects the buyer back to `successUrl`, our handler (`orders-eps-return.ts`) reads `merchantTransactionId` from the query string — but EPS does NOT append it under that name (the guide doesn't document the return param names). Result: handler can't find the txn id → redirects to `/orders/return/error` (the buyer sees an error page despite paying). **Need EPS's actual return param names** (capture from a real redirect, or ask EPS) — likely `TransactionId`/`EPSTransactionId`, not our `merchantTransactionId`.
+
+**Impact.** Both block **auto-settlement** (orders stay `awaiting_payment` after a successful charge). The payment + the rate are fine (rate readable from the EPS merchant dashboard's StoreAmount), but for launch, orders MUST settle automatically → both are launch blockers, lower-severity than the payment path (which now works).
+
+**How to avoid.** The verify + redirect-return shapes were authored from the guide/§11.4 and never validated against production (same root cause as the path 404). Validate the FULL round-trip (GetToken → Init → pay → redirect-return → verify → settle) against production before launch — the smoke surfaced the first two stages; the last two need a working verify method + the real return param names.
+
+---
+
 ## 🔴 Production EPS endpoint returns 404 — prod was NEVER validated (sandbox-only truth-gate) (Day 46)
 
 **Symptom.** First-ever production paid-order attempt (the BDT-100 smoke) failed: EPS `GetToken` → **HTTP 404** at `https://pgapi.eps.com.bd/api/v1/GetToken` (`mode:"production"`). No charge — EPS fails before any money moves.

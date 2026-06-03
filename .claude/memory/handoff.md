@@ -1,36 +1,38 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-06-03 — **Day 46.** Shipped browser-auth + super-admin login on prod (verified). Then attempted the BDT-100 EPS-rate smoke → **BLOCKED: production EPS payments don't work yet** (prod endpoint 404, never validated). **No money moved.**
-**LAUNCH TARGET: 2026-06-10 (7 days out) — now gated on fixing production EPS.**
+**Last update:** 2026-06-03 — **Day 46.** **🎉 PRODUCTION PAYMENTS WORK.** The launch-critical unknown is resolved: a real BDT-102 bKash charge went through on production EPS. Shipped browser-auth + super-admin login earlier the same day.
+**LAUNCH TARGET: 2026-06-10 (7 days out).** Remaining: 2 EPS post-payment bugs (auto-settlement) + tenant browser login.
 **Driver:** Claude Code (Opus 4.8). **🛑 $30/mo AWS ceiling.**
 
-## 🚨 THE launch blocker — production EPS endpoint 404
+## ✅ Today's headline — EPS production payment VALIDATED (#279)
 
-The smoke surfaced that **no paid order can process on prod**: EPS `GetToken` → **HTTP 404** at `https://pgapi.eps.com.bd/api/v1/GetToken`. The truth-gate only ever validated **sandbox** (`sandboxpgapi.eps.com.bd` + `/v1/Auth/...`); the **production** config in `apps/api/src/infra/eps/core.ts` (`BASE_URLS.production` + `V5_PRODUCTION_PATHS` = `/api/v1/GetToken|InitializeEPS|CheckMerchantTransactionStatus`) was authored from the V5 guide but **never hit a live prod EPS server**, and it 404s.
+The operator provided the **EPS V5 Integration Guide**, which fixed the prod-EPS-404. PR #279 (TDD, CI green, deployed) corrected 3 protocol divergences: paths (`/v1/Auth/GetToken` + `/v1/EPSEngine/*`), the InitializeEPS body (added mandatory customer fields + CustomerOrderId + productName — **placeholders for now**), verify POST→GET. Then: no-charge Initialize test returned a real EPS RedirectURL; the operator paid **BDT 102.00 via bKash** and **EPS charged it successfully.**
 
-**To unblock (operator/EPS dependency):**
-1. Confirm the correct **production** EPS base URL + the three endpoint paths from the **V5 production integration guide** (likely they mirror sandbox `/v1/Auth/...` + `/v1/EPSEngine/...`, or the host differs).
-2. Confirm the merchant is **activated for production** at that endpoint.
-3. Then a small config fix in `core.ts` (base + paths are isolated in `EpsConfig`) → re-run the smoke per `docs/runbooks/production-smoke.md` (seeded guest-checkout, no login).
-- **Do NOT guess-and-retry** against the live production EPS API.
+## 🔴 2 EPS post-payment bugs — orders don't auto-settle (launch blockers, lower-severity than payment)
 
-## ✅ Shipped + verified this session (browser-auth)
+1. **Verify 404.** `GET /v1/EPSEngine/CheckMerchantTransactionStatus` → 404 (Initialize on the same prefix works). Guide says GET; the **original code used POST**. **Hypothesis: revert V5 verify to POST.** Read-only + not block-guarded → testable WITHOUT money: change → deploy → `POST /api/v1/webhooks/eps/callback {"merchantTransactionId":"…"}` re-triggers verify+settle.
+2. **Redirect-return param mismatch.** EPS's redirect to `successUrl` doesn't carry `merchantTransactionId` (our handler `orders-eps-return.ts` expects it) → `no_txn_id` → buyer lands on `/orders/return/error`. **Need EPS's actual return param names** (capture from a real redirect or ask EPS — likely `TransactionId`/`EPSTransactionId`).
 
-- **Browser-auth core** (Option B: CORS + HttpOnly `ep_session` cookie + `/auth/magic` consume page) — #270/#271, deployed, curl-verified on prod.
-- **Super-admin browser login** — #272 (`/admin-sign-in` + MagicLinkForm API-base fix), deployed. `moshiur@publicpulse.com.bd` is super-admin; **operator logged in end-to-end** (`app.eventpulse.com.bd/admin-sign-in` → magic link → `/admin/kyc`). Verified.
+Both must land for orders to settle automatically. gotchas.md + decisions.md Day-46 EPS entries have the detail.
+
+## ⏳ Pending on the operator (from the smoke)
+
+- **Refund** the BDT 102.00: EPS merchant dashboard, txn **`TXN-mpxzcmt4-epsmoke1-i776iw93`** (the verify 404 means our code didn't settle/refund it; it's a normal EPS transaction to refund manually).
+- **Report the rate:** from that txn's dashboard row, `Total (102.00) − Store/Settled = EPS fee`; compare to the **175 bps** calculator assumption. (Verify 404 blocked reading StoreAmount in-code.)
 
 ## State + invariants
 
-- **Prod safe + pristine:** `STAGING_PAYMENT_BLOCK=1` re-locked + verified; seeded smoke data fully cleaned (0 tenants/events/orders); ~1 user (the operator). No money moved.
-- **Config added live (not yet in bootstrap):** `EPS_SUCCESS_URL/FAIL_URL/CANCEL_URL` in `.env.production` → `api.eventpulse.com.bd/api/v1/public/orders/eps-return/{success,fail,cancel}`. **Codify in `bootstrap-prod.sh`** so a re-bootstrap doesn't drop them.
-- `EPS_MODE=production`, `MAIL_DRY_RUN=0`. Prod box `i-0c41fae1286527654` @ EIP `52.76.69.96`; API `https://api.eventpulse.com.bd`.
+- **Prod safe + pristine:** `STAGING_PAYMENT_BLOCK=1` re-locked + verified; seeded smoke data cleaned (0 tenants/events/orders); ~1 user (the operator, a super-admin). 
+- `EPS_MODE=production`, `MAIL_DRY_RUN=0`. `EPS_SUCCESS/FAIL/CANCEL_URL` added live to `.env.production` (→ `api.eventpulse.com.bd/.../eps-return/{success,fail,cancel}`) — **codify in `bootstrap-prod.sh`** (follow-up).
+- Prod box `i-0c41fae1286527654` @ EIP `52.76.69.96`; API `https://api.eventpulse.com.bd`.
 
 ## 🎯 Next session
 
-1. **Fix production EPS** (above) — THE launch blocker. Then re-smoke.
-2. **Tenant browser login** (multi-tenant context §4.2) — the full-UI-smoke gap; entangled with unbuilt tenant onboarding + a product decision.
-3. **Smaller deferred:** Step 7 layout auth-gate, Step 8 e2e, `/refresh`, codify EPS return URLs in bootstrap, decommission staging at launch.
+1. **Fix the 2 EPS post-payment bugs** (verify method + redirect params) → re-validate the full round-trip (GetToken→Init→pay→return→verify→settle). The verify fix is testable with no money (webhook re-trigger).
+2. **Thread real buyer info** into the EPS init body (placeholders shipped) + **codify EPS return URLs** in `bootstrap-prod.sh`.
+3. **Tenant browser login** (multi-tenant context §4.2) — the full-self-serve gap (super-admin login already works).
+4. Smaller: Step 7 layout gate, `/refresh`, decommission staging at launch.
 
 ## Standing invariants
 
-- Money math only via fee-calculator.ts. RLS via the exact 3-role model. Memory commits via PRs separate from feature commits. Branch protection on main. Privilege grants on prod DB + real-money steps are harness-gated → explicit operator authorization. The Day-45 auth-bypass stays closed (audience server-resolved from the session row).
+- Money math only via fee-calculator.ts. RLS via the exact 3-role model. Memory commits via PRs separate from feature commits. Branch protection on main. **Prod deploys + lifting STAGING_PAYMENT_BLOCK + real payments are harness-gated → explicit per-step operator authorization** (the classifier enforces this — seen repeatedly today). Privilege grants on prod DB need explicit operator auth. The Day-45 auth-bypass stays closed.
