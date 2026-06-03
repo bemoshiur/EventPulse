@@ -1,30 +1,27 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-06-03 — **Day 46.** **🎉 PRODUCTION PAYMENTS WORK + EPS RATE CONFIRMED.** A real BDT-102 bKash charge went through on production EPS; verify works; the actual EPS bKash rate is **~2.0% (200 bps)**, not the 175 bps the calculator assumes. Also shipped browser-auth + super-admin login earlier the same day.
-**LAUNCH TARGET: 2026-06-10 (7 days out).** Remaining pre-launch: calculator fee update (175→~200), one EPS redirect bug, tenant browser login.
+**Last update:** 2026-06-04 — **Day 46 (cont.).** Big sweep: every launch-gating EPS bug + the tenant browser-login gap closed. **8 PRs** (#282, #284–289). **LAUNCH TARGET: 2026-06-10.**
 **Driver:** Claude Code (Opus 4.8). **🛑 $30/mo AWS ceiling.**
 
-## ✅ EPS production — payment + verify + rate all confirmed (Day 46)
+## ✅ Shipped + merged to main (→ staging) this session
 
-- **Protocol fix #279** (paths `/v1/Auth`+`/v1/EPSEngine`, full mandatory init body, verify GET) — TDD, deployed.
-- **Real payment SUCCESS:** operator paid BDT 102.00 via bKash; EPS charged it.
-- **Verify GET WORKS** (confirmed via a read-only diagnostic: `Status:Success, FinancialEntity:BKash, TotalAmount:102.00, StoreAmount:99.96`; POST→405). The earlier post-payment 404 was EPS not having the txn queryable yet (timing) — NOT a bug.
-- **RATE:** EPS fee = 102.00 − 99.96 = **2.04 BDT on a 102.00 capture ≈ 2.0% (200 bps)**. The calculator's `DEFAULT_EPS_FEE_BPS_ESTIMATE = 175` is too low → platform/organiser eats ~0.29 BDT/txn.
+- **EPS redirect-param bug FIXED (#285).** Buyers hit `/orders/return/error` after paying because EPS appends our id as **PascalCase `MerchantTransactionId`** (ground truth from a read-only prod nginx-log probe). Handler now accepts it. Status/ErrorCode/EPSTransactionId ignored (§1.3 R3). gotchas.md updated (#286).
+- **EPS fee 175 → 200 bps (#287).** Operator-confirmed (prod smoke measured 2.04/102.00 = 2.0%). TDD across calculator + `/pricing` page + new `eps-fee-estimate.test.ts`; 175-block reframed as sandbox archaeology. Money math still only via fee-calculator.ts. decisions.md (#288).
+- **Tenant browser login (#289)** — *always show a picker* (decisions.md 2026-06-04). New `GET /my/contexts` + `POST /my/contexts/switch` (requireUser middleware; switch re-checks `tenant_users` membership, mints a tenant session) + `/choose-tenant` web page; `consumeHomePath('attendee')` → `/choose-tenant`. Full TDD (6 api route tests + 4 RTL + portal). Self-serve login gap CLOSED (super-admin already worked).
+- Earlier: EPS return URLs in bootstrap (#282), real buyer identity → EPS init (#284), font/animation polish (#283 — last session).
+- **Dependabot: triaged → launch-week FREEZE recommended** (no security advisories; hold all 10, esp. #72 @noble/hashes major + #247 vitest major). Not merged.
 
-## 🎯 Pre-launch must-dos (the first paying tenant is gated on these)
+## 🔴 The 2 prod-side gates before first paying tenant (BOTH need Moshiur; gated — nothing touched on prod)
 
-1. **Update the EPS fee estimate** `175 → ~200 bps` (money math ONLY via `apps/api/src/domain/payments/fee-calculator.ts`; `DEFAULT_EPS_FEE_BPS_ESTIMATE` lives in `infra/eps/initialise-order.ts`). Also decide the §14.2 base (EPS charges on the FULL capture incl. pass-through → recursive). **Operator decision + a re-smoke to confirm the new value** (runbook rule). HARD-STOP before the money-math PR.
-2. **Fix the EPS redirect-return param bug** (`orders-eps-return.ts`): EPS's browser redirect doesn't carry `merchantTransactionId` under that name → `no_txn_id` → buyer hits `/orders/return/error`. Need EPS's actual return param names (likely `TransactionId`/`EPSTransactionId`). The verify/settle logic itself works.
-3. **Tenant browser login** (multi-tenant context §4.2) — the full self-serve gap (super-admin login already works).
+1. **Re-smoke** to confirm the 200-bps fee against production (real-money step; runbook rule).
+2. **Prod deploy** so #285/#287/#289 reach production (main→staging only so far). DNS not pointed at prod = no public traffic until cutover.
 
-## Smaller follow-ups
-- Thread real buyer name/email/phone into the EPS init body (placeholders shipped in #279).
-- Codify `EPS_SUCCESS/FAIL/CANCEL_URL` into `bootstrap-prod.sh` (added live to `.env.production`).
-- Step 7 layout auth-gate, `/refresh`, decommission staging at launch.
-- **Refund NOT needed** (operator's call) — the BDT-102 smoke txn `TXN-mpxzcmt4-epsmoke1-i776iw93` stays in EPS.
+## Next / remaining
 
-## State + invariants
+- **Layout auth-gate + token `/refresh` rotation** — the one deprioritized item (underspecified; tenant routes still rely on the cookie/session, no server-side layout redirect yet).
+- Verify the tenant-login end-to-end on staging (browser → `/choose-tenant` → switch → `/dashboard`).
+- Decommission staging at launch.
 
-- **Prod safe + pristine:** `STAGING_PAYMENT_BLOCK=1` re-locked + verified; seeded smoke data cleaned (0 tenants/events/orders); ~1 user (the operator, a super-admin). `EPS_MODE=production`, `MAIL_DRY_RUN=0`.
-- Prod box `i-0c41fae1286527654` @ EIP `52.76.69.96`; API `https://api.eventpulse.com.bd`. Super-admin self-serve login at `app.eventpulse.com.bd/admin-sign-in`.
-- Money math only via fee-calculator.ts. RLS via the exact 3-role model. Memory commits via PRs separate from feature commits. **Prod deploys + lifting STAGING_PAYMENT_BLOCK + real payments + privilege grants are harness-gated → explicit per-step operator authorization** (enforced repeatedly today). Day-45 auth-bypass stays closed.
+## Invariants (unchanged)
+
+Prod safe: `STAGING_PAYMENT_BLOCK=1` locked, `EPS_MODE=production`, ~1 user (operator/super-admin), 0 tenants/orders. Money math only via `fee-calculator.ts`. RLS via the 3-role model. **Prod deploys + block-lift + real payments + privilege grants are harness-gated → explicit per-step operator auth.** Memory commits via PRs separate from feature commits.
