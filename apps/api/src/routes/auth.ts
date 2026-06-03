@@ -27,6 +27,7 @@ import { hashPassword, verifyPassword } from '../auth/hash.js'
 import { allowedOrigins } from '../middleware/cors.js'
 import { signTokens } from '../auth/jwt.js'
 import { consumeMagicLink, requestMagicLink, type MagicLinkPurpose } from '../auth/magic-link.js'
+import { requireUser } from '../auth/middleware.js'
 import { createSession, revokeSession, type SessionAudience } from '../auth/sessions.js'
 import { hashToken } from '../auth/tokens.js'
 import { createUser, findUserByEmail, markEmailVerified } from '../auth/users.js'
@@ -263,6 +264,19 @@ auth.post('/magic-link/consume', zValidator('json', magicConsumeSchema), async (
       user: { id: user.id, email: user.email, fullName: user.fullName },
       session: { token, ...tokens },
     },
+  })
+})
+
+/**
+ * GET /session — "who am I" for the web layout auth-gate. Any authenticated
+ * audience may call it (requireUser); it echoes the session's audience +
+ * tenantId so the gate can match the route group. No body, no DB beyond the
+ * middleware's session resolution.
+ */
+auth.get('/session', requireUser, (c) => {
+  const claims = c.get('auth')!
+  return c.json({
+    data: { userId: claims.sub, audience: claims.audience, tenantId: claims.tenantId ?? null },
   })
 })
 
