@@ -4,6 +4,30 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## Hono `setCookie` silently drops a cookie whose `expires` is > 400 days out (Day 46)
+
+**Symptom.** A unit test set a session cookie with `expires: new Date('2099-01-01')` and asserted the `Set-Cookie` header — but the header came back **empty** (`''`). The `deleteCookie` (clear) path in the same test worked, so it looked like `setCookie` was broken.
+
+**Why it happens.** Hono's `setCookie` enforces the cookie-spec / Chrome **400-day cap** on `expires`/`maxAge`. An expiry beyond that is rejected — the header is simply not written (no throw). The test's `2099` date was the bug, not the implementation (real sessions are 7 days, well under the cap).
+
+**Fix.** Use a realistic expiry in tests: `new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)`. No clamp needed in `setSessionCookie` — sessions never approach 400 days.
+
+**How to avoid.** When testing cookie helpers, use a near-future expiry, not a sentinel like `2099`. If a real cookie ever needs > 400 days, it can't — split the concern (long-lived server session + short cookie).
+
+---
+
+## A raw `<a href="/internal-route">` fails `next build` (not just lint) (Day 46)
+
+**Symptom.** Added a magic-link consume page with `<a href="/sign-in">`. Local unit tests + typecheck were green, but CI failed **two** jobs: "Lint + typecheck + format" AND "E2E smoke (Playwright)".
+
+**Why it happens.** `@next/next/no-html-link-for-pages` is an **error** (not warning) for internal navigation. `next build` runs ESLint by default and **fails the build on lint errors** — so the e2e job (which builds the web app before running Playwright) also died, with a confusing "e2e failed" surface that was really a build-time lint error. `next lint` alone would have caught it.
+
+**Fix.** Use `<Link href="/sign-in">` from `next/link` for internal navigation. Raw `<a>` is only for external URLs.
+
+**How to avoid.** Run `pnpm --filter @eventpulse/web lint` locally before pushing web changes — the api package's `lint` is a no-op `echo` (no eslint), so api-dev habits don't catch web lint. typecheck ≠ lint ≠ build; the web build subsumes lint.
+
+---
+
 ## 🔴 Browser-auth flow was never wired end-to-end — logged-in portals can't authenticate (Day 45)
 
 **Symptom.** Bootstrapping the first super-admin for the prod smoke, found there is **no working browser sign-in** to the tenant/admin/attendee portals — on prod or anywhere. The API works (Bearer, integration-tested); the portal UIs exist; but the two never met in a browser.
