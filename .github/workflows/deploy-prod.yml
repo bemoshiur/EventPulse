@@ -105,7 +105,26 @@ jobs:
         env:
           CMD_ID: ${{ steps.ssm.outputs.cmd_id }}
         run: |
-          aws ssm wait command-executed --command-id "$CMD_ID" --instance-id "$PROD_INSTANCE_ID"
+          # `aws ssm wait command-executed` only polls ~100s (20×5s), but a
+          # build-on-box deploy takes minutes — it would TIME OUT and fail the
+          # job even when deploy.sh ultimately SUCCEEDS (observed v0.4.0 cutover,
+          # 2026-06-04). Poll get-command-invocation until a terminal status,
+          # bounded by the command's own 900s timeout. (gotchas.md "deploy-prod
+          # aws-ssm-wait times out on build-on-box deploys → false failure".)
+          for _ in $(seq 1 100); do
+            ST="$(aws ssm get-command-invocation --command-id "$CMD_ID" \
+              --instance-id "$PROD_INSTANCE_ID" --query Status --output text 2>/dev/null || echo Pending)"
+            echo "ssm command status: $ST"
+            case "$ST" in
+              Success) break ;;
+              Failed|Cancelled|TimedOut|Undeliverable|Terminated)
+                echo "::error::deploy command ended in '$ST'"
+                aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$PROD_INSTANCE_ID" \
+                  --query '{Status:Status,Error:StandardErrorContent}'
+                exit 1 ;;
+            esac
+            sleep 10
+          done
           aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$PROD_INSTANCE_ID" \
             --query '{Status:Status,Output:StandardOutputContent,Error:StandardErrorContent}'
 
