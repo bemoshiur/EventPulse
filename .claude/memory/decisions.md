@@ -4,6 +4,51 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-04 · Day 46 (cont.) — EPS fee estimate set to 200 bps (operator-confirmed); redirect-param bug fixed
+
+Supersedes the "value pending + one real bug remains" decision in the 2026-06-03 entry below.
+
+### Context
+
+The 2026-06-03 diagnostic measured production bKash at ~2.0% (200 bps) vs the 175 the calculator assumed, and left two launch-gating items: the fee value (money-math hard-stop, needs the operator's call) and the redirect-return param bug.
+
+### Decision
+
+- **EPS fee estimate `DEFAULT_EPS_FEE_BPS_ESTIMATE` 175 → 200** (operator picked "200, matches measured" on 2026-06-04, over the 205-buffer option). The §14.2 base rule is unchanged — bps applies to the capture base (subtotal + pass-through platform fee); the small non-recursive gap (~2% of the eps fee itself) is absorbed by the platform, not modelled. Card/other-method rates still deferred (bKash-only v1.0). **PR #287.** Money math stays in fee-calculator.ts; only the bps INPUT moved. The 175-bps fee-calculator tests are reframed as sandbox spec-archaeology; the launch value is pinned in `services/orders/eps-fee-estimate.test.ts`. `/pricing` page + drift-guard test moved to 2.0%.
+- **Redirect-param bug RESOLVED.** Read-only prod nginx log showed EPS appends `?Status&MerchantTransactionId&ErrorCode&EPSTransactionId` — it echoes our id as **PascalCase `MerchantTransactionId`**, a casing mismatch (not a different field). Handler now accepts it. **PR #285** + gotcha #286.
+
+### Consequences
+
+- **Re-smoke still REQUIRED** before first paying tenant to confirm 200 against production (runbook rule) — a real-money step on the operator's go. The code is ready behind that gate.
+- The redirect fix is on main→staging; it reaches PROD only on the next (gated) prod deploy — must land before the first real buyer.
+- Both 2026-06-03 open items are now closed in code; the launch-blocking EPS work is done pending the re-smoke.
+
+### Pointers
+
+PRs #285 (redirect), #287 (fee). gotchas.md Day-46 "EPS redirect-return param mismatch" (RESOLVED). `services/orders/index.ts` `DEFAULT_EPS_FEE_BPS_ESTIMATE` + `eps-fee-estimate.test.ts`.
+
+---
+
+## 2026-06-04 · Tenant browser-login UX — always show a tenant picker after login
+
+### Context
+
+Super-admin browser login already works (audience-grant flow, Day 46). The tenant equivalent at `app.eventpulse.com.bd` needs a multi-tenant-context UX: after a tenant-context user consumes their magic link, how do they land in the right tenant? (§2.3 identity model: one user can belong to several tenants + a personal tenant.)
+
+### Decision
+
+**Always show a tenant-picker screen after login** (operator's call, 2026-06-04), even when the user owns exactly one tenant — over the "auto-route if one, picker if many" and "personal-tenant-default" options. Simplest, most predictable; one extra click for solo users is acceptable. The picker reads the user's tenant memberships and writes the short-lived context cookie that scopes subsequent `/tenant/*` requests (RLS still enforces isolation regardless). The navbar context switcher (§2.3) remains the way to change tenant later.
+
+### Consequences
+
+- Build (not yet started): a tenant-context magic-link login at `app.eventpulse.com.bd` + a `/choose-tenant` picker page + the contexts-list endpoint (`GET /my/contexts` per §10.3) + context-set. Reuses the existing auth/consume infra; the picker + context-cookie write are the net-new pieces. This is Sprint-8-scoped (§26.2) — larger than the other Day-46 items.
+
+### Pointers
+
+§2.3 identity model, §10.3 `/my/contexts`, §5 auth. Mirrors the working super-admin login (audience-grant.ts).
+
+---
+
 ## 2026-06-03 · Day 46 — EPS RATE CONFIRMED via read-only diagnostic: bKash ≈ 2.0% (200 bps), NOT 175 bps
 
 Supersedes the "rate pending / verify is a bug" framing of the same-day "payment VALIDATED" entry below.
