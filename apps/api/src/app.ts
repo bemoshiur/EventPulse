@@ -5,7 +5,6 @@ import { withSuperAdmin } from './db/client.js'
 import { logger } from './lib/logger.js'
 import { corsMiddleware } from './middleware/cors.js'
 import { authRoutes } from './routes/auth.js'
-import { oauthRoutes } from './routes/oauth-routes.js'
 import { publicChangelogRoutes } from './routes/public/changelog.js'
 import { publicContactRoutes } from './routes/public/contact.js'
 import { publicEventsRoutes } from './routes/public/events.js'
@@ -88,7 +87,6 @@ export function createApp() {
   })
 
   app.route('/api/v1/auth', authRoutes)
-  app.route('/api/v1/auth/oauth', oauthRoutes)
   // Public Trust Center read endpoints. Unauthenticated; consumed by
   // apps/web Server Components for the /trust + /privacy/etc pages
   // (Decision K, 2026-05-19). Edge-cacheable.

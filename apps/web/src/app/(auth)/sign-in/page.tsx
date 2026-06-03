@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { MagicLinkForm } from '@/components/auth/magic-link-form'
-import { OAuthButtonGroup } from '@/components/auth/oauth-button-group'
 import { GlassCard } from '@/components/ui/glass-card'
 
 export const metadata: Metadata = {
@@ -19,17 +18,13 @@ export default function SignInPage() {
         <p className="text-ep-graphite mt-2 text-sm">Run your events. Get paid in 5 days.</p>
       </header>
 
-      <div className="mt-8">
-        <OAuthButtonGroup />
-      </div>
+      <p className="text-ep-graphite mt-8 text-center text-sm">
+        Enter your email and we’ll send you a one-time sign-in link.
+      </p>
 
-      <div className="text-ep-graphite/60 my-6 flex items-center gap-4 text-xs tracking-wide uppercase">
-        <span className="bg-ep-line h-px flex-1" />
-        or
-        <span className="bg-ep-line h-px flex-1" />
+      <div className="mt-4">
+        <MagicLinkForm />
       </div>
-
-      <MagicLinkForm />
 
       <p className="text-ep-graphite mt-8 text-center text-xs">
         By continuing you agree to our{' '}
