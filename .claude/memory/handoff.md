@@ -1,31 +1,36 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-06-03 — **Day 46.** This session built **and shipped** the browser-auth core (Option B: session-cookie + CORS) **and** finished + verified **super-admin browser login on prod**. Production live + secured since Day 45.
-**LAUNCH TARGET: 2026-06-10 (7 days out).** Tenant browser login + the EPS-rate smoke remain.
-**Driver:** Claude Code (Opus 4.8). **🛑 $30/mo AWS ceiling** (decommission staging at launch holds it).
+**Last update:** 2026-06-03 — **Day 46.** Shipped browser-auth + super-admin login on prod (verified). Then attempted the BDT-100 EPS-rate smoke → **BLOCKED: production EPS payments don't work yet** (prod endpoint 404, never validated). **No money moved.**
+**LAUNCH TARGET: 2026-06-10 (7 days out) — now gated on fixing production EPS.**
+**Driver:** Claude Code (Opus 4.8). **🛑 $30/mo AWS ceiling.**
 
-## ✅ Shipped + deployed + verified this session
+## 🚨 THE launch blocker — production EPS endpoint 404
 
-- **Browser-auth core** (PR #270 + memory #271) — CORS allow-listing portal origins + Allow-Credentials; API reads HttpOnly `ep_session` cookie → `resolveSession` (live-row check); signup/login/consume set it, logout clears; magic-link URL → sign-in portal (request Origin, no open-redirect) + audience; `/auth/magic` consume page. Deployed to prod (`9a34385`). **Verified on prod via curl** (CORS echoes origin + credentials; cookie set; cookie read → 403 vs 401).
-- **Super-admin login** (PR #272, `8c80395`, deployed) — `/admin-sign-in` page requests a super-admin link; **fixed a latent prod bug** (MagicLinkForm POSTed a RELATIVE `/api/v1` URL → 404 on prod; now uses `NEXT_PUBLIC_API_BASE_URL`). `moshiur@publicpulse.com.bd` granted super-admin. **Operator clicked the magic link → landed `/admin/kyc` logged in → super-admin browser login CONFIRMED end-to-end on prod.** `/admin-sign-in` live (200).
-- **No new prod env vars needed** (CORS default = prod portals; cookie host-only on `api.eventpulse.com.bd`; magic-link uses request Origin).
+The smoke surfaced that **no paid order can process on prod**: EPS `GetToken` → **HTTP 404** at `https://pgapi.eps.com.bd/api/v1/GetToken`. The truth-gate only ever validated **sandbox** (`sandboxpgapi.eps.com.bd` + `/v1/Auth/...`); the **production** config in `apps/api/src/infra/eps/core.ts` (`BASE_URLS.production` + `V5_PRODUCTION_PATHS` = `/api/v1/GetToken|InitializeEPS|CheckMerchantTransactionStatus`) was authored from the V5 guide but **never hit a live prod EPS server**, and it 404s.
 
-## 🎯 Next session — remaining for full self-serve + the smoke
+**To unblock (operator/EPS dependency):**
+1. Confirm the correct **production** EPS base URL + the three endpoint paths from the **V5 production integration guide** (likely they mirror sandbox `/v1/Auth/...` + `/v1/EPSEngine/...`, or the host differs).
+2. Confirm the merchant is **activated for production** at that endpoint.
+3. Then a small config fix in `core.ts` (base + paths are isolated in `EpsConfig`) → re-run the smoke per `docs/runbooks/production-smoke.md` (seeded guest-checkout, no login).
+- **Do NOT guess-and-retry** against the live production EPS API.
 
-1. **Tenant browser login** — the multi-tenant context entry (tenant audience needs a `tenantId` at login, §4.2 open decision). This is the gap blocking the **full-UI** smoke (tenant creates event + submits KYC). Decide UX: auto-select when the user has one tenant vs a context picker.
-2. **Deferred follow-ups:** Step 7 layout auth-gate UX (today: API-401 → hooks error, no clean redirect); Step 8 Playwright e2e; no `/refresh` endpoint (session is the 7-day store).
-3. **BDT-100 EPS-rate smoke** — the launch-critical EXTERNAL unknown. Runnable **now** via **seeded guest-checkout** (no login) per `docs/runbooks/production-smoke.md`; or via full-UI once tenant login lands. This confirms the 175bps production bKash rate; first paying tenant is gated on it.
-4. **Decommission staging** (restores the $30 ceiling) — after the smoke.
+## ✅ Shipped + verified this session (browser-auth)
 
-## Login facts (for next session)
+- **Browser-auth core** (Option B: CORS + HttpOnly `ep_session` cookie + `/auth/magic` consume page) — #270/#271, deployed, curl-verified on prod.
+- **Super-admin browser login** — #272 (`/admin-sign-in` + MagicLinkForm API-base fix), deployed. `moshiur@publicpulse.com.bd` is super-admin; **operator logged in end-to-end** (`app.eventpulse.com.bd/admin-sign-in` → magic link → `/admin/kyc`). Verified.
 
-- Super-admin self-serve: `app.eventpulse.com.bd/admin-sign-in` → email link → `/admin/kyc`. (No subdomain routing — `/admin/*` paths serve from any host.)
-- `moshiur@publicpulse.com.bd` is a super-admin on prod. Prod DB otherwise ~1 user (the operator).
-- The generic `/sign-in` requests `attendee`; `/admin-sign-in` requests `super-admin`. Tenant has no self-serve sign-in yet (needs §4.2).
+## State + invariants
 
-## Standing invariants (unchanged)
+- **Prod safe + pristine:** `STAGING_PAYMENT_BLOCK=1` re-locked + verified; seeded smoke data fully cleaned (0 tenants/events/orders); ~1 user (the operator). No money moved.
+- **Config added live (not yet in bootstrap):** `EPS_SUCCESS_URL/FAIL_URL/CANCEL_URL` in `.env.production` → `api.eventpulse.com.bd/api/v1/public/orders/eps-return/{success,fail,cancel}`. **Codify in `bootstrap-prod.sh`** so a re-bootstrap doesn't drop them.
+- `EPS_MODE=production`, `MAIL_DRY_RUN=0`. Prod box `i-0c41fae1286527654` @ EIP `52.76.69.96`; API `https://api.eventpulse.com.bd`.
 
-- **$30/mo ceiling**; decommission-staging-at-launch holds it.
-- prod `.env.production`: **`STAGING_PAYMENT_BLOCK=1`** (only lifts, session-scoped, for the BDT-100 smoke). **`MAIL_DRY_RUN=0`**. **`EPS_MODE=production`**, real creds verified. All re-confirmed this session post-deploy.
-- Prod box `i-0c41fae1286527654` @ EIP **52.76.69.96**; API `https://api.eventpulse.com.bd`. Money math only via fee-calculator.ts. RLS via the exact 3-role model.
-- Memory commits via PRs, separate from feature commits. Branch protection on main. First prod payment steps are harness-gated → explicit per-step auth. Privilege grants on prod DB (super_admins) need explicit operator authorization (the classifier enforces this).
+## 🎯 Next session
+
+1. **Fix production EPS** (above) — THE launch blocker. Then re-smoke.
+2. **Tenant browser login** (multi-tenant context §4.2) — the full-UI-smoke gap; entangled with unbuilt tenant onboarding + a product decision.
+3. **Smaller deferred:** Step 7 layout auth-gate, Step 8 e2e, `/refresh`, codify EPS return URLs in bootstrap, decommission staging at launch.
+
+## Standing invariants
+
+- Money math only via fee-calculator.ts. RLS via the exact 3-role model. Memory commits via PRs separate from feature commits. Branch protection on main. Privilege grants on prod DB + real-money steps are harness-gated → explicit operator authorization. The Day-45 auth-bypass stays closed (audience server-resolved from the session row).
