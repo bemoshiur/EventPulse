@@ -63,9 +63,13 @@ export interface EpsEndpointPaths {
  * so a future bug can't mutate the wire-shape at runtime.
  */
 export const V5_PRODUCTION_PATHS: EpsEndpointPaths = Object.freeze({
-  getToken: '/api/v1/GetToken',
-  initialise: '/api/v1/InitializeEPS',
-  verify: '/api/v1/CheckMerchantTransactionStatus',
+  // Per the EPS Merchant API Integration Guide V0.5 (Jan 2024). Production
+  // uses the SAME paths as sandbox; only the host differs (BASE_URLS). An
+  // earlier value of `/api/v1/*` 404'd on the first live production call
+  // (Day-46 smoke) — the prod endpoint was never validated before then.
+  getToken: '/v1/Auth/GetToken',
+  initialise: '/v1/EPSEngine/InitializeEPS',
+  verify: '/v1/EPSEngine/CheckMerchantTransactionStatus',
 })
 
 export interface EpsConfig {

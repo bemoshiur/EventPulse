@@ -160,7 +160,7 @@ describe('initialiseOrderHttp — STAGING_PAYMENT_BLOCK guard (load-bearing safe
     await seedToken()
 
     const scope = nock(PROD_BASE)
-      .post('/api/v1/InitializeEPS')
+      .post('/v1/EPSEngine/InitializeEPS')
       .reply(200, { RedirectURL: 'https://pgapi.eps.com.bd/checkout/abc' })
 
     const result = await initialiseOrderHttp({
@@ -176,7 +176,7 @@ describe('initialiseOrderHttp — STAGING_PAYMENT_BLOCK guard (load-bearing safe
     await seedToken()
 
     const scope = nock(PROD_BASE)
-      .post('/api/v1/InitializeEPS')
+      .post('/v1/EPSEngine/InitializeEPS')
       .reply(200, { RedirectURL: 'https://pgapi.eps.com.bd/free' })
 
     const result = await initialiseOrderHttp({
@@ -285,16 +285,27 @@ describe('initialiseOrderHttp — happy path', () => {
     const expectedHash = signEpsField('TXN-HAPPY-12345', 'hashkey-secret')
 
     const scope = nock(PROD_BASE)
-      .post('/api/v1/InitializeEPS', (body) => {
+      .post('/v1/EPSEngine/InitializeEPS', (body) => {
         expect(body).toEqual({
           merchantId: 'merchant-1',
           storeId: 'store-1',
+          CustomerOrderId: 'ORDER-TXN-HAPPY-12345',
           merchantTransactionId: 'TXN-HAPPY-12345',
           totalAmount: '1000.00',
           transactionTypeId: 1,
           successUrl: 'https://staging.eventpulse.com.bd/orders/return/success',
           failUrl: 'https://staging.eventpulse.com.bd/orders/return/fail',
           cancelUrl: 'https://staging.eventpulse.com.bd/orders/return/cancel',
+          // Mandatory customer fields per the EPS V5 guide (placeholders for now).
+          customerName: 'Event Pulse Buyer',
+          customerEmail: 'noreply@eventpulse.com.bd',
+          customerAddress: 'Dhaka',
+          customerCity: 'Dhaka',
+          customerState: 'Dhaka',
+          customerPostcode: '1200',
+          customerCountry: 'BD',
+          customerPhone: '01700000000',
+          productName: 'Event ticket',
         })
         return true
       })
@@ -314,7 +325,7 @@ describe('initialiseOrderHttp — happy path', () => {
   it('accepts lowercase redirectUrl alias from response', async () => {
     await seedToken()
     const scope = nock(PROD_BASE)
-      .post('/api/v1/InitializeEPS')
+      .post('/v1/EPSEngine/InitializeEPS')
       .reply(200, { redirectUrl: 'https://pgapi.eps.com.bd/checkout/lc' })
 
     const result = await initialiseOrderHttp({
@@ -328,11 +339,11 @@ describe('initialiseOrderHttp — happy path', () => {
   it('fetches access token when cache empty (chains GetToken + InitializeEPS)', async () => {
     // No seed; expect a GetToken first then InitializeEPS.
     const scope1 = nock(PROD_BASE)
-      .post('/api/v1/GetToken')
+      .post('/v1/Auth/GetToken')
       .reply(200, { Token: 'fresh-jwt', ExpiresIn: 900 })
 
     const scope2 = nock(PROD_BASE)
-      .post('/api/v1/InitializeEPS')
+      .post('/v1/EPSEngine/InitializeEPS')
       .matchHeader('authorization', 'Bearer fresh-jwt')
       .reply(200, { RedirectURL: 'https://pgapi.eps.com.bd/checkout/fresh' })
 
@@ -351,16 +362,16 @@ describe('initialiseOrderHttp — 401 refresh-and-retry', () => {
     await seedToken('stale-jwt')
 
     const initFirst = nock(PROD_BASE)
-      .post('/api/v1/InitializeEPS')
+      .post('/v1/EPSEngine/InitializeEPS')
       .matchHeader('authorization', 'Bearer stale-jwt')
       .reply(401, { Code: 'TOKEN_EXPIRED', Message: 'JWT expired' })
 
     const getToken = nock(PROD_BASE)
-      .post('/api/v1/GetToken')
+      .post('/v1/Auth/GetToken')
       .reply(200, { Token: 'fresh-jwt', ExpiresIn: 900 })
 
     const initRetry = nock(PROD_BASE)
-      .post('/api/v1/InitializeEPS')
+      .post('/v1/EPSEngine/InitializeEPS')
       .matchHeader('authorization', 'Bearer fresh-jwt')
       .reply(200, { RedirectURL: 'https://pgapi.eps.com.bd/checkout/after-retry' })
 
@@ -377,9 +388,9 @@ describe('initialiseOrderHttp — 401 refresh-and-retry', () => {
   it('throws EpsResponseError when retry ALSO 401s (no infinite-retry loop)', async () => {
     await seedToken('stale-jwt')
 
-    nock(PROD_BASE).post('/api/v1/InitializeEPS').reply(401)
-    nock(PROD_BASE).post('/api/v1/GetToken').reply(200, { Token: 'fresh-jwt-also-bad' })
-    nock(PROD_BASE).post('/api/v1/InitializeEPS').reply(401, { Code: 'TOKEN_STILL_BAD' })
+    nock(PROD_BASE).post('/v1/EPSEngine/InitializeEPS').reply(401)
+    nock(PROD_BASE).post('/v1/Auth/GetToken').reply(200, { Token: 'fresh-jwt-also-bad' })
+    nock(PROD_BASE).post('/v1/EPSEngine/InitializeEPS').reply(401, { Code: 'TOKEN_STILL_BAD' })
 
     await expect(
       initialiseOrderHttp({
@@ -397,7 +408,7 @@ describe('initialiseOrderHttp — error mapping', () => {
   it('throws EpsResponseError on 4xx (non-401)', async () => {
     await seedToken()
     nock(PROD_BASE)
-      .post('/api/v1/InitializeEPS')
+      .post('/v1/EPSEngine/InitializeEPS')
       .reply(400, { Code: 'INVALID_HASH', Message: 'x-hash mismatch' })
 
     await expect(
@@ -411,7 +422,7 @@ describe('initialiseOrderHttp — error mapping', () => {
 
   it('throws EpsResponseError on 5xx', async () => {
     await seedToken()
-    nock(PROD_BASE).post('/api/v1/InitializeEPS').reply(503, { Message: 'gateway down' })
+    nock(PROD_BASE).post('/v1/EPSEngine/InitializeEPS').reply(503, { Message: 'gateway down' })
 
     await expect(
       initialiseOrderHttp({ merchantTransactionId: 'TXN-503-12345', totalPaisa: 1n }),
@@ -421,7 +432,7 @@ describe('initialiseOrderHttp — error mapping', () => {
   it('throws EpsResponseError when response missing RedirectURL', async () => {
     await seedToken()
     nock(PROD_BASE)
-      .post('/api/v1/InitializeEPS')
+      .post('/v1/EPSEngine/InitializeEPS')
       .reply(200, { Code: '0000', Message: 'OK but no URL' })
 
     await expect(
@@ -435,7 +446,7 @@ describe('initialiseOrderHttp — error mapping', () => {
 
   it('throws EpsResponseError on schema-fail (non-object response)', async () => {
     await seedToken()
-    nock(PROD_BASE).post('/api/v1/InitializeEPS').reply(200, 'plain text')
+    nock(PROD_BASE).post('/v1/EPSEngine/InitializeEPS').reply(200, 'plain text')
 
     await expect(
       initialiseOrderHttp({ merchantTransactionId: 'TXN-PLAIN-1234', totalPaisa: 1n }),
@@ -444,7 +455,7 @@ describe('initialiseOrderHttp — error mapping', () => {
 
   it('throws EpsNetworkError on network failure', async () => {
     await seedToken()
-    nock(PROD_BASE).post('/api/v1/InitializeEPS').replyWithError(new Error('ECONNREFUSED'))
+    nock(PROD_BASE).post('/v1/EPSEngine/InitializeEPS').replyWithError(new Error('ECONNREFUSED'))
 
     await expect(
       initialiseOrderHttp({ merchantTransactionId: 'TXN-ECONN-1234', totalPaisa: 1n }),

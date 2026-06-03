@@ -25,8 +25,8 @@
  *   2. V4 InitializeEPS RESPONSE shape: PascalCase top-level with nullable
  *      `RedirectURL` / `TransactionId` on error; numeric `ErrorCode`. V5
  *      uses RedirectURL/redirectUrl + string Code/Message.
- *   3. V4 Verify request: GET with `merchantTransactionId` query param +
- *      x-hash + Bearer; no body. V5 uses POST with body.
+ *   3. Verify request: BOTH V4 and V5 use GET with `merchantTransactionId`
+ *      query param + x-hash + Bearer; no body (per the EPS V5 guide API 03).
  *   4. V4 Verify response: PascalCase top-level with `TotalAmount` as a BDT
  *      DECIMAL STRING ("1027.56"), not paisa, not number. The truth-gate
  *      comparator derives observed EPS fee by parsing this and subtracting
@@ -185,21 +185,50 @@ const V5VerifyResponseSchema = z
   .passthrough()
 
 /**
- * V5 production protocol. Byte-identical to the wrapper's pre-refactor
- * inline logic — running services see no change.
+ * Placeholder customer values for the V5 production init body. The EPS V5
+ * Integration Guide (API 02) marks customerName/Email/Address/City/State/
+ * Postcode/Country/Phone + productName as MANDATORY — EPS rejects an init
+ * missing them (the Day-46 smoke's first attempt found the V5 body was
+ * incomplete). The buyer pays with their own bKash on EPS's hosted page, so
+ * these fields are record-keeping only; for now we send neutral placeholders.
+ * FOLLOW-UP: thread the real buyer name/email/phone from the order through
+ * `BuildInitBodyArgs` so EPS records + receipts carry the actual buyer.
+ */
+const V5_CUSTOMER_PLACEHOLDERS = Object.freeze({
+  customerName: 'Event Pulse Buyer',
+  customerEmail: 'noreply@eventpulse.com.bd',
+  customerAddress: 'Dhaka',
+  customerCity: 'Dhaka',
+  customerState: 'Dhaka',
+  customerPostcode: '1200',
+  customerCountry: 'BD',
+  customerPhone: '01700000000',
+  productName: 'Event ticket',
+})
+
+/**
+ * V5 production protocol — per the EPS Merchant API Integration Guide V0.5.
+ * Production uses the SAME request shape as V4 sandbox (CustomerOrderId + the
+ * mandatory customer fields for InitializeEPS; GET-with-query for Verify); the
+ * only env difference is the host (BASE_URLS) + the camelCase `transactionTypeId`.
+ * (An earlier minimal V5 body omitting the mandatory fields was never validated
+ * and failed on the first live production call — see gotchas.md Day-46.)
  */
 export const V5_PRODUCTION_PROTOCOL: EpsWireProtocol = Object.freeze({
   name: 'v5-production' as const,
   buildInitBody(args: BuildInitBodyArgs): Record<string, unknown> {
+    const orderRef = args.customerOrderId ?? `ORDER-${args.merchantTransactionId}`
     return {
       merchantId: args.merchantId,
       storeId: args.storeId,
+      CustomerOrderId: orderRef,
       merchantTransactionId: args.merchantTransactionId,
+      transactionTypeId: 1, // 1=Web per guide API 02 param 5
       totalAmount: args.totalAmountBdt,
-      transactionTypeId: 1, // 1=Web per §11.4
       successUrl: args.successUrl,
       failUrl: args.failUrl,
       cancelUrl: args.cancelUrl,
+      ...V5_CUSTOMER_PLACEHOLDERS,
     }
   },
   parseInitResponse(data: unknown): InitParseResult {
@@ -219,14 +248,13 @@ export const V5_PRODUCTION_PROTOCOL: EpsWireProtocol = Object.freeze({
     return { kind: 'success', redirectUrl: url, transactionId: null, raw: data }
   },
   buildVerifyRequest(args: BuildVerifyRequestArgs): VerifyRequestSpec {
+    // Per the EPS V5 guide (API 03), Verify is a GET with merchantTransactionId
+    // as a query param (NOT a POST body) — same as V4 sandbox. x-hash is keyed
+    // by merchantTransactionId. (The earlier POST shape was never validated.)
     return {
-      method: 'POST',
+      method: 'GET',
       path: args.path,
-      body: {
-        merchantId: args.merchantId,
-        storeId: args.storeId,
-        merchantTransactionId: args.merchantTransactionId,
-      },
+      queryParams: { merchantTransactionId: args.merchantTransactionId },
       headers: {
         Authorization: `Bearer ${args.token}`,
         'x-hash': args.xHash,

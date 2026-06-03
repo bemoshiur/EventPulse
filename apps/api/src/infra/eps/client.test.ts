@@ -94,9 +94,9 @@ describe('cfg', () => {
     expect(c.hashKey).toBe('k')
     expect(c.mode).toBe('production')
     expect(c.paths).toEqual({
-      getToken: '/api/v1/GetToken',
-      initialise: '/api/v1/InitializeEPS',
-      verify: '/api/v1/CheckMerchantTransactionStatus',
+      getToken: '/v1/Auth/GetToken',
+      initialise: '/v1/EPSEngine/InitializeEPS',
+      verify: '/v1/EPSEngine/CheckMerchantTransactionStatus',
     })
     expect(c.wireProtocol.name).toBe('v5-production')
   })

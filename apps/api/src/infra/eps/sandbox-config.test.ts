@@ -205,22 +205,25 @@ describe('per-endpoint path map — V4 sandbox vs V5 production isolation', () =
     })
   })
 
-  it('V5_PRODUCTION_PATHS holds the §11.4 V5 production paths', () => {
+  it('V5_PRODUCTION_PATHS holds the EPS V5 Integration Guide production paths', () => {
+    // Per the EPS Merchant API Integration Guide V0.5 (Jan 2024): GetToken =
+    // /v1/Auth/GetToken, InitializeEPS + CheckMerchantTransactionStatus =
+    // /v1/EPSEngine/*. An earlier value of /api/v1/* was wrong and 404'd on the
+    // first live production call (Day-46 smoke; see gotchas.md).
     expect(V5_PRODUCTION_PATHS).toEqual({
-      getToken: '/api/v1/GetToken',
-      initialise: '/api/v1/InitializeEPS',
-      verify: '/api/v1/CheckMerchantTransactionStatus',
+      getToken: '/v1/Auth/GetToken',
+      initialise: '/v1/EPSEngine/InitializeEPS',
+      verify: '/v1/EPSEngine/CheckMerchantTransactionStatus',
     })
   })
 
-  it('V4 and V5 share NO path values — no key collides between the two maps', () => {
-    // Cross-contamination guard: if any production path string equals any
-    // sandbox path string, a swap-bug somewhere could route traffic at the
-    // wrong env without obvious symptoms. Pin that they are disjoint.
-    const v4Values = new Set(Object.values(V4_SANDBOX_PATHS))
-    for (const v5 of Object.values(V5_PRODUCTION_PATHS)) {
-      expect(v4Values.has(v5)).toBe(false)
-    }
+  it('production + sandbox share the SAME paths — only the host (BASE_URLS) differs', () => {
+    // Per the EPS V5 guide, production and sandbox use IDENTICAL endpoint paths.
+    // The environment split is the HOST: pgapi.eps.com.bd (prod) vs
+    // sandboxpgapi.eps.com.bd (sandbox). (The earlier "disjoint paths" invariant
+    // was based on a wrong assumption that prod used /api/v1/* — it 404'd.)
+    expect(V5_PRODUCTION_PATHS).toEqual(V4_SANDBOX_PATHS)
+    expect(BASE_URLS.production).not.toBe(BASE_URLS.sandbox)
   })
 
   it('both path maps are FROZEN (cannot be mutated at runtime)', () => {

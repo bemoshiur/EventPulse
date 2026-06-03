@@ -7,7 +7,7 @@
  * the interceptor regardless of how the factory is wired.
  *
  * Behaviour pinned:
- *   - Happy path: POST to /api/v1/GetToken with body+x-hash header,
+ *   - Happy path: POST to /v1/Auth/GetToken with body+x-hash header,
  *     returns { token, ttlSeconds }
  *   - x-hash signs the `userName` field (not password, not whole body)
  *     per §11.4 hash mechanism table
@@ -63,11 +63,11 @@ afterEach(() => {
 })
 
 describe('fetchAccessTokenFromEps — happy path', () => {
-  it('POSTs userName+password to /api/v1/GetToken with x-hash header', async () => {
+  it('POSTs userName+password to /v1/Auth/GetToken with x-hash header', async () => {
     const expectedHash = signEpsField('epsuser', 'hashkey-secret')
 
     const scope = nock(PROD_BASE)
-      .post('/api/v1/GetToken', (body) => {
+      .post('/v1/Auth/GetToken', (body) => {
         expect(body).toEqual({ userName: 'epsuser', password: 'epspass' })
         return true
       })
@@ -91,7 +91,7 @@ describe('fetchAccessTokenFromEps — happy path', () => {
     // never by the env-driven path the running services use.
     process.env['EPS_MODE'] = 'sandbox'
 
-    const scope = nock(SANDBOX_BASE).post('/api/v1/GetToken').reply(200, { Token: 'sandbox-jwt' })
+    const scope = nock(SANDBOX_BASE).post('/v1/Auth/GetToken').reply(200, { Token: 'sandbox-jwt' })
 
     const result = await fetchAccessTokenFromEps()
     expect(result.token).toBe('sandbox-jwt')
@@ -99,7 +99,7 @@ describe('fetchAccessTokenFromEps — happy path', () => {
   })
 
   it('accepts lowercase-alias Token field (passthrough schema)', async () => {
-    const scope = nock(PROD_BASE).post('/api/v1/GetToken').reply(200, { token: 'alias-token' }) // lowercase alias
+    const scope = nock(PROD_BASE).post('/v1/Auth/GetToken').reply(200, { token: 'alias-token' }) // lowercase alias
 
     const result = await fetchAccessTokenFromEps()
     expect(result.token).toBe('alias-token')
@@ -108,7 +108,7 @@ describe('fetchAccessTokenFromEps — happy path', () => {
 
   it('accepts AccessToken field as fallback', async () => {
     const scope = nock(PROD_BASE)
-      .post('/api/v1/GetToken')
+      .post('/v1/Auth/GetToken')
       .reply(200, { AccessToken: 'another-alias-jwt' })
 
     const result = await fetchAccessTokenFromEps()
@@ -119,26 +119,26 @@ describe('fetchAccessTokenFromEps — happy path', () => {
 
 describe('fetchAccessTokenFromEps — TTL derivation', () => {
   it('uses EPS ExpiresIn minus 60s safety margin when present + ample', async () => {
-    nock(PROD_BASE).post('/api/v1/GetToken').reply(200, { Token: 't', ExpiresIn: 600 })
+    nock(PROD_BASE).post('/v1/Auth/GetToken').reply(200, { Token: 't', ExpiresIn: 600 })
     const result = await fetchAccessTokenFromEps()
     expect(result.ttlSeconds).toBe(600 - 60)
   })
 
   it('falls back to default 14*60 when EPS omits ExpiresIn', async () => {
-    nock(PROD_BASE).post('/api/v1/GetToken').reply(200, { Token: 't' })
+    nock(PROD_BASE).post('/v1/Auth/GetToken').reply(200, { Token: 't' })
     const result = await fetchAccessTokenFromEps()
     expect(result.ttlSeconds).toBe(14 * 60)
   })
 
   it('uses default when reported TTL is too short to be meaningful', async () => {
-    nock(PROD_BASE).post('/api/v1/GetToken').reply(200, { Token: 't', ExpiresIn: 30 })
+    nock(PROD_BASE).post('/v1/Auth/GetToken').reply(200, { Token: 't', ExpiresIn: 30 })
     const result = await fetchAccessTokenFromEps()
     // 30s reported < safety margin + 30 buffer → fall back to default
     expect(result.ttlSeconds).toBe(14 * 60)
   })
 
   it('accepts lowercase expiresIn alias', async () => {
-    nock(PROD_BASE).post('/api/v1/GetToken').reply(200, { Token: 't', expiresIn: 600 })
+    nock(PROD_BASE).post('/v1/Auth/GetToken').reply(200, { Token: 't', expiresIn: 600 })
     const result = await fetchAccessTokenFromEps()
     expect(result.ttlSeconds).toBe(600 - 60)
   })
@@ -161,7 +161,7 @@ describe('deriveTokenTtl', () => {
 describe('fetchAccessTokenFromEps — error mapping', () => {
   it('throws EpsResponseError on 4xx with httpStatus + parsed EPS code/message', async () => {
     nock(PROD_BASE)
-      .post('/api/v1/GetToken')
+      .post('/v1/Auth/GetToken')
       .reply(401, { Code: 'AUTH_FAILED', Message: 'Bad credentials' })
 
     await expect(fetchAccessTokenFromEps()).rejects.toMatchObject({
@@ -173,7 +173,7 @@ describe('fetchAccessTokenFromEps — error mapping', () => {
   })
 
   it('throws EpsResponseError on 5xx', async () => {
-    nock(PROD_BASE).post('/api/v1/GetToken').reply(503, { Message: 'gateway down' })
+    nock(PROD_BASE).post('/v1/Auth/GetToken').reply(503, { Message: 'gateway down' })
     await expect(fetchAccessTokenFromEps()).rejects.toMatchObject({
       name: 'EpsResponseError',
       httpStatus: 503,
@@ -181,12 +181,12 @@ describe('fetchAccessTokenFromEps — error mapping', () => {
   })
 
   it('throws EpsResponseError on schema-fail (root is not an object)', async () => {
-    nock(PROD_BASE).post('/api/v1/GetToken').reply(200, 'plain text body')
+    nock(PROD_BASE).post('/v1/Auth/GetToken').reply(200, 'plain text body')
     await expect(fetchAccessTokenFromEps()).rejects.toBeInstanceOf(EpsResponseError)
   })
 
   it('throws EpsResponseError when no token field present in response', async () => {
-    nock(PROD_BASE).post('/api/v1/GetToken').reply(200, { Code: '0001', Message: 'no token here' })
+    nock(PROD_BASE).post('/v1/Auth/GetToken').reply(200, { Code: '0001', Message: 'no token here' })
 
     await expect(fetchAccessTokenFromEps()).rejects.toMatchObject({
       name: 'EpsResponseError',
@@ -199,7 +199,7 @@ describe('fetchAccessTokenFromEps — error mapping', () => {
     // Pass a real Error instance — some nock+axios version combos don't
     // propagate plain-object errors cleanly (the request hangs until
     // axios timeout, which our 15s default would exceed test budget).
-    nock(PROD_BASE).post('/api/v1/GetToken').replyWithError(new Error('connect ECONNREFUSED'))
+    nock(PROD_BASE).post('/v1/Auth/GetToken').replyWithError(new Error('connect ECONNREFUSED'))
 
     await expect(fetchAccessTokenFromEps()).rejects.toBeInstanceOf(EpsNetworkError)
   })
