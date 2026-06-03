@@ -29,6 +29,7 @@ import { checkInRoutes } from './routes/tenant/checkin.js'
 import { eventsRoutes } from './routes/tenant/events.js'
 import { kycDraftRoutes } from './routes/tenant/kyc-drafts.js'
 import { kycRoutes } from './routes/tenant/kyc.js'
+import { myContextsRoutes } from './routes/my/contexts.js'
 import { meRoutes } from './routes/tenant/me.js'
 import { tenantReportsRoutes } from './routes/tenant/reports.js'
 import { tenantOrderRefundRoutes, tenantRefundRoutes } from './routes/tenant/refunds.js'
@@ -143,6 +144,11 @@ export function createApp() {
   // Both `me` and `account-type` are NOT gated by requireTenantType
   // (the gate-setter and the read endpoint the modal needs); `kyc` IS
   // gated, applied inside `routes/tenant/kyc.ts` via `kyc.use('*', ...)`.
+  // Tenant-context picker (§10.3) — mounted under /my because the caller is a
+  // freshly-logged-in user (attendee session), NOT yet in a tenant context.
+  // requireUser (any audience) inside the router; the switch route re-checks
+  // tenant_users membership before minting a tenant session.
+  app.route('/api/v1/my/contexts', myContextsRoutes)
   app.route('/api/v1/tenant/me', meRoutes)
   app.route('/api/v1/tenant/account-type', accountTypeRoutes)
   app.route('/api/v1/tenant/kyc', kycRoutes)

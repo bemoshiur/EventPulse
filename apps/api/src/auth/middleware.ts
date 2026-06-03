@@ -103,6 +103,22 @@ export const requireAttendeeAuth: MiddlewareHandler = async (c, next) => {
   await next()
 }
 
+/**
+ * Require ANY authenticated user, regardless of audience. Used by the
+ * context-picker routes (`/my/contexts`): a user who just logged in holds an
+ * `attendee` session and has not yet entered a tenant context, so
+ * `requireTenantAuth` would reject them (chicken-and-egg). Authorization for a
+ * specific tenant is still enforced per-action (the switch route re-checks
+ * `tenant_users` membership via `decideAudience`) — this only proves identity.
+ */
+export const requireUser: MiddlewareHandler = async (c, next) => {
+  const claims = await extractAndVerify(c)
+  if (!claims) return unauthorized(c, 'AUTH_REQUIRED', 'authentication required')
+  c.set('auth', claims)
+  if (claims.tenantId) c.set('tenantId', claims.tenantId)
+  await next()
+}
+
 /** Helper for tests / future code: do nothing if no token, but set claims if there is one. */
 export const optionalAuth: MiddlewareHandler = async (c, next: Next) => {
   const claims = await extractAndVerify(c)
