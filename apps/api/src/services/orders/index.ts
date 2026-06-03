@@ -163,10 +163,9 @@ export interface CreateOrderInput {
   /** Optional idempotency key (Day 29 middleware reads at request layer). */
   idempotencyKey?: string | null
   /** Optional EPS-fee bps override at order time — defaults to
-   *  DEFAULT_EPS_FEE_BPS_ESTIMATE (175 = 1.75%, bKash rate per the
-   *  v1.0 single-method launch decision; see DEFAULT_EPS_FEE_BPS_ESTIMATE
-   *  JSDoc below). Real reconciliation against EPS settlement reports
-   *  lands Day 27+. */
+   *  DEFAULT_EPS_FEE_BPS_ESTIMATE (200 = 2.0%, the production-confirmed bKash
+   *  rate; see DEFAULT_EPS_FEE_BPS_ESTIMATE JSDoc below). Real reconciliation
+   *  against EPS settlement reports lands Day 27+. */
   epsFeeBpsEstimate?: number
   /** Buyer-side metadata captured for audit + abuse triage. */
   ip?: string | null
@@ -210,42 +209,37 @@ export interface CreateOrderResult {
 }
 
 /**
- * Default EPS fee bps used when caller doesn't supply one. **175 = 1.75%,
- * which is the bKash MFS rate per the v1.0 single-method launch decision**
- * (see `.claude/memory/decisions.md` "EPS fee-model structural decision —
- * Option 3 (single-method launch, bKash-only for v1.0) CHOSEN" dated
- * 2026-05-31). The empirical truth-gate observation was BDT 17.47 EPS fee
- * on a BDT 1,000 face = 1.747% on face — rounded to 175 bps (1.75%).
+ * Default EPS fee bps used when caller doesn't supply one. **200 = 2.0%, the
+ * PRODUCTION-confirmed bKash MFS rate.** Measured on Day 46 from the BDT-102
+ * production smoke: EPS's fee was BDT 2.04 on a BDT 102.00 capture = exactly
+ * 2.0% (`.claude/memory/decisions.md` "EPS RATE CONFIRMED" 2026-06-03 + the
+ * 2026-06-04 operator value confirmation). This **supersedes the earlier 175
+ * bps**, which was derived from the SANDBOX truth-gate (~174.27 bps on the
+ * capture base) and never reflected production reality — the sandbox bKash
+ * rate was simply lower than production's.
  *
- * Under Option 3, the EPS hosted checkout is restricted to bKash; every
- * paid order at launch flows through bKash; this single rate is the
- * actual rate for every transaction. Calculator prediction matches
- * reality (within 7-paisa floor-rounding) on every order.
+ * The §14.2 single-method launch frame is unchanged (Option 3, bKash-only for
+ * v1.0; decisions.md 2026-05-31): the EPS hosted checkout is restricted to
+ * bKash, so every paid order at launch flows through this single rate.
  *
- * Important — bps is applied to the CAPTURE BASE (subtotal + platform_fee
- * if pass-through), not to face value, per §14.2 Mode D footnote. The
- * 1.747% empirical observation was on face (BDT 17.47 / BDT 1,000); on a
- * capture base of BDT 1,002.50 (subtotal + 0.25% platform PT), the actual
- * EPS rate is closer to 174.27 bps. 175 bps applied here produces
- * BDT 17.54 (7 paisa over the BDT 17.47 observation) — the rounding cost
- * of single-bps modelling. The 7-paisa delta is invisible at BDT 1,000
- * face and absorbed into the integer-paisa floor; never round-trips back
- * to the buyer.
+ * Important — bps is applied to the CAPTURE BASE (subtotal + platform_fee if
+ * pass-through), not to face value, per §14.2 Mode D footnote. At Mode A on a
+ * BDT 1,000 face:
+ *   capture_base = 100_000 + 250 (platform PT) = 100_250 paisa
+ *   eps_fee at 200 bps = floor(100_250 × 200 / 10_000) = 2005 paisa (BDT 20.05)
  *
- * Card / Nagad / Rocket / Upay / bank-transfer rates are NOT modelled
- * at v1.0 — those methods are restricted at the EPS init step (Phase 2
- * of Day 38 implementation). Card support is the immediate post-launch
- * roadmap item (week 1) per decisions.md 2026-05-31 Option 3 entry's
- * implication (d); each new method requires its own production
- * rate-confirmation smoke before going live, same discipline as v1.0
- * bKash.
+ * Card / Nagad / Rocket / Upay / bank-transfer rates are NOT modelled at v1.0
+ * — those methods are restricted at the EPS init step. Card support is the
+ * immediate post-launch roadmap item (week 1); each new method requires its
+ * own production rate-confirmation smoke before going live, same discipline as
+ * v1.0 bKash.
  *
- * Previous value: 250 bps (2.5%, card-rate estimate). Historical 250
- * preserved in git history; the §14.2 worked-example tests at 250 bps
- * remain in fee-calculator.test.ts as spec-archaeology (they pin the
- * §14.2 narrative math, not the runtime default).
+ * Value history: 250 bps (card-rate guess) → 175 bps (sandbox truth-gate) →
+ * **200 bps (production smoke, current)**. The 250 + 175 worked-example tests
+ * remain in fee-calculator.test.ts as spec-archaeology — they pin the
+ * calculator's arithmetic at those rates, not the runtime default.
  */
-export const DEFAULT_EPS_FEE_BPS_ESTIMATE = 175
+export const DEFAULT_EPS_FEE_BPS_ESTIMATE = 200
 
 /**
  * Sellable event statuses per §2.4 event lifecycle. Only events in

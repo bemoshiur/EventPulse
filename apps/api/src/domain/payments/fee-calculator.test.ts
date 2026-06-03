@@ -27,15 +27,18 @@ const PLATFORM_BPS_25 = 25
 const EPS_BPS_250 = 250
 
 /**
- * EPS fee at v1.0 single-method launch rate per the Option 3 decision
- * (decisions.md 2026-05-31 "EPS fee-model structural decision — Option 3
- * CHOSEN"): 175 bps = 1.75%, bKash MFS rate rounded from the empirical
- * truth-gate observation of 1.747% on face. This is the value of
- * `DEFAULT_EPS_FEE_BPS_ESTIMATE` in services/orders/index.ts; the test
- * suite duplicates it as a local constant so the calculator tests stay
- * decoupled from the services layer (calculator tests are pure-function).
+ * The bKash rate observed in the SANDBOX truth-gate: 175 bps = 1.75%, rounded
+ * from the sandbox observation of 1.747% on face (~174.27 bps on capture).
+ *
+ * **This is NOT the launch default.** The Day-46 PRODUCTION smoke measured
+ * bKash at 2.0% (200 bps) — higher than sandbox — and that is what
+ * `DEFAULT_EPS_FEE_BPS_ESTIMATE` is set to. The 175-bps tests below are kept
+ * as spec-archaeology: they pin the calculator's arithmetic at the sandbox
+ * rate (and the +7-paisa rounding delta), NOT the runtime default. The launch
+ * default's arithmetic is pinned in services/orders/eps-fee-estimate.test.ts.
+ * The calculator tests stay decoupled from the services layer (pure-function).
  */
-const EPS_BPS_175_BKASH_V1 = 175
+const EPS_BPS_175_BKASH_SANDBOX = 175
 
 function makeInput(overrides: Partial<FeeCalcInput> = {}): FeeCalcInput {
   return {
@@ -162,9 +165,13 @@ describe('§14.2 worked example — Mode D (platform pass_through, eps absorb)',
   })
 })
 
-// ─── v1.0 launch — bKash 175 bps (truth-gate Mode A reproduction) ────
+// ─── sandbox truth-gate reproduction — bKash 175 bps (Mode A) ────────
+// NOTE: 175 is the SANDBOX rate, superseded as the launch default by the
+// Day-46 prod smoke (→ 200). The launch default is pinned in
+// services/orders/eps-fee-estimate.test.ts. These tests pin the calculator's
+// arithmetic at the sandbox rate as spec-archaeology.
 
-describe('v1.0 launch — bKash 175 bps applied to §14.2 Mode A — reproduces truth-gate observation within 7-paisa floor', () => {
+describe('sandbox truth-gate reproduction — bKash 175 bps applied to §14.2 Mode A — within 7-paisa floor', () => {
   // Per `.claude/memory/decisions.md` "EPS fee-model structural decision —
   // Option 3 (single-method launch, bKash-only for v1.0) CHOSEN" (2026-05-31):
   // EPS hosted checkout is restricted to bKash at launch; the calculator's
@@ -201,13 +208,13 @@ describe('v1.0 launch — bKash 175 bps applied to §14.2 Mode A — reproduces 
   it('Mode A at 175 bps reproduces truth-gate observation: buyer 1,020.04, eps_fee 17.54, organiser 1,000.00', () => {
     const result = calculateOrderFees(
       makeInput({
-        epsFeeBps: EPS_BPS_175_BKASH_V1,
+        epsFeeBps: EPS_BPS_175_BKASH_SANDBOX,
         platformFeeHandling: 'pass_through',
         epsFeeHandling: 'pass_through',
       }),
     )
 
-    // Calculator prediction at 175 bps (the value we ship at v1.0 launch):
+    // Calculator prediction at 175 bps (the sandbox rate; launch ships 200):
     //   Ticket             1,000.00       = 100_000 paisa
     //   Platform fee           2.50       = 250 paisa
     //   Payment fee           17.54       = 1754 paisa (floor of 1754.375)
@@ -229,7 +236,7 @@ describe('v1.0 launch — bKash 175 bps applied to §14.2 Mode A — reproduces 
   it('Mode A at 175 bps — calculator vs truth-gate delta is +7 paisa (over-estimate, by design)', () => {
     const result = calculateOrderFees(
       makeInput({
-        epsFeeBps: EPS_BPS_175_BKASH_V1,
+        epsFeeBps: EPS_BPS_175_BKASH_SANDBOX,
         platformFeeHandling: 'pass_through',
         epsFeeHandling: 'pass_through',
       }),
@@ -245,15 +252,15 @@ describe('v1.0 launch — bKash 175 bps applied to §14.2 Mode A — reproduces 
     expect(result.epsFeePaisa - TRUTH_GATE_OBSERVED_EPS_PAISA).toBe(expectedDelta)
   })
 
-  // §14.10 Invariant-1 check at the v1.0 launch rate. The other four §14.2
+  // §14.10 Invariant-1 check at the sandbox 175-bps rate. The other four §14.2
   // tests cover this implicitly via their explicit organiser_net + platform
   // + eps assertions; adding it explicitly at 175 bps means a future bigint-
-  // arithmetic change can't silently violate the invariant at the launch rate
+  // arithmetic change can't silently violate the invariant at this rate
   // without this test catching it.
   it('Mode A at 175 bps — §14.10 Invariant-1 holds (total = net + platform + eps + 0 withholding)', () => {
     const result = calculateOrderFees(
       makeInput({
-        epsFeeBps: EPS_BPS_175_BKASH_V1,
+        epsFeeBps: EPS_BPS_175_BKASH_SANDBOX,
         platformFeeHandling: 'pass_through',
         epsFeeHandling: 'pass_through',
       }),

@@ -2,7 +2,7 @@
  * Marketing pricing calculator — drift guard.
  *
  * The /pricing page renders fee scenarios at the v1.0 launch bKash rate
- * (175 bps platform 25 bps). The arithmetic is a paisa-bigint mirror of
+ * (200 bps platform 25 bps — production-confirmed Day 46). The arithmetic is a paisa-bigint mirror of
  * apps/api/src/domain/payments/fee-calculator.ts (which lives in the
  * api workspace and per §3.2 cannot be imported from the web workspace).
  *
@@ -18,7 +18,7 @@
 import { describe, expect, it } from 'vitest'
 
 const PLATFORM_FEE_BPS = 25
-const BKASH_FEE_BPS = 175
+const BKASH_FEE_BPS = 200
 const BPS_DIVISOR = 10_000n
 
 function feeOnAmount(amountPaisa: bigint, bps: number): bigint {
@@ -56,32 +56,32 @@ describe('marketing /pricing calculator — drift guard at v1.0 bKash rate', () 
     }
   })
 
-  it('Mode (pass, pass) — buyer pays 1020.04, organiser receives full 1000.00', () => {
+  it('Mode (pass, pass) — buyer pays 1022.55, organiser receives full 1000.00', () => {
     const r = compute(face, 'pass_pass')
-    expect(r.epsFee).toBe(1754n)
-    expect(r.buyerTotal).toBe(102_004n)
+    expect(r.epsFee).toBe(2005n)
+    expect(r.buyerTotal).toBe(102_255n)
     expect(r.organiserNet).toBe(100_000n)
   })
 
-  it('Mode (absorb, absorb) — buyer pays 1000.00, organiser receives 980.00', () => {
+  it('Mode (absorb, absorb) — buyer pays 1000.00, organiser receives 977.50', () => {
     const r = compute(face, 'absorb_absorb')
-    expect(r.epsFee).toBe(1750n)
+    expect(r.epsFee).toBe(2000n)
     expect(r.buyerTotal).toBe(100_000n)
-    expect(r.organiserNet).toBe(98_000n)
+    expect(r.organiserNet).toBe(97_750n)
   })
 
-  it('Mode (absorb, pass) — buyer pays 1017.50, organiser receives 997.50', () => {
+  it('Mode (absorb, pass) — buyer pays 1020.00, organiser receives 997.50', () => {
     const r = compute(face, 'absorb_pass')
-    expect(r.epsFee).toBe(1750n)
-    expect(r.buyerTotal).toBe(101_750n)
+    expect(r.epsFee).toBe(2000n)
+    expect(r.buyerTotal).toBe(102_000n)
     expect(r.organiserNet).toBe(99_750n)
   })
 
-  it('Mode (pass, absorb) — buyer pays 1002.50, organiser receives 982.46', () => {
+  it('Mode (pass, absorb) — buyer pays 1002.50, organiser receives 979.95', () => {
     const r = compute(face, 'pass_absorb')
-    expect(r.epsFee).toBe(1754n)
+    expect(r.epsFee).toBe(2005n)
     expect(r.buyerTotal).toBe(100_250n)
-    expect(r.organiserNet).toBe(98_246n)
+    expect(r.organiserNet).toBe(97_995n)
   })
 
   it('free event (subtotal=0) — all zeros regardless of mode', () => {
@@ -97,7 +97,7 @@ describe('marketing /pricing calculator — drift guard at v1.0 bKash rate', () 
   it('large face (BDT 50,000) — bigint arithmetic does not overflow', () => {
     const r = compute(5_000_000n, 'pass_pass')
     expect(r.platformFee).toBe(12_500n) // 5,000,000 × 25/10000
-    expect(r.epsFee).toBe(87_718n) // (5,000,000 + 12,500) × 175/10000 floor = 87718
+    expect(r.epsFee).toBe(100_250n) // (5,000,000 + 12,500) × 200/10000 floor = 100250
     expect(r.organiserNet).toBe(5_000_000n)
   })
 })
