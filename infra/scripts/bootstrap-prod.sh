@@ -243,6 +243,13 @@ EPS_PASSWORD=${EPS_PASSWORD}
 EPS_HASH_KEY=${EPS_HASH_KEY}
 EPS_MODE=${EPS_MODE}
 STAGING_PAYMENT_BLOCK=1
+# EPS buyer-return URLs (required by InitializeEPS per §11.3). Static — they
+# point at the API's eps-return handler which Verifies + redirects the buyer
+# to the web frontend. Added Day-46 after the smoke found them missing on prod
+# (the live order failed "EPS init env vars missing" until set).
+EPS_SUCCESS_URL=https://api.eventpulse.com.bd/api/v1/public/orders/eps-return/success
+EPS_FAIL_URL=https://api.eventpulse.com.bd/api/v1/public/orders/eps-return/fail
+EPS_CANCEL_URL=https://api.eventpulse.com.bd/api/v1/public/orders/eps-return/cancel
 
 # Porichoy — scaffold-only (stub throws regardless of value).
 POROCHOY_API_KEY=${POROCHOY_API_KEY}
