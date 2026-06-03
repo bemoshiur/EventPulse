@@ -9,8 +9,10 @@ describe('consumeHomePath', () => {
   it('tenant lands on the tenant dashboard', () => {
     expect(consumeHomePath('tenant')).toBe('/dashboard')
   })
-  it('attendee / unknown lands on root', () => {
-    expect(consumeHomePath('attendee')).toBe('/')
+  it('attendee lands on the tenant picker (always-show-a-picker, decisions.md 2026-06-04)', () => {
+    expect(consumeHomePath('attendee')).toBe('/choose-tenant')
+  })
+  it('unknown audience lands on root', () => {
     expect(consumeHomePath('whatever')).toBe('/')
   })
 })

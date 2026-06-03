@@ -14,8 +14,16 @@ export function consumeHomePath(audience: string): string {
       return '/admin/kyc'
     case 'tenant':
       return '/dashboard'
-    // attendee + anything unexpected → marketing/root (the attendee portal
-    // lands in Phase 2; there is no `(my)` page to redirect to yet).
+    case 'attendee':
+      // The tenant portal signs users in with an attendee magic link (the
+      // request flow can't mint a tenant session — it has no tenantId), so a
+      // freshly-signed-in tenant user arrives here as `attendee`. Land them on
+      // the tenant picker (decisions.md 2026-06-04 "always show a picker"); it
+      // lists their tenants and the chosen one mints the tenant session. A user
+      // with no tenants sees the picker's empty state. When the attendee portal
+      // (my.eventpulse.com.bd) ships in Phase 2 this branches by portal.
+      return '/choose-tenant'
+    // Anything unexpected → marketing/root.
     default:
       return '/'
   }
