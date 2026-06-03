@@ -44,6 +44,7 @@
 
   /* Easings + durations */
   --ease-ep: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-ep-soft: cubic-bezier(0.4, 0, 0.2, 1);
 
   /* Shadow that pairs well with glass */
   --shadow-glass: 0 12px 40px -8px rgba(20, 18, 60, 0.15);
@@ -66,6 +67,11 @@
     background-color: var(--color-ep-mist);
     color: var(--color-ep-graphite);
     font-family: var(--font-sans);
+    /* Inter looks sharper with contextual alternates + proper kerning on. */
+    font-feature-settings:
+      'cv11' 1,
+      'ss01' 1,
+      'kern' 1;
   }
   h1,
   h2,
@@ -75,7 +81,18 @@
   h6 {
     color: var(--color-ep-ink);
     font-family: var(--font-display);
-    letter-spacing: -0.01em;
+    /* Optical tracking: display type wants tighter letters than body. */
+    letter-spacing: -0.022em;
+    text-wrap: balance;
+  }
+  /* The biggest headings tighten further so they read as one confident shape. */
+  h1 {
+    letter-spacing: -0.032em;
+  }
+  /* Lining tabular figures everywhere numbers carry meaning. */
+  time,
+  [data-numeric] {
+    font-variant-numeric: tabular-nums lining-nums;
   }
   :focus-visible {
     outline: 2px solid var(--color-ep-cerulean);
@@ -130,6 +147,81 @@
 }
 
 /* ---------------------------------------------------------------------------
+   Display typography + motion utilities (§1.5 / §19.2)
+   --------------------------------------------------------------------------- */
+@layer components {
+  /* Fluid hero headline — one confident shape from phone to desktop. */
+  .text-hero {
+    font-family: var(--font-display);
+    font-size: clamp(2.75rem, 1.6rem + 4.2vw, 4.75rem);
+    line-height: 1;
+    letter-spacing: -0.04em;
+    font-weight: 600;
+  }
+  .text-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.028em;
+  }
+  .nums {
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  /* A slowly-shifting brand gradient clipped to text — for the one accent
+     phrase per hero (§1.5 "gradients earn their place"). */
+  .ep-gradient-text {
+    background-image: linear-gradient(
+      110deg,
+      var(--color-ep-violet) 0%,
+      var(--color-ep-indigo) 28%,
+      var(--color-ep-cerulean) 50%,
+      var(--color-ep-indigo) 72%,
+      var(--color-ep-violet) 100%
+    );
+    background-size: 250% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: ep-text-shimmer 9s linear infinite;
+  }
+
+  /* Orchestrated page-load reveal — opt in, stagger with --d delay vars. */
+  .ep-reveal {
+    opacity: 0;
+    animation: ep-rise 0.7s var(--ease-ep) both;
+    animation-delay: var(--ep-reveal-delay, 0ms);
+  }
+  .ep-reveal-1 {
+    --ep-reveal-delay: 60ms;
+  }
+  .ep-reveal-2 {
+    --ep-reveal-delay: 150ms;
+  }
+  .ep-reveal-3 {
+    --ep-reveal-delay: 260ms;
+  }
+  .ep-reveal-4 {
+    --ep-reveal-delay: 380ms;
+  }
+}
+
+@keyframes ep-text-shimmer {
+  to {
+    background-position: 250% 0;
+  }
+}
+
+@keyframes ep-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
    Gradient mesh background (§1.5)
    A slow-moving multi-radial mesh that lives behind the authenticated portals
    and the auth screens. Falls back to a static mesh under prefers-reduced-motion.
@@ -140,58 +232,127 @@
     inset: 0;
     z-index: -1;
     pointer-events: none;
+    overflow: hidden;
     background-color: var(--color-ep-mist);
+    /* Five anchored blobs. Each layer is over-sized (see background-size) so
+       its background-position has room to drift on its own path — the blobs
+       move independently instead of panning as one rigid image. The fifth,
+       central warm glow adds depth between the four corners. */
     background-image:
-      radial-gradient(at 0% 0%, rgba(108, 79, 224, 0.35) 0%, transparent 50%),
-      radial-gradient(at 100% 0%, rgba(45, 168, 255, 0.3) 0%, transparent 50%),
-      radial-gradient(at 100% 100%, rgba(255, 111, 97, 0.25) 0%, transparent 50%),
-      radial-gradient(at 0% 100%, rgba(25, 195, 154, 0.25) 0%, transparent 50%);
-    background-size: 200% 200%;
-    animation: ep-mesh-drift 45s ease-in-out infinite alternate;
+      radial-gradient(38% 44% at 18% 22%, rgba(108, 79, 224, 0.42) 0%, transparent 60%),
+      radial-gradient(42% 50% at 82% 18%, rgba(45, 168, 255, 0.36) 0%, transparent 62%),
+      radial-gradient(46% 52% at 80% 84%, rgba(255, 111, 97, 0.32) 0%, transparent 60%),
+      radial-gradient(44% 48% at 16% 82%, rgba(25, 195, 154, 0.3) 0%, transparent 62%),
+      radial-gradient(34% 38% at 50% 50%, rgba(255, 181, 71, 0.16) 0%, transparent 60%);
+    background-repeat: no-repeat;
+    background-size:
+      170% 170%,
+      180% 165%,
+      165% 180%,
+      175% 170%,
+      150% 150%;
+    /* drift = independent per-blob travel; breathe = a slow whole-field swell. */
+    animation:
+      ep-mesh-drift 42s var(--ease-ep-soft) infinite alternate,
+      ep-mesh-breathe 19s ease-in-out infinite;
+    will-change: background-position, transform;
   }
+
+  /* A fine grain overlay (static fractal noise) for tactile depth — §1.5.
+     soft-light keeps it as texture, not a visible scrim. */
+  .gradient-mesh::after {
+    content: '';
+    position: absolute;
+    inset: -50%;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.035;
+    mix-blend-mode: soft-light;
+  }
+
   .gradient-mesh--calm {
-    /* Auth screens — slower drift to feel calm (§19.2) */
-    animation-duration: 90s;
+    /* Auth screens — slower, gentler drift to feel calm (§19.2) */
+    animation:
+      ep-mesh-drift 80s var(--ease-ep-soft) infinite alternate,
+      ep-mesh-breathe 30s ease-in-out infinite;
   }
+
   .gradient-mesh--dark {
     background-color: #0b0b14;
     background-image:
-      radial-gradient(at 0% 0%, rgba(108, 79, 224, 0.45) 0%, transparent 55%),
-      radial-gradient(at 100% 0%, rgba(74, 91, 255, 0.35) 0%, transparent 55%),
-      radial-gradient(at 100% 100%, rgba(255, 77, 126, 0.3) 0%, transparent 55%),
-      radial-gradient(at 0% 100%, rgba(25, 195, 154, 0.25) 0%, transparent 55%);
+      radial-gradient(38% 44% at 18% 22%, rgba(124, 96, 240, 0.5) 0%, transparent 60%),
+      radial-gradient(42% 50% at 82% 18%, rgba(74, 91, 255, 0.4) 0%, transparent 62%),
+      radial-gradient(46% 52% at 80% 84%, rgba(255, 77, 126, 0.34) 0%, transparent 60%),
+      radial-gradient(44% 48% at 16% 82%, rgba(25, 195, 154, 0.28) 0%, transparent 62%),
+      radial-gradient(34% 38% at 50% 50%, rgba(255, 181, 71, 0.12) 0%, transparent 60%);
+  }
+  .gradient-mesh--dark::after {
+    opacity: 0.06;
+    mix-blend-mode: overlay;
   }
 }
 
+/* Independent per-blob drift — five comma-separated positions, one per layer,
+   each tracing its own slow loop. `alternate` makes it breathe 0→mid→far→back. */
 @keyframes ep-mesh-drift {
   0% {
-    background-position: 0% 0%;
-  }
-  25% {
-    background-position: 100% 25%;
+    background-position:
+      0% 0%,
+      100% 0%,
+      100% 100%,
+      0% 100%,
+      50% 50%;
   }
   50% {
-    background-position: 100% 100%;
-  }
-  75% {
-    background-position: 0% 75%;
+    background-position:
+      42% 28%,
+      58% 44%,
+      66% 60%,
+      30% 68%,
+      56% 42%;
   }
   100% {
-    background-position: 0% 0%;
+    background-position:
+      16% 52%,
+      92% 18%,
+      58% 86%,
+      8% 54%,
+      44% 58%;
   }
 }
 
-/* Motion + accessibility — §19.6 */
+/* Whole-field swell — scale only ever grows from 1, so the fixed mesh always
+   stays covering (never uncovers an edge). */
+@keyframes ep-mesh-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+/* Motion + accessibility — §19.6.
+   Reduced motion: hold the mesh on its mid-drift frame (a balanced static
+   composition) and drop every transition/animation. */
 @media (prefers-reduced-motion: reduce) {
   .gradient-mesh,
   .gradient-mesh--calm,
   .gradient-mesh--dark {
     animation: none !important;
+    transform: none !important;
+    background-position:
+      42% 28%,
+      58% 44%,
+      66% 60%,
+      30% 68%,
+      56% 42%;
   }
   *,
   *::before,
   *::after {
     animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
 }
