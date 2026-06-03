@@ -163,29 +163,51 @@ function buildReturnUrl(result: SettlementResult): string {
 
 /**
  * `merchantTransactionId` must satisfy our own minting contract
- * (§11.4: ≥10 chars). We accept both the camelCase form (matching
- * the outbound init body field name) and the snake_case alias
- * (common gateway convention for query params).
+ * (§11.4: ≥10 chars). We accept three spellings of the key:
+ *
+ *   - `MerchantTransactionId` (PascalCase) — **what EPS production actually
+ *     appends to the success/fail/cancel return URL.** Confirmed from the
+ *     Day-46 BDT-102 prod smoke's nginx access log: the redirect carried
+ *     `?Status=…&MerchantTransactionId=TXN-…&ErrorCode=…&EPSTransactionId=…`.
+ *     The original handler only accepted the camel/snake forms → it could
+ *     never find the id → every paid buyer hit `/orders/return/error`
+ *     (gotchas.md "EPS redirect-return param mismatch", Day 46).
+ *   - `merchantTransactionId` (camelCase) — matches our outbound init body
+ *     field name; kept for forward-compat / non-prod callers.
+ *   - `merchant_transaction_id` (snake_case) — common gateway convention.
+ *
+ * `Status` / `ErrorCode` / `EPSTransactionId` from the redirect are
+ * deliberately IGNORED (§1.3 R3: redirect params are never authoritative;
+ * `settleOrderFromEps` → `verifyOrder` is the source of truth). We consume
+ * ONLY the merchant id, and only as a DB lookup key.
  */
 const querySchema = z
   .object({
+    MerchantTransactionId: z.string().min(10).max(120).optional(),
     merchantTransactionId: z.string().min(10).max(120).optional(),
     merchant_transaction_id: z.string().min(10).max(120).optional(),
   })
   .passthrough()
 
 function pickTxnId(q: {
+  MerchantTransactionId?: string
   merchantTransactionId?: string
   merchant_transaction_id?: string
 }): string | null {
-  return q.merchantTransactionId ?? q.merchant_transaction_id ?? null
+  // EPS production sends PascalCase; the camel/snake forms are kept for
+  // forward-compat. Whichever is present is our minted TXN- id either way.
+  return q.merchantTransactionId ?? q.MerchantTransactionId ?? q.merchant_transaction_id ?? null
 }
 
 // ─── handler factory (shared shape for all 3 paths) ─────────────────
 
 function makeReturnHandler(source: SettlementSource) {
   return async (c: import('hono').Context) => {
-    const q = c.req.query() as { merchantTransactionId?: string; merchant_transaction_id?: string }
+    const q = c.req.query() as {
+      MerchantTransactionId?: string
+      merchantTransactionId?: string
+      merchant_transaction_id?: string
+    }
     const parseResult = querySchema.safeParse(q)
     if (!parseResult.success) {
       // Malformed query — redirect to the error page (NEVER show

@@ -281,6 +281,31 @@ describe('safe rejection of unknown / tampered / malformed', () => {
       source: 'redirect_success',
     })
   })
+
+  it('accepts EPS production PascalCase `MerchantTransactionId` + the real return params (Day-46 redirect bug)', async () => {
+    // GROUND TRUTH — the BDT-102 prod smoke nginx access log shows EPS appends
+    // exactly: ?Status=Success&MerchantTransactionId=TXN-...&ErrorCode=&EPSTransactionId=...
+    // The handler MUST read the PascalCase MerchantTransactionId as the lookup
+    // key. Status/ErrorCode/EPSTransactionId are IGNORED (§1.3 R3: redirect
+    // params are never authoritative; verify is the source of truth).
+    vi.mocked(settleOrderFromEps).mockResolvedValueOnce({
+      kind: 'settled',
+      orderId: 'ord-pascal',
+      previousStatus: 'awaiting_payment',
+      newStatus: 'paid',
+    })
+    const res = await hitReturn('success', {
+      Status: 'Success',
+      MerchantTransactionId: 'TXN-prod-smoke-12345',
+      ErrorCode: '',
+      EPSTransactionId: 'EPS-9988776655',
+    })
+    expectRedirect(res, '/orders/return/success?orderId=ord-pascal')
+    expect(settleOrderFromEps).toHaveBeenCalledWith({
+      merchantTransactionId: 'TXN-prod-smoke-12345',
+      source: 'redirect_success',
+    })
+  })
 })
 
 // ─── EPS verify failure handling ────────────────────────────────────
