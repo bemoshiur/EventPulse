@@ -8,11 +8,13 @@ import { MarketingNavbar } from '@/components/marketing/marketing-navbar'
 export const metadata: Metadata = {
   title: 'Pricing — Event Pulse',
   description:
-    'Flat 0.25% platform fee. EPS gateway fees pass through at cost. v1.0 launches with bKash at 1.75%. Run the numbers for your event.',
+    'Flat 0.25% platform fee. EPS gateway fees pass through at cost. v1.0 launches with bKash at 2.0%. Run the numbers for your event.',
 }
 
 const PLATFORM_FEE_BPS = 25
-const BKASH_FEE_BPS = 175
+// Production-confirmed bKash rate (Day-46 BDT-102 smoke: 2.04/102.00 = 2.0%).
+// Must stay in lock-step with DEFAULT_EPS_FEE_BPS_ESTIMATE in the API.
+const BKASH_FEE_BPS = 200
 const BPS_DIVISOR = 10_000n
 
 const FACE_VALUES_PAISA = [50_000n, 100_000n, 500_000n, 1_000_000n, 5_000_000n] as const
@@ -114,7 +116,7 @@ export default function PricingPage() {
                 </h2>
               </div>
               <p className="text-xs text-[var(--ep-graphite)]">
-                Platform 0.25% &middot; bKash 1.75% &middot; all four fee modes shown
+                Platform 0.25% &middot; bKash 2.0% &middot; all four fee modes shown
               </p>
             </div>
 
@@ -169,14 +171,14 @@ export default function PricingPage() {
               About the rate shown above
             </h3>
             <p className="mt-3 text-sm leading-relaxed text-[var(--ep-graphite)]">
-              The calculator above uses the v1.0 launch bKash rate (1.75% on capture). Card, Nagad,
+              The calculator above uses the v1.0 launch bKash rate (2.0% on capture). Card, Nagad,
               Rocket, and Upay rates publish when those methods join post-launch.
             </p>
             <p
               lang="bn"
               className="mt-3 text-sm leading-relaxed font-[var(--ep-bn-font)] text-[var(--ep-graphite)]"
             >
-              উপরের ক্যালকুলেটরটি v1.0 লঞ্চের bKash রেট (১.৭৫%) ব্যবহার করছে। কার্ড / নগদ / রকেট /
+              উপরের ক্যালকুলেটরটি v1.0 লঞ্চের bKash রেট (২.০%) ব্যবহার করছে। কার্ড / নগদ / রকেট /
               উপয় রেট লঞ্চ-পরবর্তী যখন সেই পদ্ধতিগুলো যোগ হবে তখন প্রকাশিত হবে।
             </p>
           </GlassCard>
