@@ -645,6 +645,14 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const initResult = await initialiseOrder({
       merchantTransactionId,
       totalPaisa: calc.buyerTotalPaisa,
+      // Thread the real buyer so EPS records + receipts carry them (the wire
+      // protocol falls back to placeholders for any blank field). PII stays in
+      // the request body only — never logged (§1.3 R5).
+      buyer: {
+        name: input.buyer.name,
+        email: input.buyer.email,
+        phone: input.buyer.phone,
+      },
     })
     return {
       orderId,

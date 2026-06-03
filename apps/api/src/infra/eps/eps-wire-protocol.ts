@@ -63,6 +63,20 @@ export interface BuildInitBodyArgs {
    * supplies; V5 ignores it.
    */
   customerOrderId?: string
+  /**
+   * The real buyer identity from the order, threaded into the V5 init body so
+   * EPS records + receipts carry the actual buyer (replaces the #279 neutral
+   * placeholders). Only the identity triplet — address/city/etc. are not
+   * collected at checkout and stay placeholders. Any field that is missing or
+   * blank falls back to its placeholder so EPS never receives an empty
+   * MANDATORY field. These values are PII (§1.3 R5): they belong in the wire
+   * body only and must NEVER reach a log line.
+   */
+  customer?: {
+    name?: string | null
+    email?: string | null
+    phone?: string | null
+  }
 }
 
 /** Args for `buildVerifyRequest`. */
@@ -207,6 +221,25 @@ const V5_CUSTOMER_PLACEHOLDERS = Object.freeze({
 })
 
 /**
+ * Resolve the buyer-identity overrides for the V5 init body. Returns ONLY the
+ * keys whose value is present + non-blank, so the caller can spread them OVER
+ * `V5_CUSTOMER_PLACEHOLDERS`: a missing/blank field keeps its placeholder and
+ * EPS never receives an empty MANDATORY field (which it rejects).
+ */
+function resolveV5CustomerOverrides(
+  customer: BuildInitBodyArgs['customer'],
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  const name = customer?.name?.trim()
+  const email = customer?.email?.trim()
+  const phone = customer?.phone?.trim()
+  if (name) out['customerName'] = name
+  if (email) out['customerEmail'] = email
+  if (phone) out['customerPhone'] = phone
+  return out
+}
+
+/**
  * V5 production protocol — per the EPS Merchant API Integration Guide V0.5.
  * Production uses the SAME request shape as V4 sandbox (CustomerOrderId + the
  * mandatory customer fields for InitializeEPS; GET-with-query for Verify); the
@@ -228,7 +261,9 @@ export const V5_PRODUCTION_PROTOCOL: EpsWireProtocol = Object.freeze({
       successUrl: args.successUrl,
       failUrl: args.failUrl,
       cancelUrl: args.cancelUrl,
+      // Placeholders first, then the real buyer triplet wins where present.
       ...V5_CUSTOMER_PLACEHOLDERS,
+      ...resolveV5CustomerOverrides(args.customer),
     }
   },
   parseInitResponse(data: unknown): InitParseResult {

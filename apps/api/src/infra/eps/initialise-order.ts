@@ -72,6 +72,17 @@ export interface InitialiseOrderInput {
    * omitted on a sandbox call, the V4 protocol derives one from the mtid.
    */
   customerOrderId?: string
+  /**
+   * Real buyer identity from the order, threaded into the V5 init body so
+   * EPS records + receipts carry the actual buyer (replaces #279 placeholders).
+   * Optional — blank/missing fields fall back to placeholders in the wire
+   * protocol. **PII (§1.3 R5): never logged by this layer.**
+   */
+  buyer?: {
+    name?: string | null
+    email?: string | null
+    phone?: string | null
+  }
 }
 
 export interface InitialiseOrderResult {
@@ -241,6 +252,7 @@ async function performInitWithRetry(
     failUrl: redirects.failUrl,
     cancelUrl: redirects.cancelUrl,
     customerOrderId: input.customerOrderId,
+    customer: input.buyer,
   })
 
   const startMs = Date.now()
