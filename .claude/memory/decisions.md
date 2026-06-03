@@ -4,6 +4,31 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-03 · Day 46 (cont) — Super-admin browser login FINISHED + verified live on prod (#270/#272)
+
+### Context
+
+After the browser-auth core (#270) deployed, finished the super-admin login path so the operator can use the admin portal in a browser. Verified the transport on prod via curl (CORS echoes admin origin + Allow-Credentials; signup sets HttpOnly cookie; attendee cookie → `/tenant/me` → 403 = cookie read+resolved vs 401 baseline), then the operator's **real end-to-end login** (magic link → consume → `/admin/kyc`, page rendered).
+
+### Decision
+
+- **`moshiur@publicpulse.com.bd` granted super-admin on prod** (users + super_admins row; operator-authorized — the safety classifier correctly blocked an earlier throwaway-user grant). Prod DB otherwise at 0 users.
+- **#272 (`feat/admin-sign-in`)**: a `/admin-sign-in` page requests a `super-admin` magic link (noindex); the #267 grant check still gates it. **Also fixed a latent prod bug:** `MagicLinkForm` POSTed to a **relative** `/api/v1/...` URL → 404 on prod (API is a separate host) → it now uses `NEXT_PUBLIC_API_BASE_URL`. + optional `audience` prop.
+- **No new env vars needed on prod** for browser-auth: CORS default = prod portals; the cookie is host-only on `api.eventpulse.com.bd` and every portal→API call targets that host; magic-link uses the (allow-listed) request Origin.
+
+### Consequences
+
+- **Super-admin browser login is live + self-serve** on prod (`app.eventpulse.com.bd/admin-sign-in`). Verified working by the operator.
+- **Tenant browser login is the remaining gap** for the full-UI smoke — multi-tenant context entry (tenant audience needs a tenantId at login, §4.2). Still deferred.
+- The EPS-rate smoke (launch-critical) remains runnable via seeded guest-checkout (no login).
+- Two prod deploys this session (browser-auth core, then admin-sign-in); `STAGING_PAYMENT_BLOCK=1` untouched.
+
+### Pointers
+
+- PR #272 (`8c80395`). gotchas.md "MagicLinkForm relative URL 404s on prod". Builds on #270 + #267.
+
+---
+
 ## 2026-06-03 · Day 46 — Browser-auth: Option B (session-cookie + CORS) chosen + core built (PR #270)
 
 ### Context
