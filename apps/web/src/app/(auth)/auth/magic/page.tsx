@@ -12,6 +12,7 @@
  */
 
 import { Suspense, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
 import { GlassCard } from '@/components/ui/glass-card'
@@ -73,12 +74,12 @@ function MagicConsume() {
           <p role="alert" className="text-ep-rose text-sm">
             {state.message}
           </p>
-          <a
+          <Link
             href="/sign-in"
             className="text-ep-violet mt-6 inline-block text-sm font-semibold hover:underline"
           >
             Back to sign in
-          </a>
+          </Link>
         </div>
       )}
     </GlassCard>
