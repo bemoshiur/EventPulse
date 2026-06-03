@@ -4,6 +4,30 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-03 · Day 46 — EPS-rate smoke ATTEMPTED → BLOCKED on prod EPS endpoint 404 (production never validated)
+
+### Context
+
+Ran the BDT-100 production EPS-rate smoke via seeded guest-checkout (no login needed). Seeded an active+KYC-approved tenant + an on_sale BDT-100 event (Mode A, both pass-through) directly in the prod DB (super-user bypasses RLS). Validated purchasability with the block ON (`paymentInitState:"blocked"`, buyer total = **BDT 102.00** — note: corrects the runbook's 102.04; calc is 10000 + 25 platform + 175 eps). Operator confirmed payment-ready → lifted `STAGING_PAYMENT_BLOCK`.
+
+### Decision / outcome
+
+- **Smoke BLOCKED — no money moved.** Live order failed twice: (1) `EPS_SUCCESS_URL/FAIL/CANCEL` missing on prod (added live); (2) EPS `GetToken` → **HTTP 404** at `pgapi.eps.com.bd/api/v1/GetToken`. The **production EPS endpoint was never empirically validated** — the truth-gate ran sandbox only (`sandboxpgapi.eps.com.bd` + `/v1/Auth/...`), and the prod paths (`/api/v1/...`) 404. Full detail: gotchas.md Day-46 "Production EPS endpoint returns 404".
+- **Re-locked the block** (`STAGING_PAYMENT_BLOCK=1` verified) + **cleaned up all seeded data** (prod pristine: 0 tenants/events/orders).
+- **Did NOT guess-and-retry** against the live production EPS API (could trip rate-limits / look abusive). The fix needs the correct production endpoint from EPS.
+
+### Consequences
+
+- **Launch-critical:** production payments do not work → **first paying tenant is blocked** until the prod EPS endpoint is corrected. The EPS-rate question (175bps) remains unanswered.
+- **Operator/EPS dependency:** confirm the correct production EPS base URL + GetToken/InitializeEPS/CheckMerchantTransactionStatus paths from the V5 production integration guide + merchant production activation. Then a small config fix (`core.ts` `BASE_URLS.production` / `V5_PRODUCTION_PATHS`) + re-smoke.
+- **Follow-up:** codify `EPS_SUCCESS_URL/FAIL_URL/CANCEL_URL` into `bootstrap-prod.sh` (added live but not in the script). They point at `api.eventpulse.com.bd/api/v1/public/orders/eps-return/{success,fail,cancel}`.
+
+### Pointers
+
+- gotchas.md Day-46 "Production EPS endpoint returns 404". `apps/api/src/infra/eps/core.ts`. docs/runbooks/production-smoke.md. Builds on the Day-30/36 sandbox truth-gate (which never covered production).
+
+---
+
 ## 2026-06-03 · Day 46 (cont) — Super-admin browser login FINISHED + verified live on prod (#270/#272)
 
 ### Context

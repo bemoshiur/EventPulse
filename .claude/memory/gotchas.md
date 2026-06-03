@@ -4,6 +4,20 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## 🔴 Production EPS endpoint returns 404 — prod was NEVER validated (sandbox-only truth-gate) (Day 46)
+
+**Symptom.** First-ever production paid-order attempt (the BDT-100 smoke) failed: EPS `GetToken` → **HTTP 404** at `https://pgapi.eps.com.bd/api/v1/GetToken` (`mode:"production"`). No charge — EPS fails before any money moves.
+
+**Why it happened.** The EPS Day-24/36 truth-gate validated only the **sandbox** wire (`sandboxpgapi.eps.com.bd` + paths `/v1/Auth/GetToken`, `/v1/EPSEngine/...`). The **production** config in `apps/api/src/infra/eps/core.ts` (`BASE_URLS.production='https://pgapi.eps.com.bd'` + `V5_PRODUCTION_PATHS={getToken:'/api/v1/GetToken', initialise:'/api/v1/InitializeEPS', verify:'/api/v1/CheckMerchantTransactionStatus'}`) was authored from the V5 guide/§11.4 but **never hit a live production EPS server**. The memory's "V5 ≈ V4 sandbox, production smoke is the remaining empirical step" was exactly this gap — and the prod paths (`/api/v1/...`) differ from the validated sandbox paths (`/v1/Auth/...`), so a 404 is unsurprising.
+
+**Also found:** `EPS_SUCCESS_URL` / `EPS_FAIL_URL` / `EPS_CANCEL_URL` were **missing entirely** on prod (`.env.production`) — required for `InitializeEPS` per §11.3. Added live to `api.eventpulse.com.bd/api/v1/public/orders/eps-return/{success,fail,cancel}`; NOT yet in `bootstrap-prod.sh` (codify as a follow-up so a re-bootstrap doesn't drop them).
+
+**Fix (needs EPS-side info).** Confirm the correct **production** EPS base URL + endpoint paths from the V5 production integration guide (likely the paths mirror sandbox `/v1/Auth/...` + `/v1/EPSEngine/...`, or the host differs) AND that the merchant is **activated for production**. The wrapper already isolates base+paths in config (`EpsEndpointPaths` on `EpsConfig`), so the fix is small once the right values are known. Do NOT guess-and-retry against the live production EPS API. Then re-run the smoke.
+
+**Launch impact.** Blocks the EPS-rate smoke AND the first paying tenant — **no paid order can process on prod** until this is corrected. Found before any real customer hit it.
+
+---
+
 ## Client components POSTing to a RELATIVE `/api/v1/...` URL 404 on prod (API is a separate host) (Day 46)
 
 **Symptom.** `MagicLinkForm` (the sign-in form) had shipped + passed all tests, but a real magic-link request on prod would never send — it POSTed to `'/api/v1/auth/magic-link/request'` (relative), which resolves to the **web** host (`app.eventpulse.com.bd`), not the **API** host (`api.eventpulse.com.bd`). The web app has no such route → 404. So sign-in silently did nothing on prod.
