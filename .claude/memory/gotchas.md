@@ -4,7 +4,9 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
-## EPS production: payment WORKS, but verify + redirect-return have post-payment bugs (orders don't auto-settle) (Day 46)
+## EPS production: payment WORKS; verify GET is FINE (404 was timing); only the redirect-return param is a bug (Day 46)
+
+> **CORRECTION (same day, after a read-only diagnostic):** Bug 1 below was a FALSE ALARM. A self-contained diagnostic (Node `crypto` HMAC-SHA512 base64 + axios, real creds) against the paid txn showed **verify GET → 200** (`Status:Success, TotalAmount:102.00, StoreAmount:99.96, FinancialEntity:BKash`) and **verify POST → 405**. So the #279 GET change is CORRECT; the earlier webhook 404 was EPS not having the txn queryable in the ~seconds right after payment (timing). **Lesson: don't conclude a method/path is wrong from a 404 immediately post-payment — EPS needs a moment to make the txn queryable; retry before changing the method.** Only Bug 2 (redirect-return param) is real. See decisions.md "EPS RATE CONFIRMED" 2026-06-03.
 
 **Context.** After the protocol fix (#279: paths + full init body), the BDT-100 production smoke's **payment succeeded** — real bKash charge of BDT 102.00 went through. GetToken (`/v1/Auth/GetToken`) + InitializeEPS (`/v1/EPSEngine/InitializeEPS` with the full mandatory-field body) both work against production. **The launch-critical unknown (can we take a production payment?) is RESOLVED: yes.** But the order didn't auto-settle — two post-payment bugs:
 

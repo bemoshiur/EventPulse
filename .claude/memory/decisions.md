@@ -4,6 +4,33 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-03 · Day 46 — EPS RATE CONFIRMED via read-only diagnostic: bKash ≈ 2.0% (200 bps), NOT 175 bps
+
+Supersedes the "rate pending / verify is a bug" framing of the same-day "payment VALIDATED" entry below.
+
+### Context
+
+The post-payment verify webhook returned 404, so the order didn't auto-settle + the rate was unread. Rather than guess (POST vs GET), ran a **read-only diagnostic** on the prod box (self-contained: Node `crypto` HMAC-SHA512 base64 + axios, reusing the real EPS creds) doing GetToken → verify both methods against the real paid txn `TXN-mpxzcmt4-epsmoke1-i776iw93`. No money, no deploy.
+
+### Findings
+
+- **Verify GET WORKS (200); POST → 405.** So the #279 verify→GET change was **correct** — verify is NOT broken. The earlier webhook 404 was EPS not having the txn queryable in the seconds right after payment (timing), not a method/path bug. The "verify is a bug" note in the entry below + the gotcha is **corrected**.
+- **Payment confirmed:** `Status: Success`, `FinancialEntity: BKash`.
+- **THE RATE:** `TotalAmount=102.00`, `StoreAmount=99.96` → **EPS fee = 2.04 BDT on a 102.00 capture ≈ 2.0% (≈200 bps).** The calculator's `DEFAULT_EPS_FEE_BPS_ESTIMATE = 175` is **too low** (would pass through only ~1.75); the platform/organiser eats the ~0.29 BDT shortfall per txn. Sandbox truth-gate had observed 1.747%/face; production is higher (~2.04%/face, 2.0%/capture).
+
+### Decision / consequences
+
+- **Calculator update REQUIRED before first paying tenant** (runbook "rate diverged within ±0.50% → update + re-smoke" rule): `DEFAULT_EPS_FEE_BPS_ESTIMATE` 175 → ~200, AND decide the fee BASE — EPS charges on the FULL captured amount (incl. pass-through fees), which is recursive; the exact value + §14.2 base model is a fee-calculator decision (HARD-STOP: money math only via fee-calculator.ts; needs the operator's call + a re-smoke to confirm the new value).
+- **Only ONE real post-payment code bug remains:** the EPS browser **redirect-return param mismatch** (`no_txn_id` → buyer hit `/orders/return/error`). EPS's redirect doesn't carry `merchantTransactionId` under that name; need EPS's actual return param names. The verify/settle logic itself works (webhook path settles once the txn is queryable).
+- **Refund: NOT needed** (operator's call — the BDT 102 smoke cost is accepted). Txn stays in EPS.
+- Prod safe: block locked, seeded data cleaned, diagnostic file removed.
+
+### Pointers
+
+- gotchas.md Day-46 EPS entries (verify gotcha now corrected to redirect-only). PR #279. docs/runbooks/production-smoke.md decision rules. `apps/api/src/domain/payments/fee-calculator.ts` + `infra/eps/initialise-order.ts` `DEFAULT_EPS_FEE_BPS_ESTIMATE`.
+
+---
+
 ## 2026-06-03 · Day 46 — EPS production protocol FIXED + real payment VALIDATED on prod (#279)
 
 ### Context
