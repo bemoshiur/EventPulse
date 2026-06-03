@@ -14,7 +14,9 @@
 
 import type { Context, MiddlewareHandler, Next } from 'hono'
 
+import { readSessionCookie } from './cookie.js'
 import { resolveSession } from './sessions.js'
+import { hashToken } from './tokens.js'
 import { verifyAccessToken, type AccessClaims } from './jwt.js'
 
 declare module 'hono' {
@@ -38,23 +40,36 @@ function unauthorized(c: Context, code: 'AUTH_REQUIRED' | 'FORBIDDEN', message: 
 }
 
 async function extractAndVerify(c: Context): Promise<AccessClaims | null> {
+  // 1. Bearer access-token — programmatic clients + the existing path.
+  // A valid JWT issued by us is accepted on signature + expiry alone
+  // (no live-session lookup; the plaintext token isn't in the JWT).
   const header = c.req.header('authorization') ?? c.req.header('Authorization')
-  if (!header?.startsWith('Bearer ')) return null
-  const token = header.slice('Bearer '.length).trim()
-  if (!token) return null
+  if (header?.startsWith('Bearer ')) {
+    const token = header.slice('Bearer '.length).trim()
+    if (token) {
+      const claims = await verifyAccessToken(token)
+      if (claims) return claims
+    }
+  }
 
-  const claims = await verifyAccessToken(token)
-  if (!claims) return null
+  // 2. Session cookie — browser clients (Option B, browser-auth integration).
+  // Unlike the Bearer path this does a LIVE `sessions` row check via
+  // resolveSession, so a revoked or expired session is rejected at once.
+  // Claims are derived from the row (the server's authority), never the client.
+  const cookieToken = readSessionCookie(c)
+  if (cookieToken) {
+    const session = await resolveSession(cookieToken)
+    if (session) {
+      return {
+        sub: session.userId,
+        audience: session.audience,
+        tenantId: session.tenantId,
+        sessionId: hashToken(cookieToken),
+      }
+    }
+  }
 
-  // Cross-check session still exists + isn't expired/revoked.
-  // The session token plaintext isn't in the JWT; the JWT carries the
-  // session's primary key (= hash of original token) as `sessionId`.
-  // We can't call `resolveSession(token)` directly because we don't
-  // have the plaintext. Instead we rely on the JWT's sessionId being
-  // the row id and look up directly.
-  // (For now, accept any valid JWT issued by us — tighten in Day 9-10
-  //  when we wire the cookie -> hash lookup.)
-  return claims
+  return null
 }
 
 export const requireSuperAdminAuth: MiddlewareHandler = async (c, next) => {

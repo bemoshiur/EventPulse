@@ -21,6 +21,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 
 import { decideAudience, fetchAudienceGrants } from '../auth/audience-grant.js'
+import { clearSessionCookie, setSessionCookie } from '../auth/cookie.js'
 import { hashPassword, verifyPassword } from '../auth/hash.js'
 import { signTokens } from '../auth/jwt.js'
 import { consumeMagicLink, requestMagicLink, type MagicLinkPurpose } from '../auth/magic-link.js'
@@ -62,12 +63,13 @@ auth.post('/password/signup', zValidator('json', signupSchema), async (c) => {
     passwordHash: hash,
   })
   // New attendee account by default; tenant/super-admin require explicit grant.
-  const { token } = await createSession({
+  const { token, expiresAt } = await createSession({
     userId: user.id,
     audience: 'attendee',
     ip: c.req.header('x-forwarded-for') ?? null,
     userAgent: c.req.header('user-agent') ?? null,
   })
+  setSessionCookie(c, token, expiresAt)
   const tokens = await signTokens({
     sub: user.id,
     audience: 'attendee',
@@ -119,13 +121,14 @@ auth.post('/password/login', zValidator('json', loginSchema), async (c) => {
       403,
     )
   }
-  const { token } = await createSession({
+  const { token, expiresAt } = await createSession({
     userId: user.id,
     audience,
     tenantId: audience === 'tenant' ? input.tenantId! : undefined,
     ip: c.req.header('x-forwarded-for') ?? null,
     userAgent: c.req.header('user-agent') ?? null,
   })
+  setSessionCookie(c, token, expiresAt)
   const tokens = await signTokens({
     sub: user.id,
     audience,
@@ -230,13 +233,14 @@ auth.post('/magic-link/consume', zValidator('json', magicConsumeSchema), async (
       403,
     )
   }
-  const { token } = await createSession({
+  const { token, expiresAt } = await createSession({
     userId: user.id,
     audience,
     tenantId: audience === 'tenant' ? input.tenantId : undefined,
     ip,
     userAgent: c.req.header('user-agent') ?? null,
   })
+  setSessionCookie(c, token, expiresAt)
   const tokens = await signTokens({
     sub: user.id,
     audience,
@@ -258,6 +262,7 @@ const logoutSchema = z.object({
 
 auth.post('/logout', zValidator('json', logoutSchema), async (c) => {
   await revokeSession(c.req.valid('json').token)
+  clearSessionCookie(c)
   return c.json({ data: { revoked: true } })
 })
 
