@@ -4,6 +4,18 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## Client components POSTing to a RELATIVE `/api/v1/...` URL 404 on prod (API is a separate host) (Day 46)
+
+**Symptom.** `MagicLinkForm` (the sign-in form) had shipped + passed all tests, but a real magic-link request on prod would never send — it POSTed to `'/api/v1/auth/magic-link/request'` (relative), which resolves to the **web** host (`app.eventpulse.com.bd`), not the **API** host (`api.eventpulse.com.bd`). The web app has no such route → 404. So sign-in silently did nothing on prod.
+
+**Why it stayed hidden.** Tests run with `NEXT_PUBLIC_API_BASE_URL` unset → `apiBase()` returns `''` → the URL is relative in test too, and a mocked `fetch` resolves regardless of host. The relative-vs-absolute distinction only bites where the API is a genuinely separate origin (prod). Same root cause as the whole Day-45 browser-auth gap: nothing exercised the real cross-origin transport.
+
+**Fix.** Client components that call the API must build the URL from `NEXT_PUBLIC_API_BASE_URL` (the `apiBase()` helper), exactly like the TanStack-Query hooks do. Never a bare relative `/api/v1/...` from a client component.
+
+**How to avoid.** Grep for `fetch('/api/v1` / `fetch("/api/v1` in `apps/web` — any client-side one is suspect. Server Components fetching at build/SSR can use the internal base, but browser code must use the public API base.
+
+---
+
 ## Hono `setCookie` silently drops a cookie whose `expires` is > 400 days out (Day 46)
 
 **Symptom.** A unit test set a session cookie with `expires: new Date('2099-01-01')` and asserted the `Set-Cookie` header — but the header came back **empty** (`''`). The `deleteCookie` (clear) path in the same test worked, so it looked like `setCookie` was broken.
