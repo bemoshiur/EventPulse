@@ -4,6 +4,30 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-04 · Production cutover (v0.4.0) + staging DECOMMISSIONED — prod-only now
+
+### Context
+
+After the session's fixes all merged to main, the operator called the production cutover ("yes prod cutover") and then "after i dont need any staging platform."
+
+### Decision
+
+- **Prod cutover via the documented `deploy-prod.yml` workflow.** Cut tag **v0.4.0** at main HEAD (`732bf7b`), enabled `PROD_DEPLOY_ENABLED=true`, dispatched `--ref prod` (advanced `prod` branch to the release first — see gotchas.md OIDC entry). Deployed all session work: EPS fixes (#282/#284/#285/#287), tenant login (#289), auth-gate (#291), Google-login removal (#294), mesh/type (#283). No new migrations (18 already in place). **Verified live:** Google gone (sign-in email-only, OAuth route → 404), `/auth/session` → 401, health 200, `STAGING_PAYMENT_BLOCK=1` still locked, `EPS_MODE=production`. The deploy-prod workflow false-reported failure (aws-ssm-wait timeout, fixed #296); the deploy itself succeeded.
+- **Staging fully decommissioned** (operator-confirmed full teardown). Terminated EC2 `i-02e4fddeb923c14f9` + its 30 GB EBS, released EIP `18.141.7.246`, deleted the 6 staging DNS records, emptied+deleted 2 S3 buckets (`eventpulse-kyc-staging`, `eventpulse-staging-ssm-logs`), scheduled 6 `eventpulse/staging/*` secrets + 2 KMS keys for deletion (7-day window → 2026-06-11) + removed their aliases, deleted the staging log group + CPU alarm, set `STAGING_DEPLOY_ENABLED=false`. **~$25/mo saved** (matters under the $30 ceiling).
+
+### Consequences
+
+- **Single environment = production.** No staging. The `main → staging` auto-deploy is dead (flag off). Local dev + CI (dockerized PG) are unaffected. There is no longer a pre-prod box to verify on — changes go main → tag → prod deploy → verify on prod (block stays locked, so payment-safe).
+- KMS keys + secrets are recoverable until **2026-06-11**; after that, gone. The staging OIDC role + `AWS_OIDC_ROLE_STAGING` secret + `deploy-staging.yml` were left (harmless, no cost).
+- CLAUDE.md §17.6/§17.8 staging references are now historical (not edited).
+- Remaining pre-first-paying-tenant: the **EPS re-smoke** to confirm 200 bps (real-money, operator-gated).
+
+### Pointers
+
+Tag v0.4.0. PRs #296 (deploy-prod wait fix). gotchas.md "deploy-prod must be dispatched from the prod branch" + "aws-ssm-wait times out". Prod box `i-0c41fae1286527654` @ `52.76.69.96`.
+
+---
+
 ## 2026-06-04 · Third-party (Google) login REMOVED — email + OTP only
 
 ### Context

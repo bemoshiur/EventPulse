@@ -4,6 +4,30 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## deploy-prod must be dispatched from the `prod` branch, not main (OIDC `job_workflow_ref`)
+
+**Symptom.** First v0.4.0 prod-cutover run: `validate-inputs` passed, but the deploy job failed at "Configure AWS credentials via OIDC" → `Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity`.
+
+**Why it happens.** The `eventpulse-deploy-prod` role trust policy pins three claims (§17.9.1), including `job_workflow_ref = …/deploy-prod.yml@refs/heads/prod`. `gh workflow run deploy-prod.yml` defaults to the repo's default branch (**main**), so the OIDC token's `job_workflow_ref` was `@refs/heads/main` → no match → denied. (The `sub` claim matched fine — the workflow declares `environment: production`, so GitHub sets `sub=…:environment:production` regardless of branch.)
+
+**Fix.** Dispatch from the prod branch: `gh workflow run deploy-prod.yml --ref prod -f confirm_target=production -f release_tag=vX.Y.Z`. The `prod` branch must also be advanced to the release commit first (this session merges to main only; prod is a separate release branch advanced deliberately — §18.3). Advance it via `git push --no-verify origin main:prod` (the pre-push hook blocks direct main/prod pushes; `--no-verify` is its sanctioned override for deliberate release promotions — logged here per the hook, 2026-06-04, reason = v0.4.0 prod cutover).
+
+**How to avoid.** Prod deploys = (1) advance `prod` to the release commit, (2) cut a `vX.Y.Z` tag, (3) `gh workflow run deploy-prod.yml --ref prod …`. Never dispatch deploy-prod from main.
+
+---
+
+## deploy-prod `aws ssm wait command-executed` times out on build-on-box deploys → false failure
+
+**Symptom.** v0.4.0 cutover: the deploy SUCCEEDED on the box (deploy.sh exit 0, migrations no-op, PM2 reloaded, api /health=200, `deploy ok ref=v0.4.0`), but the workflow's "Wait for SSM command" step FAILED and the run went red.
+
+**Why it happens.** `aws ssm wait command-executed` polls only ~100s (20 attempts × 5s). A build-on-box deploy (`pnpm build` web+api) takes 2-3 min, so the wait times out and the step fails — even though the SSM command keeps running and finishes Success. The deploy was fine; only the workflow's wait was too short.
+
+**Fix.** Poll `get-command-invocation` until a terminal Status, bounded by the command's own `--timeout-seconds 900` (PR #296). Don't trust a red deploy-prod run alone — check `aws ssm get-command-invocation` Status (or `deploy.log` on the box) before assuming failure or rolling back.
+
+**How to avoid.** Replaced the short `wait` with the bounded poll in #296.
+
+---
+
 ## EPS production: payment WORKS; verify GET is FINE (404 was timing); only the redirect-return param is a bug (Day 46)
 
 > **CORRECTION (same day, after a read-only diagnostic):** Bug 1 below was a FALSE ALARM. A self-contained diagnostic (Node `crypto` HMAC-SHA512 base64 + axios, real creds) against the paid txn showed **verify GET → 200** (`Status:Success, TotalAmount:102.00, StoreAmount:99.96, FinancialEntity:BKash`) and **verify POST → 405**. So the #279 GET change is CORRECT; the earlier webhook 404 was EPS not having the txn queryable in the ~seconds right after payment (timing). **Lesson: don't conclude a method/path is wrong from a 404 immediately post-payment — EPS needs a moment to make the txn queryable; retry before changing the method.** Only Bug 2 (redirect-return param) is real. See decisions.md "EPS RATE CONFIRMED" 2026-06-03.
