@@ -96,9 +96,9 @@ async function performVerifyWithRetry(
   const requestId = `eps-verify-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const xHash = signEpsField(input.merchantTransactionId, config.hashKey)
 
-  // Dispatch through the per-config wire protocol. V5 production = POST with
-  // body; V4 sandbox = GET with merchantTransactionId as a query param. Same
-  // retry semantics regardless of method.
+  // Dispatch through the per-config wire protocol. Both V5 production and V4
+  // sandbox = GET with merchantTransactionId as a query param (per the EPS V5
+  // guide API 03). Same retry semantics regardless of method.
   const verifyReq = config.wireProtocol.buildVerifyRequest({
     merchantId: config.merchantId,
     storeId: config.storeId,

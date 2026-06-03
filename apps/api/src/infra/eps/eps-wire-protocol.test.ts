@@ -36,36 +36,47 @@ const baseVerifyArgs: BuildVerifyRequestArgs = {
 }
 
 describe('V5_PRODUCTION_PROTOCOL — request shape (§11.4)', () => {
-  it('buildInitBody emits camelCase + transactionTypeId:1 + NO CustomerOrderId/customer fields', () => {
+  it('buildInitBody emits the full guide shape: CustomerOrderId + mandatory customer fields + productName', () => {
+    // EPS V5 Integration Guide API 02 marks the customer fields + CustomerOrderId
+    // + productName as MANDATORY. An earlier minimal body (8 fields) was never
+    // validated and failed on the first live production init (Day-46 smoke).
     const body = V5_PRODUCTION_PROTOCOL.buildInitBody({
       ...baseInitArgs,
-      customerOrderId: 'should-be-ignored',
+      customerOrderId: 'ORDER-XYZ',
     })
     expect(body).toEqual({
       merchantId: 'm-1',
       storeId: 's-1',
+      CustomerOrderId: 'ORDER-XYZ',
       merchantTransactionId: 'TXN-AAA-0000000001',
+      transactionTypeId: 1, // camelCase per the V5 guide (V4 uses PascalCase)
       totalAmount: '1027.56',
-      transactionTypeId: 1,
       successUrl: 'https://example.test/success',
       failUrl: 'https://example.test/fail',
       cancelUrl: 'https://example.test/cancel',
+      customerName: 'Event Pulse Buyer',
+      customerEmail: 'noreply@eventpulse.com.bd',
+      customerAddress: 'Dhaka',
+      customerCity: 'Dhaka',
+      customerState: 'Dhaka',
+      customerPostcode: '1200',
+      customerCountry: 'BD',
+      customerPhone: '01700000000',
+      productName: 'Event ticket',
     })
-    expect(Object.keys(body)).not.toContain('CustomerOrderId')
-    expect(Object.keys(body)).not.toContain('customerName')
-    expect(Object.keys(body)).not.toContain('productName')
   })
 
-  it('buildVerifyRequest emits POST + body (NOT GET + queryParams)', () => {
+  it('buildInitBody derives CustomerOrderId from the mtid when not supplied', () => {
+    const body = V5_PRODUCTION_PROTOCOL.buildInitBody(baseInitArgs)
+    expect(body['CustomerOrderId']).toBe('ORDER-TXN-AAA-0000000001')
+  })
+
+  it('buildVerifyRequest emits GET + merchantTransactionId query param (per the V5 guide, NOT POST)', () => {
     const req = V5_PRODUCTION_PROTOCOL.buildVerifyRequest(baseVerifyArgs)
-    expect(req.method).toBe('POST')
-    expect(req.path).toBe('/api/v1/Verify')
-    expect(req.body).toEqual({
-      merchantId: 'm-1',
-      storeId: 's-1',
-      merchantTransactionId: 'TXN-AAA-0000000001',
-    })
-    expect(req.queryParams).toBeUndefined()
+    expect(req.method).toBe('GET')
+    expect(req.path).toBe(baseVerifyArgs.path)
+    expect(req.queryParams).toEqual({ merchantTransactionId: 'TXN-AAA-0000000001' })
+    expect(req.body).toBeUndefined()
     expect(req.headers).toEqual({
       Authorization: 'Bearer jwt-token',
       'x-hash': 'XHASH=',
@@ -411,12 +422,15 @@ describe('cross-contamination — V4 and V5 protocols cannot leak', () => {
     expect(V4_SANDBOX_PROTOCOL.name).toBe('v4-sandbox')
     expect(V5_PRODUCTION_PROTOCOL.name).toBe('v5-production')
   })
-  it('V5 Init body NEVER contains the V4 CustomerOrderId/TransactionTypeId PascalCase fields', () => {
+  it('V5 Init body uses camelCase transactionTypeId, NEVER the V4 PascalCase TransactionTypeId', () => {
     const body = V5_PRODUCTION_PROTOCOL.buildInitBody({
       ...baseInitArgs,
-      customerOrderId: 'should-not-leak',
+      customerOrderId: 'ORDER-X',
     })
-    expect(Object.keys(body)).not.toContain('CustomerOrderId')
+    // CustomerOrderId is now SHARED with V4 (both mandatory per the V5 guide);
+    // the casing of transactionTypeId is what distinguishes the two init bodies.
+    expect(Object.keys(body)).toContain('CustomerOrderId')
+    expect(Object.keys(body)).toContain('transactionTypeId')
     expect(Object.keys(body)).not.toContain('TransactionTypeId')
   })
   it('V4 Init body NEVER uses the V5 camelCase transactionTypeId', () => {

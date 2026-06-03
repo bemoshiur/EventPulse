@@ -66,19 +66,13 @@ async function seedToken(token = 'cached-jwt'): Promise<void> {
 }
 
 describe('verifyOrderHttp — happy path', () => {
-  it('POSTs body+headers per §11 contract; returns canonical status', async () => {
+  it('GETs with merchantTransactionId query + headers per the V5 guide; returns canonical status', async () => {
     await seedToken('bearer-token-y')
     const expectedHash = signEpsField('TXN-VERIFY-12345', 'hashkey-secret')
 
     const scope = nock(PROD_BASE)
-      .post('/api/v1/CheckMerchantTransactionStatus', (body) => {
-        expect(body).toEqual({
-          merchantId: 'merchant-1',
-          storeId: 'store-1',
-          merchantTransactionId: 'TXN-VERIFY-12345',
-        })
-        return true
-      })
+      .get('/v1/EPSEngine/CheckMerchantTransactionStatus')
+      .query({ merchantTransactionId: 'TXN-VERIFY-12345' })
       .matchHeader('authorization', 'Bearer bearer-token-y')
       .matchHeader('x-hash', expectedHash)
       .reply(200, { Status: 'SUCCESS', EPSTransactionId: 'EPS-9999' })
@@ -91,11 +85,12 @@ describe('verifyOrderHttp — happy path', () => {
 
   it('chains GetToken + Verify when cache empty', async () => {
     const scope1 = nock(PROD_BASE)
-      .post('/api/v1/GetToken')
+      .post('/v1/Auth/GetToken')
       .reply(200, { Token: 'fresh-verify-jwt' })
 
     const scope2 = nock(PROD_BASE)
-      .post('/api/v1/CheckMerchantTransactionStatus')
+      .get('/v1/EPSEngine/CheckMerchantTransactionStatus')
+      .query(true)
       .matchHeader('authorization', 'Bearer fresh-verify-jwt')
       .reply(200, { Status: 'COMPLETED' })
 
@@ -110,7 +105,8 @@ describe('verifyOrderHttp — happy path', () => {
     await seedToken()
 
     const scope = nock(PROD_BASE)
-      .post('/api/v1/CheckMerchantTransactionStatus')
+      .get('/v1/EPSEngine/CheckMerchantTransactionStatus')
+      .query(true)
       .reply(200, { Status: 'PENDING' })
 
     const result = await verifyOrderHttp({ merchantTransactionId: 'TXN-BLOCK-12345' })
@@ -138,7 +134,10 @@ describe('verifyOrderHttp — status alias coverage', () => {
 
   it.each(aliasCases)('Status="%s" → %s', async (alias, canonical) => {
     await seedToken()
-    nock(PROD_BASE).post('/api/v1/CheckMerchantTransactionStatus').reply(200, { Status: alias })
+    nock(PROD_BASE)
+      .get('/v1/EPSEngine/CheckMerchantTransactionStatus')
+      .query(true)
+      .reply(200, { Status: alias })
 
     const result = await verifyOrderHttp({ merchantTransactionId: 'TXN-ALIAS-12345' })
     expect(result.status).toBe(canonical)
@@ -147,7 +146,8 @@ describe('verifyOrderHttp — status alias coverage', () => {
   it('unknown alias collapses to "unknown" (no throw)', async () => {
     await seedToken()
     nock(PROD_BASE)
-      .post('/api/v1/CheckMerchantTransactionStatus')
+      .get('/v1/EPSEngine/CheckMerchantTransactionStatus')
+      .query(true)
       .reply(200, { Status: 'WEIRD_VALUE' })
 
     const result = await verifyOrderHttp({ merchantTransactionId: 'TXN-WEIRD-12345' })
@@ -157,7 +157,8 @@ describe('verifyOrderHttp — status alias coverage', () => {
   it('status in nested data.Status is recognised', async () => {
     await seedToken()
     nock(PROD_BASE)
-      .post('/api/v1/CheckMerchantTransactionStatus')
+      .get('/v1/EPSEngine/CheckMerchantTransactionStatus')
+      .query(true)
       .reply(200, { data: { Status: 'SUCCESS' } })
 
     const result = await verifyOrderHttp({ merchantTransactionId: 'TXN-NESTED-1234' })
@@ -167,7 +168,8 @@ describe('verifyOrderHttp — status alias coverage', () => {
   it('status field alias `transactionStatus` is recognised', async () => {
     await seedToken()
     nock(PROD_BASE)
-      .post('/api/v1/CheckMerchantTransactionStatus')
+      .get('/v1/EPSEngine/CheckMerchantTransactionStatus')
+      .query(true)
       .reply(200, { transactionStatus: 'CANCELLED' })
 
     const result = await verifyOrderHttp({ merchantTransactionId: 'TXN-TXNSTAT-1234' })
@@ -180,16 +182,18 @@ describe('verifyOrderHttp — 401 refresh-and-retry', () => {
     await seedToken('stale-verify-jwt')
 
     const verifyFirst = nock(PROD_BASE)
-      .post('/api/v1/CheckMerchantTransactionStatus')
+      .get('/v1/EPSEngine/CheckMerchantTransactionStatus')
+      .query(true)
       .matchHeader('authorization', 'Bearer stale-verify-jwt')
       .reply(401, { Code: 'TOKEN_EXPIRED' })
 
     const getToken = nock(PROD_BASE)
-      .post('/api/v1/GetToken')
+      .post('/v1/Auth/GetToken')
       .reply(200, { Token: 'fresh-verify-retry-jwt' })
 
     const verifyRetry = nock(PROD_BASE)
-      .post('/api/v1/CheckMerchantTransactionStatus')
+      .get('/v1/EPSEngine/CheckMerchantTransactionStatus')
+      .query(true)
       .matchHeader('authorization', 'Bearer fresh-verify-retry-jwt')
       .reply(200, { Status: 'SUCCESS' })
 
@@ -202,9 +206,9 @@ describe('verifyOrderHttp — 401 refresh-and-retry', () => {
 
   it('throws EpsResponseError when retry also 401s', async () => {
     await seedToken()
-    nock(PROD_BASE).post('/api/v1/CheckMerchantTransactionStatus').reply(401)
-    nock(PROD_BASE).post('/api/v1/GetToken').reply(200, { Token: 'still-bad' })
-    nock(PROD_BASE).post('/api/v1/CheckMerchantTransactionStatus').reply(401)
+    nock(PROD_BASE).get('/v1/EPSEngine/CheckMerchantTransactionStatus').query(true).reply(401)
+    nock(PROD_BASE).post('/v1/Auth/GetToken').reply(200, { Token: 'still-bad' })
+    nock(PROD_BASE).get('/v1/EPSEngine/CheckMerchantTransactionStatus').query(true).reply(401)
 
     await expect(
       verifyOrderHttp({ merchantTransactionId: 'TXN-DOUBLE401-1' }),
@@ -216,7 +220,8 @@ describe('verifyOrderHttp — error mapping', () => {
   it('throws EpsResponseError on 4xx (non-401)', async () => {
     await seedToken()
     nock(PROD_BASE)
-      .post('/api/v1/CheckMerchantTransactionStatus')
+      .get('/v1/EPSEngine/CheckMerchantTransactionStatus')
+      .query(true)
       .reply(404, { Code: 'TXN_NOT_FOUND' })
 
     await expect(verifyOrderHttp({ merchantTransactionId: 'TXN-404-12345' })).rejects.toMatchObject(
@@ -226,7 +231,7 @@ describe('verifyOrderHttp — error mapping', () => {
 
   it('throws EpsResponseError on 5xx', async () => {
     await seedToken()
-    nock(PROD_BASE).post('/api/v1/CheckMerchantTransactionStatus').reply(500)
+    nock(PROD_BASE).get('/v1/EPSEngine/CheckMerchantTransactionStatus').query(true).reply(500)
 
     await expect(verifyOrderHttp({ merchantTransactionId: 'TXN-500-12345' })).rejects.toMatchObject(
       { name: 'EpsResponseError', httpStatus: 500 },
@@ -235,7 +240,10 @@ describe('verifyOrderHttp — error mapping', () => {
 
   it('throws EpsResponseError on schema-fail (non-object response)', async () => {
     await seedToken()
-    nock(PROD_BASE).post('/api/v1/CheckMerchantTransactionStatus').reply(200, 'plain text')
+    nock(PROD_BASE)
+      .get('/v1/EPSEngine/CheckMerchantTransactionStatus')
+      .query(true)
+      .reply(200, 'plain text')
 
     await expect(
       verifyOrderHttp({ merchantTransactionId: 'TXN-PLAIN-12345' }),
@@ -245,7 +253,8 @@ describe('verifyOrderHttp — error mapping', () => {
   it('throws EpsNetworkError on network failure', async () => {
     await seedToken()
     nock(PROD_BASE)
-      .post('/api/v1/CheckMerchantTransactionStatus')
+      .get('/v1/EPSEngine/CheckMerchantTransactionStatus')
+      .query(true)
       .replyWithError(new Error('ECONNRESET'))
 
     await expect(
