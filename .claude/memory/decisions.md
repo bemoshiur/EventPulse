@@ -4,6 +4,37 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-03 · Day 46 — Browser-auth: Option B (session-cookie + CORS) chosen + core built (PR #270)
+
+### Context
+
+Day-45 scoped browser-auth (the launch blocker — logged-in portals couldn't authenticate from a browser) with two transport options. Operator chose **Option B** (HttpOnly session-cookie read by the API + CORS-with-credentials) over C (Next BFF proxy): least work, reuses `resolveSession` + the `sessions` table, no `/refresh` needed.
+
+### Decision
+
+Implemented steps 1–6 of `docs/design/browser-auth-integration.md` via TDD (PR #270, CI green):
+
+- **CORS** (`middleware/cors.ts`): echoes only allow-listed portal origins (`EVENTPULSE_CORS_ORIGINS`, default prod portals) + `Allow-Credentials`; never `*` under credentials.
+- **Cookie read** (`middleware.ts`): reads an HttpOnly `ep_session` cookie when no Bearer, resolving via `resolveSession` — a LIVE sessions-row check that rejects revoked/expired (the Bearer path doesn't).
+- **Cookie set/clear** (`auth/cookie.ts`): signup/login/magic-consume set it (HttpOnly, Secure, SameSite=Lax, `Domain` via `EVENTPULSE_COOKIE_DOMAIN`); logout clears.
+- **Magic-link URL** (`auth/consume-url.ts`): targets the portal the user signed in from (request Origin, when allow-listed — no open redirect) + carries audience; default `app.eventpulse.com.bd` (NOT the old staging fallback).
+- **Web consume page** (`(auth)/auth/magic/page.tsx` + `lib/auth-portal.ts`): POSTs token with `credentials:'include'` → API sets cookie cross-origin → lands the audience home (super-admin → `/admin/kyc`).
+
+**Net: super-admin (and attendee) browser login is functional end-to-end.** Audience is server-enforced (#267 grant check) — requesting an audience you don't hold → 403.
+
+### Consequences
+
+- **New env vars to set per environment at deploy:** `EVENTPULSE_CORS_ORIGINS`, `EVENTPULSE_COOKIE_DOMAIN` (=`eventpulse.com.bd` so one cookie covers app/admin/my/api), `EVENTPULSE_BASE_URL`, `EVENTPULSE_COOKIE_INSECURE` (local http only). **CORS default = prod portals only → staging needs the env set or browser-auth is CORS-blocked there.**
+- **Deferred (documented in #270):** Step 7 layout auth-gate UX (today: API-401 → hooks show error, no clean redirect); Step 8 Playwright e2e; **multi-tenant context entry for the `app`/tenant portal** — tenant audience needs a `tenantId` at login (§4.2 open decision); no `/refresh` endpoint (session is the 7-day store).
+- **Web-layer findings:** there is **no subdomain→portal middleware** (§7.5's `middleware.ts` doesn't exist — all route groups serve from one app on any host); the `(my)` attendee portal has **zero pages** (Phase 2). Audience therefore travels in the magic link, not inferred from host.
+- Prod still needs the deploy (gated) + env vars before browser-auth is live there. `STAGING_PAYMENT_BLOCK=1` untouched.
+
+### Pointers
+
+- PR #270 (CI green). `docs/design/browser-auth-integration.md`. gotchas.md Day-46 entries (hono 400-day cookie cap; raw `<a>` fails `next build`).
+
+---
+
 ## 2026-06-02 · Day 45 (blocker) — Browser-auth integration scoped; BDT-100 smoke re-deferred
 
 ### Context

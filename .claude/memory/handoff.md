@@ -1,33 +1,38 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-06-02 — **Day 45 (continued)** of the 47-day Phase 1 MVP runway. **🚀 PRODUCTION IS PUBLICLY LIVE over HTTPS and now SECURED** (critical auth bypass fixed + verified). But a **launch blocker surfaced: the authenticated browser flow was never wired end-to-end.** The BDT-100 EPS smoke is **re-deferred**; `STAGING_PAYMENT_BLOCK=1` was never lifted — prod is safe.
-**LAUNCH TARGET: 2026-06-10 (8 days out) — now AT RISK for a full self-serve launch; a guest-checkout-narrow launch remains viable.**
-**Driver:** Claude Code (Opus 4.8). **🛑 $30/mo AWS ceiling still load-bearing** (current ~$45/mo overlap; decommission staging post-smoke restores ~$26-28).
+**Last update:** 2026-06-03 — **Day 46.** Production live + secured since Day 45. This session **built the browser-auth core** (Option B: session-cookie + CORS) — **PR #270, CI fully green** — which closes the API + magic-consume half of the Day-45 launch blocker (logged-in portals couldn't authenticate from a browser).
+**LAUNCH TARGET: 2026-06-10 (7 days out).** Full self-serve still needs the deferred web pieces; a guest-checkout-narrow launch remains viable.
+**Driver:** Claude Code (Opus 4.8). **🛑 $30/mo AWS ceiling** (decommission staging at launch holds it).
 
-## ✅ Done this session (continued)
+## ✅ Done this session — browser-auth Option B core (PR #270, green, NOT yet merged)
 
-1. **Critical auth bypass (PR #267) deployed to prod + VERIFIED LIVE.** signup→201; login `audience:super-admin` (non-admin)→**403**; `audience:tenant`+arbitrary tenantId→**403**; legit attendee→**200**. Throwaway test user deleted — prod DB back to **0 users**. Memory **PR #268 merged**.
-2. **Discovered + scoped a launch blocker: browser-auth is unwired.** Wrote `docs/design/browser-auth-integration.md` (this PR). No code changes — docs + memory only.
+Steps 1–6 of `docs/design/browser-auth-integration.md`, TDD throughout:
+1. **CORS** — allow-listed portal origins (`EVENTPULSE_CORS_ORIGINS`) + Allow-Credentials; never `*`.
+2. **Cookie read** — API middleware reads HttpOnly `ep_session` → `resolveSession` (LIVE row check; rejects revoked/expired).
+3. **Cookie set** — signup/login/magic-consume.
+4. **Cookie clear** — logout.
+6. **Magic-link URL** — targets the sign-in portal (request Origin if allow-listed) + carries audience; default `app.eventpulse.com.bd` (not staging).
+5. **Web `/auth/magic` consume page** — POSTs token (credentials:include) → API sets cookie → lands audience home (super-admin → `/admin/kyc`).
 
-## 🔴 The blocker — no working browser sign-in (tenant/admin/attendee portals)
-
-Four verified gaps: (1) **no CORS** on the API; (2) web hooks send **cookies** but the API reads **only `Authorization: Bearer`** and nothing attaches Bearer; (3) **no session cookie is ever set** (consume returns JSON tokens; no `/auth/magic` page, no cookie-setter); (4) **magic-link** uses unset `EVENTPULSE_BASE_URL`→points to **staging** + `/auth/magic` page **doesn't exist**. Plus **no `/refresh` endpoint**. Hidden because every test used `app.request` with a hand-made Bearer, or guest checkout — never a real browser login. The API itself + guest checkout + public pages all work. Full root-cause in gotchas.md + decisions.md Day-45 top entries.
+**Net: super-admin (and attendee) browser login works end-to-end** — what's needed to approve KYC in the smoke. Local suites green (api 1316 + web 206, 0 fail); all CI jobs green.
 
 ## 🎯 Next session — first actions
 
-1. **OPERATOR/ARCHITECT SIGN-OFF (gates everything):** credential transport — **Option B** (HttpOnly session-cookie read by API + CORS-with-credentials; recommended, reuses `resolveSession`+`sessions`, no `/refresh` needed) **vs Option C** (Next BFF proxy; stronger isolation, more web build). Option A (token in JS) rejected. See design doc §3.1 + §4.
-2. **Decide June-10 posture (design doc §4.4):** guest-checkout-narrow (ops publishes events; buyers use guest checkout — works today) vs full self-serve (needs this integration).
-3. **Implement via the 9-step TDD breakdown** (design doc §5): CORS → API cookie-read → consume sets cookie → logout clears → `/auth/magic` page → magic-link URL+env → layout auth-gate → Playwright e2e → (tenant context switch). Deploy + verify on prod.
-4. **THEN the full-UI BDT-100 smoke** is runnable. **OR run the seeded guest-checkout smoke anytime** to confirm the EPS production bKash rate (175 bps) independently — it needs no login (`docs/runbooks/production-smoke.md` + the seeded-smoke pivot). The EPS rate is the biggest external unknown and is the one thing worth unblocking soonest.
+1. **Merge PR #270** (browser-auth core) + this memory PR. #270 is CI-green; auth code — operator may want a glance first.
+2. **Deploy needs env vars per environment** (NOT yet set anywhere): `EVENTPULSE_CORS_ORIGINS` (CORS default = prod portals only → **staging/prod must set this or browser-auth is CORS-blocked**), `EVENTPULSE_COOKIE_DOMAIN=eventpulse.com.bd` (one cookie across app/admin/my/api), `EVENTPULSE_BASE_URL`. Set via the bootstrap script / SSM. Prod deploy is **harness-gated**.
+3. **Then super-admin browser login is usable on prod** → unblocks the smoke's KYC-approval step (operator logs into `admin.eventpulse.com.bd` via magic link with `audience=super-admin`; requires a `super_admins` row created for them).
+4. **Deferred follow-ups (in #270 body):** Step 7 layout auth-gate UX (today: API-401 → hooks error, no clean redirect); Step 8 Playwright e2e; **multi-tenant context entry for the tenant/app portal** — tenant login needs a `tenantId` (§4.2 open decision); no `/refresh` endpoint.
+5. **The BDT-100 EPS smoke** remains the launch-critical external unknown — still runnable anytime via **seeded guest-checkout** (no login needed) per `docs/runbooks/production-smoke.md`; or via the full UI once super-admin + tenant login + KYC flow are deployed.
+
+## ⚠️ Web-layer findings (shape the remaining work)
+
+- **No subdomain→portal middleware** (§7.5's `middleware.ts` doesn't exist) — all route groups serve from one app on any host; audience travels in the magic link, not host-inferred.
+- **`(my)` attendee portal has zero pages** (Phase 2). Meaningful MVP logins are **super-admin** (`/admin/*`) and **tenant** (`/dashboard`, needs the context decision).
 
 ## Standing invariants (unchanged)
 
-- **$30/mo ceiling**; decommission-staging-at-launch holds it. Every AWS-write STOP-ASK includes cost delta.
-- prod `.env.production`: **`STAGING_PAYMENT_BLOCK=1`** (only lifts, session-scoped, for the BDT-100 smoke). **`MAIL_DRY_RUN=0`** (Phase 4, suppression-guarded). **`EPS_MODE=production`**, real prod EPS creds loaded (verified present + materialized).
+- **$30/mo ceiling**; decommission-staging-at-launch holds it. AWS-write STOP-ASK includes cost delta.
+- prod `.env.production`: **`STAGING_PAYMENT_BLOCK=1`** (only lifts, session-scoped, for the BDT-100 smoke). **`MAIL_DRY_RUN=0`** (suppression-guarded). **`EPS_MODE=production`**, real prod creds loaded + verified.
 - Prod box `i-0c41fae1286527654` @ EIP **52.76.69.96**; API `https://api.eventpulse.com.bd`. Money math only via fee-calculator.ts. RLS via the exact 3-role model.
 - Memory commits via PRs, separate from feature commits. Branch protection on main. First prod deploy/payment steps are harness-gated → explicit per-step auth.
-
-## Carried (pre-existing, from prior handoff)
-
-- Open PRs to merge if not yet: #265 (bootstrap default-site), #266 (DB backups) — check status.
-- App-level CW alarms (BLOCKED on app emitting custom metrics — code feature). CloudTrail (account-level, shared w/ TenderPulse — operator decision). #7 prod-branch ff-merge (pre-push hook; §18.3 wants tag/dispatch). #5 OAuth creds (operator-supplied; `OAUTH_NOT_CONFIGURED` is clean/optional). SNS alarm email sub — operator click-to-confirm.
+- The critical auth-bypass (client-trusted audience) was fixed + verified live on prod Day 45 (#267); this session's `ep_session` cookie path keeps that enforcement (audience resolved server-side from the session row).
