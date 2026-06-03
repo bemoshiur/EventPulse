@@ -21,8 +21,10 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 
 import { decideAudience, fetchAudienceGrants } from '../auth/audience-grant.js'
+import { buildConsumeUrl, resolveConsumeBase } from '../auth/consume-url.js'
 import { clearSessionCookie, setSessionCookie } from '../auth/cookie.js'
 import { hashPassword, verifyPassword } from '../auth/hash.js'
+import { allowedOrigins } from '../middleware/cors.js'
 import { signTokens } from '../auth/jwt.js'
 import { consumeMagicLink, requestMagicLink, type MagicLinkPurpose } from '../auth/magic-link.js'
 import { createSession, revokeSession, type SessionAudience } from '../auth/sessions.js'
@@ -146,6 +148,11 @@ auth.post('/password/login', zValidator('json', loginSchema), async (c) => {
 const magicRequestSchema = z.object({
   email: z.string().email().toLowerCase().trim(),
   purpose: z.enum(['signup', 'signin']).default('signin'),
+  // Which portal the link logs into. Travels in the link; the #267 grant check
+  // at consume is the authority (requesting super-admin without the role → 403).
+  // `tenant` is omitted here — a tenant session needs a tenantId the magic-link
+  // flow doesn't carry; tenant context is entered via the context switcher.
+  audience: z.enum(['super-admin', 'attendee']).default('attendee'),
 })
 
 auth.post('/magic-link/request', zValidator('json', magicRequestSchema), async (c) => {
@@ -159,8 +166,11 @@ auth.post('/magic-link/request', zValidator('json', magicRequestSchema), async (
     ip: c.req.header('x-forwarded-for') ?? null,
   })
 
-  const consumeBase = process.env['EVENTPULSE_BASE_URL'] ?? 'https://staging.eventpulse.com.bd'
-  const url = `${consumeBase}/auth/magic?token=${encodeURIComponent(token)}&purpose=${input.purpose}`
+  // Land the link on the portal the user signed in from (request Origin, if
+  // allow-listed), else the per-env default. NEVER the old staging fallback.
+  const fallbackBase = process.env['EVENTPULSE_BASE_URL'] ?? 'https://app.eventpulse.com.bd'
+  const base = resolveConsumeBase(c.req.header('origin'), allowedOrigins(), fallbackBase)
+  const url = buildConsumeUrl({ base, token, purpose: input.purpose, audience: input.audience })
 
   const rendered = renderMagicLink({
     url,
