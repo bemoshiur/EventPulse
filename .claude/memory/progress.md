@@ -2,6 +2,10 @@
 
 ## In flight
 
+**Day 47 (2026-06-04, late) — ⏸️ TENDERPULSE CLONE PROGRAM — planned + memory-recorded; build PAUSED (operator: "I'll let you know when to work").** Prod now on **v0.4.4** (home rebuilt). Operator wants Event Pulse made a full clone of sister product TenderPulse (UI/UX/SEO/AEO/sitemap/Trust Center/legal/onboarding/demo/routing/payment), adapted to Event Pulse's events brand. **DONE: red/white visual re-theme** (`--mkt-*` tokens + home/nav/footer/(public) layout/features/pricing/contact/trust-grid) on branch **`feat/marketing-details`** (pushed, UNDEPLOYED). **12-phase mega TodoWrite** + `decisions.md` "TenderPulse clone program" (supersedes parts of §1.5/§2.1/§17/§14). **Locked:** subdomains→apex+paths, payment→prepaid plans. **Open decisions + resume steps in handoff.md.** Do NOT start building until operator signals.
+
+---
+
 **Day 47 (2026-06-04, eve) — ⏸️ Marketing-site refresh (TenderPulse-style) — PAUSED, operator shutting down.** Shipped earlier today: **v0.4.2** self-service create-event (personal-tenant provision + `/my/hosting/start` + `/events/new`, DB-gated CI test) + **v0.4.3** publish/share manage hub (`/events/[id]`, draft→published transition + public share URL) — both LIVE on prod, full sign-up→create→publish→share loop complete. Then operator asked to make the marketing site look like tenderpulse.com.bd (rich, bilingual, every page). **HOME page rebuilt + browser-verified** (`app/page.tsx`, TenderPulse-grade, EN+বাংলা) → branch `feat/marketing-refresh`, **PR #305 OPEN (not merged/deployed; prod still v0.4.3)**. **Next session (operator-locked): (1) deploy home as v0.4.4 [authorized], (2) full TenderPulse rewrite of all detail pages — /features, /pricing, /trust, /contact, use-cases.** See handoff.md.
 
 ---
