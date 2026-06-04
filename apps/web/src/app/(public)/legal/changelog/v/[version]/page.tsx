@@ -16,10 +16,10 @@ const CATEGORY_STYLES: Record<string, { label: string; class: string }> = {
   feature: { label: 'Feature', class: 'bg-mkt-red/15 text-mkt-red' },
   improvement: {
     label: 'Improvement',
-    class: 'bg-[var(--mkt-red)]/15 text-mkt-red',
+    class: 'bg-[var(--color-mkt-red)]/15 text-mkt-red',
   },
   fix: { label: 'Fix', class: 'bg-[var(--emerald-600)]/15 text-emerald-600' },
-  breaking: { label: 'Breaking', class: 'bg-[var(--mkt-red)]/15 text-mkt-red' },
+  breaking: { label: 'Breaking', class: 'bg-[var(--color-mkt-red)]/15 text-mkt-red' },
   security: { label: 'Security', class: 'bg-[var(--ep-amber)]/15 text-mkt-red' },
   deprecation: {
     label: 'Deprecation',
