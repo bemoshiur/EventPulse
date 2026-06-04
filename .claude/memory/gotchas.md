@@ -4,6 +4,16 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## Marketing pages silently unstyled — `var(--mkt-ink)` instead of `var(--color-mkt-ink)` (Tailwind v4 token naming)
+
+**Symptom.** After the red/white re-theme, the detail pages (features, pricing, contact, changelog, the `(public)` layout) had wrong heading colours, missing borders, and missing white backgrounds — on the LIVE site. Typecheck + ESLint were green (CSS class strings aren't checked), so it shipped (v0.4.5/0.4.6) before anyone noticed. 45 references across 8 files.
+
+**Why it happens.** The marketing tokens are declared in `globals.css` `@theme` as `--color-mkt-ink`, `--color-mkt-line`, etc. Tailwind v4 generates the *utilities* `text-mkt-ink` / `border-mkt-line` from those, and the raw CSS var is `var(--color-mkt-ink)` — WITH the `color-` prefix. A bulk find/replace had produced arbitrary-value classes like `text-[var(--mkt-ink)]` and `bg-[var(--white)]` — vars that **don't exist**, so the browser falls back to inherited/transparent. There is no build error: an undefined CSS custom property is valid CSS.
+
+**Fix.** Either use the generated utility (`text-mkt-ink`) or the full var (`var(--color-mkt-ink)`). Global repair: `var(--mkt-X)` → `var(--color-mkt-X)`, `var(--white)` → `var(--color-mkt-paper)`. Grep guard: `grep -rE "var\(--mkt-" --include=*.tsx | grep -v "color-mkt"` must return nothing.
+
+**How to avoid.** Prefer the Tailwind utility form (`text-mkt-ink`, `bg-white`, `border-mkt-line`) over arbitrary `[var(--…)]` on these tokens. When bulk-swapping tokens, swap to the UTILITY name, never hand-write `var(--mkt-…)`. Add a CI grep (or a Playwright screenshot diff) for marketing pages — typecheck/lint will NOT catch undefined CSS vars.
+
 ## A commit made while transiently on `main` during branch-juggling silently went missing from the feature branch
 
 **Symptom.** The TenderPulse red/white re-theme (home/globals tokens/nav/footer/layout/detail pages, commit `ab730c8`) "disappeared": `feat/marketing-details` had a violet home + `globals.css` with zero `mkt` tokens, so every `mkt-*` class the auth/legal commit used was unstyled — yet nav/footer looked red. Confusing + inconsistent.
