@@ -2,7 +2,11 @@
 
 ## In flight
 
-**Day 48 (2026-06-05) — 🟢 TenderPulse clone program: Phases 1–5 + 11 DONE (committed/pushed, UNDEPLOYED) on `feat/marketing-details`.** Prod still v0.4.4 (old violet home) — none of this is live yet.
+**Day 48 (2026-06-05) — ✅ TenderPulse clone LIVE (v0.4.5) + architecture decided.** Phases 1–5 + 11 deployed to prod (red/white site, SEO, JSON-LD, sitemap, AEO/llms.txt, /demo, content pages — live + browser-QA'd clean on eventpulse.com.bd). **Phase 10** onboarding (dashboard guided welcome) merged #311, deploys next (v0.4.6). **Phases 6/7/8 CLOSED — operator agreed to KEEP current architecture** (no subdomain→path migration, no prepaid plans, keep inline i18n; see decisions.md 2026-06-05). Phase 9 legal contracts stay counsel-gated; trust artefacts optional/conservative. **Clone complete where it matters.** Only open: deploy Phase 10, optional artefact enrichment, Phase 12 QA.
+
+---
+
+**Day 48 (2026-06-05, earlier) — clone Phases 1–5 + 11 built (pre-deploy snapshot).** [Superseded by the entry above once v0.4.5 shipped.]
 - ✅ **P1 Visual parity** — red/white system (`--mkt-*` tokens, `.mkt-hero/.mkt-glow/.mkt-card`) across home/nav/footer/(public) layout/features/pricing/contact/trust-grid + auth (sign-in/up/choose-tenant/admin/magic + layout + MagicLinkForm) + legal/changelog. App keeps §1.5 violet.
 - ✅ **P2 SEO** — root metadata (OG/Twitter/canonical/keywords EN+বাংলা), JSON-LD (Organization/WebSite in layout; SoftwareApplication/FAQ on home), `robots.ts`. Also CHERRY-RESTORED the lost re-theme files (globals/page/next.config — see gotchas "commit made while transiently on main").
 - ✅ **P3 Sitemap** (`app/sitemap.ts`) + ✅ **P4 AEO** (Ask-ChatGPT/Claude card on home, `public/llms.txt`) + ✅ **P5 `/demo`** (6-stage walkthrough) + ✅ **P11 content pages** (/how-it-works, /about, /faq, /book-a-demo) wired into nav/footer/sitemap.

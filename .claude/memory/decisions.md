@@ -4,6 +4,28 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-05 · KEEP current architecture — no subdomain→path migration, no prepaid plans, keep inline i18n (Phases 6/7/8 dropped)
+
+**Supersedes:** the 2026-06-04 "TenderPulse clone program" sub-decisions "subdomains → apex + path routing" and "payment → adopt prepaid plans."
+
+### Context
+
+After Phases 1–5 + 11 of the clone shipped (v0.4.5: red/white site, SEO, AEO, /demo, content pages — all live), the remaining phases were 6 (i18n migration), 7 (subdomain→apex+path), 8 (prepaid plans). Operator had earlier picked "match TenderPulse" for routing + "adopt prepaid plans," then on 2026-06-05 delegated 7/8 to Claude ("do which is best and AWS optimised"). Launch is 2026-06-10 (5 days out).
+
+### Decision
+
+Claude recommended, and operator agreed, to **keep the current architecture** for all three:
+- **Phase 7 — keep subdomains** (`app.`/`admin.`/`my.eventpulse.com.bd`). It's already a clean AWS pattern (Route 53 wildcard + Nginx vhosts + one LE cert); migrating to `/app /admin /my` rewrites cookie-scope + CORS + middleware on LIVE auth — highest-risk change to make days before launch, for ~zero AWS benefit on a single EC2.
+- **Phase 8 — keep the 0.25%/transaction model.** Prepaid credit-passes fit a usage SaaS (TenderPulse), not a transaction/ticketing platform. The per-ticket fee is the correct, simpler, already-built revenue engine.
+- **Phase 6 — keep inline bilingual** (EN + বাংলা rendered in-component). next-intl `/en /bn` is a large refactor for little gain now; revisit only if locale-specific SEO URLs are wanted later.
+
+### Consequences
+
+- The TenderPulse clone is **complete where it matters** — public brand/content/SEO/AEO are live + on-par. Phases 6/7/8 are closed as "won't do (current architecture is best)."
+- Phase 9 (legal/trust): the 6 binding contracts stay **counsel-gated** (existing decision); only factual trust *artefacts* may be enriched later, conservatively (no overclaiming certifications).
+- CLAUDE.md §2.1/§17 (subdomains) + §14 (per-transaction fee) remain authoritative — the 2026-06-04 program's reversals of them are themselves now reverted.
+- Remaining clone work: Phase 10 onboarding (merged #311, deploys next), optional Phase 9 artefact enrichment, Phase 12 QA (live home QA passed clean 2026-06-05).
+
 ## 2026-06-04 · TenderPulse clone program — full marketing/SEO/AEO/routing/payment parity (planning only; build gated on operator "go")
 
 **Supersedes (partial):** §1.5 design system (violet/glass) for PUBLIC pages; §2.1 + §17 subdomain architecture (app./admin./my.); §14 payment model (per-ticket-only). The authenticated app's §1.5 violet/glass tokens remain for now.
