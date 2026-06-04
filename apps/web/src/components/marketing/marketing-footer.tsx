@@ -5,16 +5,20 @@ const COLUMNS = [
     heading: 'Product',
     links: [
       { href: '/features', label: 'Features' },
+      { href: '/how-it-works', label: 'How it works' },
       { href: '/pricing', label: 'Pricing' },
+      { href: '/demo', label: 'Demo' },
       { href: '/legal/changelog', label: 'What’s new' },
     ],
   },
   {
     heading: 'Company',
     links: [
+      { href: '/about', label: 'About' },
       { href: '/contact', label: 'Contact' },
+      { href: '/book-a-demo', label: 'Book a demo' },
+      { href: '/faq', label: 'FAQ' },
       { href: '/trust', label: 'Trust Center' },
-      { href: '/trust/security/disclosure', label: 'Security disclosure' },
     ],
   },
   {

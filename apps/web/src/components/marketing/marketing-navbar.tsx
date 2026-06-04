@@ -2,16 +2,13 @@ import Link from 'next/link'
 
 const NAV_LINKS = [
   { href: '/features', label: 'Features' },
+  { href: '/how-it-works', label: 'How it works' },
   { href: '/pricing', label: 'Pricing' },
+  { href: '/demo', label: 'Demo' },
   { href: '/trust', label: 'Trust' },
-  { href: '/contact', label: 'Contact' },
 ]
 
-export function MarketingNavbar({
-  current,
-}: {
-  current?: 'features' | 'pricing' | 'trust' | 'contact'
-}) {
+export function MarketingNavbar({ current }: { current?: string }) {
   return (
     <nav
       aria-label="Primary"
