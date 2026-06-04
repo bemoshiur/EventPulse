@@ -2,6 +2,14 @@
 
 ## In flight
 
+**Day 48 (2026-06-05) — 🟢 TenderPulse clone program: Phases 1–5 + 11 DONE (committed/pushed, UNDEPLOYED) on `feat/marketing-details`.** Prod still v0.4.4 (old violet home) — none of this is live yet.
+- ✅ **P1 Visual parity** — red/white system (`--mkt-*` tokens, `.mkt-hero/.mkt-glow/.mkt-card`) across home/nav/footer/(public) layout/features/pricing/contact/trust-grid + auth (sign-in/up/choose-tenant/admin/magic + layout + MagicLinkForm) + legal/changelog. App keeps §1.5 violet.
+- ✅ **P2 SEO** — root metadata (OG/Twitter/canonical/keywords EN+বাংলা), JSON-LD (Organization/WebSite in layout; SoftwareApplication/FAQ on home), `robots.ts`. Also CHERRY-RESTORED the lost re-theme files (globals/page/next.config — see gotchas "commit made while transiently on main").
+- ✅ **P3 Sitemap** (`app/sitemap.ts`) + ✅ **P4 AEO** (Ask-ChatGPT/Claude card on home, `public/llms.txt`) + ✅ **P5 `/demo`** (6-stage walkthrough) + ✅ **P11 content pages** (/how-it-works, /about, /faq, /book-a-demo) wired into nav/footer/sitemap.
+- ⏳ **REMAINING & BLOCKED ON OPERATOR:** P6 i18n (next-intl vs inline — decision), P7 subdomain→apex+path (LIVE-auth cutover + deploy), P8 prepaid plans (product decision: coexist with 0.25%? + new subsystem), P9 trust/legal content, P10 onboarding, P12 QA. **NOTHING DEPLOYED — needs a prod deploy (gated) for operator to see Phases 1–5/11 live (suggest v0.4.5).**
+
+---
+
 **Day 47 (2026-06-04, eve) — ⏸️ Marketing-site refresh (TenderPulse-style) — PAUSED, operator shutting down.** Shipped earlier today: **v0.4.2** self-service create-event (personal-tenant provision + `/my/hosting/start` + `/events/new`, DB-gated CI test) + **v0.4.3** publish/share manage hub (`/events/[id]`, draft→published transition + public share URL) — both LIVE on prod, full sign-up→create→publish→share loop complete. Then operator asked to make the marketing site look like tenderpulse.com.bd (rich, bilingual, every page). **HOME page rebuilt + browser-verified** (`app/page.tsx`, TenderPulse-grade, EN+বাংলা) → branch `feat/marketing-refresh`, **PR #305 OPEN (not merged/deployed; prod still v0.4.3)**. **Next session (operator-locked): (1) deploy home as v0.4.4 [authorized], (2) full TenderPulse rewrite of all detail pages — /features, /pricing, /trust, /contact, use-cases.** See handoff.md.
 
 ---

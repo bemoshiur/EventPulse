@@ -4,6 +4,32 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-04 · TenderPulse clone program — full marketing/SEO/AEO/routing/payment parity (planning only; build gated on operator "go")
+
+**Supersedes (partial):** §1.5 design system (violet/glass) for PUBLIC pages; §2.1 + §17 subdomain architecture (app./admin./my.); §14 payment model (per-ticket-only). The authenticated app's §1.5 violet/glass tokens remain for now.
+
+### Context
+
+Operator directed Event Pulse to be made "100% identical / a clone" of the sister product **TenderPulse** (`tenderpulse.com.bd`, also Public Pulse Agency / TiCON — source at `~/Downloads/Projects/TenderPulse`, Next 16 / next-intl / shadcn). Scope across several messages: "each and every detail page, full of content," "payment process and all other scenario same as tenderpulse," "seo, aeo, site map, trust center, privacy policy and each and every should be same." Constraint: keep Event Pulse as its OWN brand (Public Pulse Agency) on its OWN domain (events/ticketing, NOT tenders). Operator then said: build a mega todo + update memory, and **wait — they will signal when to start.**
+
+### Decision
+
+Clone TenderPulse's UI/UX, SEO, AEO, sitemap, Trust Center, legal, onboarding, and routing/payment models into Event Pulse, **adapting all content to events**. Locked sub-decisions (AskUserQuestion this session):
+
+- **Visual:** adopt TenderPulse red/white on the marketing site — `--mkt-red #D32F2F`, slate-800 ink, white/soft surfaces, Hind Siliguri throughout, shadcn-style cards, soft red hero mesh. **DONE for home + nav + footer + (public) layout + /features + /pricing + /contact + trust grid** (committed `feat/marketing-details`, **undeployed**; prod still v0.4.4 violet home). New `--mkt-*` tokens + `.mkt-hero`/`.mkt-glow`/`.mkt-card` in globals.css; dev build-indicator disabled.
+- **Subdomains → apex + path routing** (chose "Match TenderPulse"): drop app./admin./my.; serve `/app`, `/admin`, `/my` (or `[locale]`) from apex. BIG refactor — middleware, cookie scope, CORS, Nginx vhosts, Route53 (keep apex + wildcard for tenant pages), tested cutover + rollback. Reverses §2.1/§17.
+- **Payment → adopt TenderPulse prepaid-plan/credit model** (chose "Adopt prepaid plans too") via EPS, ON TOP of ticketing. New subsystem (plans, 30-day passes, credit metering, `/billing/upgrade`, renewal-reminder emails, +15% VAT). Extends §14.
+- **Content:** Event Pulse's own events/ticketing/EPS/T+5 domain, in TenderPulse's structure/tone/bilingual style.
+
+Full sequenced plan = the 12-item mega TodoWrite (Phases 1–11 + open decisions), 2026-06-04.
+
+### Consequences
+
+- 11-phase program, weeks of work. Build is **paused** until operator says go; only planning + Phase-1-partial (visual re-theme) done.
+- **OPEN product decisions before the relevant phase:** (a) how prepaid plans coexist with the 0.25%/ticket fee (organiser access tier vs credits vs replacing the fee) + plan tiers for an events product; (b) next-intl locale routing vs inline bilingual; (c) apex path scheme `/app` vs `[locale]`; (d) deploy red theme now (v0.4.5) or batch.
+- Subdomain + payment changes touch LIVE auth + money — both need a tested cutover and explicit per-step deploy authorization.
+- CLAUDE.md §1.5 / §2.1 / §17 / §14 partially superseded for the public surface; update the playbook when the program lands.
+
 ## 2026-06-04 · Production cutover (v0.4.0) + staging DECOMMISSIONED — prod-only now
 
 ### Context

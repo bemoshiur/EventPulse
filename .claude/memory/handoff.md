@@ -1,7 +1,16 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-06-04 — **Day 47.** 🚀 **PROD v0.4.3 — full self-serve loop LIVE: sign up → create → publish → share.** (v0.4.0 cutover → v0.4.1 auth front-door → v0.4.2 self-service create → v0.4.3 publish+share manage hub; staging decommissioned.) Prod is the only environment. **LAUNCH TARGET: 2026-06-10.**
-**Driver:** Claude Code (Opus 4.8). **🛑 $30/mo AWS ceiling (got ~$25/mo back from killing staging).**
+**Last update:** 2026-06-04 — **Day 47.** ⏸️ **TENDERPULSE CLONE PROGRAM — planned, build PAUSED (operator will signal "go").** Prod is on **v0.4.4** (marketing home rebuilt, still violet). Live shipped today: v0.4.2 self-service create + v0.4.3 publish/share (full self-serve loop) + v0.4.4 home. Prod is the only environment. **LAUNCH TARGET: 2026-06-10.**
+**Driver:** Claude Code (Opus 4.8). **🛑 $30/mo AWS ceiling.**
+
+## ⏸️ NEXT SESSION — TenderPulse clone program (DO NOT START until operator says go)
+
+Operator wants Event Pulse made a "100% clone" of the sister product **TenderPulse** (`tenderpulse.com.bd`, also Public Pulse Agency; source `~/Downloads/Projects/TenderPulse`) — UI/UX, SEO, AEO, sitemap, Trust Center, legal, onboarding, routing + payment — **adapted to Event Pulse's own events brand** (NOT tender content). Full plan = the **12-item mega TodoWrite** (Phases 1–11 + open decisions) + `decisions.md` "TenderPulse clone program" (2026-06-04, supersedes parts of §1.5/§2.1/§17/§14).
+
+- **DONE (Phase 1 partial): red/white visual re-theme** — `--mkt-*` tokens (red `#D32F2F`, slate-800, white) + `.mkt-hero`/`.mkt-glow`/`.mkt-card` in globals.css; home + nav + footer + (public) layout + /features + /pricing + /contact + trust grid re-themed to TenderPulse red/white + Hind Siliguri + shadcn cards; stronger hero gradient; `devIndicators:false` (killed the dev "blinking logo"). Committed on branch **`feat/marketing-details`**, **PUSHED, UNDEPLOYED**. Browser-verified (home + /pricing screenshots looked right). Authenticated app keeps §1.5 violet/glass.
+- **LOCKED decisions (operator, via AskUserQuestion):** subdomains → **apex + path routing** (`/app /admin /my`, drop app./admin./my. — big middleware/CORS/cookie/Nginx/Route53 refactor, touches LIVE auth); payment → **adopt TenderPulse prepaid-plan/credit model** via EPS on top of ticketing (new subsystem).
+- **OPEN product decisions to get from operator first:** (a) prepaid-plans × 0.25%-fee coexistence + plan tiers for events; (b) next-intl vs inline i18n; (c) `/app` vs `[locale]` path scheme; (d) deploy the red theme now (v0.4.5) or batch.
+- **RESUME:** `git checkout feat/marketing-details`. First likely move when operator says go: decide deploy of the red theme, then Phase 1 finish → Phase 2 SEO. Do NOT touch subdomains/payment without resolving the open decisions + per-step deploy auth.
 
 ## ⏸️ NEXT SESSION — marketing-site refresh (in flight, paused mid-task)
 
