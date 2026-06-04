@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
+import { AskAiCard } from '@/components/marketing/ask-ai-card'
 import { MarketingFooter } from '@/components/marketing/marketing-footer'
 import { MarketingNavbar } from '@/components/marketing/marketing-navbar'
 import { FaqJsonLd, SoftwareApplicationJsonLd } from '@/components/seo/structured-data'
@@ -449,6 +450,13 @@ export default function HomePage() {
               </Link>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ── Ask the AI (AEO) ─────────────────────────────────── */}
+      <section className="border-b border-[var(--color-mkt-line)] bg-white">
+        <div className="mx-auto max-w-3xl px-6 py-12">
+          <AskAiCard />
         </div>
       </section>
 

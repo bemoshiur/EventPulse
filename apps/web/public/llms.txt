@@ -1,0 +1,42 @@
+# Event Pulse
+
+> Event Pulse is a multi-tenant event ticketing and registration platform built for Bangladesh, by Public Pulse Agency. Organisers create branded event pages, design custom registration forms, sell tickets through EPS (bKash and more), check attendees in by QR, and receive automated payouts five business days after each sale (T+5) — at a transparent 0.25% platform fee. Free events are free, forever.
+
+## What Event Pulse does
+
+- **Branded event pages** — your logo, colours, and banner; optional custom domain for KYC-verified organisers; bilingual English + বাংলা public pages.
+- **Custom registration forms** — text, email, phone, NID, file upload, dropdowns, conditional logic, per-tier variations.
+- **Ticketing** — multiple tiers, capacity caps, sales windows, per-order limits, complimentary tiers, coupons.
+- **Payments** — EPS hosted checkout; money never touches a personal wallet. Payment status is always verified server-side with EPS, never trusted from the redirect.
+- **Check-in** — QR ticket by email; a web-based scanner works from any phone browser, offline-tolerant, multi-gate aware.
+- **Money** — flat 0.25% platform fee (absorb or pass-through, per event); EPS gateway fees pass through at cost; funds held in escrow; automated T+5 settlement to bank (BEFTN) or MFS (bKash, Nagad, Rocket, Upay) with a full statement; built-in refunds and reconciliation.
+
+## How it works
+
+1. **Create your event** — sign up with email (magic link), pick an event type, fill in the basics. Free events go live immediately with no verification.
+2. **Open ticket sales** — add paid tiers; a quick KYC step verifies you to handle money; publish and share your link.
+3. **Get paid in 5 days** — buyers pay via EPS, attendees get QR tickets, you scan them at the gate, net proceeds settle T+5.
+
+## Pricing
+
+- Free events: no fee.
+- Paid events: a flat **0.25%** platform fee per transaction. No setup fee, no monthly minimum, no subscription. EPS gateway fees pass through at cost.
+
+## Who it's for
+
+Concert promoters, universities, alumni associations, conferences, NGOs, corporate events, comedy clubs, workshops, sports leagues, and community meetups across Bangladesh.
+
+## Key facts
+
+- Built for Bangladesh; bilingual English + বাংলা.
+- KYC required only when selling paid tickets (not for free events).
+- Buyer and KYC data is encrypted at rest and never used to train third-party models.
+- A product of Public Pulse Agency, Dhaka, Bangladesh.
+
+## Links
+
+- Home: https://eventpulse.com.bd
+- Features: https://eventpulse.com.bd/features
+- Pricing: https://eventpulse.com.bd/pricing
+- Trust Center: https://eventpulse.com.bd/trust
+- Contact: https://eventpulse.com.bd/contact
