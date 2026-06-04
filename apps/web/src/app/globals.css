@@ -30,6 +30,16 @@
   --color-ep-error: #ff4d7e;
   --color-ep-info: #2da8ff;
 
+  /* Marketing surface palette — red/white system for the public pages
+     (the authenticated app keeps the ep-* violet/glass tokens above). */
+  --color-mkt-red: #d32f2f;
+  --color-mkt-red-dark: #b71c1c;
+  --color-mkt-ink: #1e293b; /* slate-800 — headings + body */
+  --color-mkt-slate: #475569; /* slate-600 — muted/subtext */
+  --color-mkt-line: #e2e8f0; /* slate-200 — hairlines, card borders */
+  --color-mkt-soft: #f8fafc; /* slate-50 — alternating section bg */
+  --color-mkt-paper: #ffffff;
+
   /* Typography */
   --font-display: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-inter), var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
@@ -129,6 +139,37 @@
     -webkit-backdrop-filter: blur(28px) saturate(180%);
     border: 1px solid rgba(255, 255, 255, 0.7);
     box-shadow: var(--shadow-glass-strong);
+  }
+
+  /* Marketing surface (red/white public pages). Soft light hero mesh +
+     a clean shadcn-style card. Authenticated app still uses .glass above. */
+  .mkt-hero {
+    background:
+      radial-gradient(1100px 480px at 12% 0%, rgba(211, 47, 47, 0.16), transparent 60%),
+      radial-gradient(900px 440px at 92% 6%, rgba(255, 164, 91, 0.22), transparent 60%),
+      radial-gradient(800px 420px at 100% 100%, rgba(211, 47, 47, 0.09), transparent 62%),
+      linear-gradient(180deg, #ffffff 0%, #fff7f5 100%);
+  }
+  /* Subtle red glow for alternating sections — keeps the gradient present
+     down the page rather than only in the hero. */
+  .mkt-glow {
+    background:
+      radial-gradient(900px 360px at 0% 0%, rgba(211, 47, 47, 0.05), transparent 60%),
+      radial-gradient(800px 340px at 100% 100%, rgba(255, 164, 91, 0.06), transparent 60%),
+      var(--color-mkt-soft);
+  }
+  .mkt-card {
+    background: #ffffff;
+    border: 1px solid var(--color-mkt-line);
+    border-radius: 1rem;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    transition:
+      box-shadow 200ms var(--ease-ep),
+      transform 200ms var(--ease-ep);
+  }
+  .mkt-card:hover {
+    box-shadow: 0 12px 32px -12px rgba(15, 23, 42, 0.18);
+    transform: translateY(-2px);
   }
 
   /* Brand gradients used by hero cards, primary CTAs, success badges */
