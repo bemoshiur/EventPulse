@@ -63,9 +63,7 @@ function MagicConsume() {
 
   return (
     <div className="mkt-card w-full max-w-md rounded-3xl p-8 text-center sm:p-10">
-      <h1 className="text-mkt-ink text-2xl font-semibold tracking-tight">
-        Event Pulse
-      </h1>
+      <h1 className="text-mkt-ink text-2xl font-semibold tracking-tight">Event Pulse</h1>
       {state.kind === 'loading' ? (
         <p className="text-mkt-slate mt-4 text-sm">Signing you in…</p>
       ) : (

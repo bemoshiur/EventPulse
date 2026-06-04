@@ -1,4 +1,3 @@
-
 /**
  * Auth pages are rendered per-request (never statically cached). Without this,
  * Next prerenders the login shells with `s-maxage=1y`, so a browser/CDN can pin

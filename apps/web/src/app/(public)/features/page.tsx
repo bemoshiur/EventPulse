@@ -249,7 +249,9 @@ export default function FeaturesPage() {
                 <h3 className="font-display mt-3 text-lg font-semibold text-[var(--mkt-ink)]">
                   {f.title}
                 </h3>
-                <p className="mt-2 text-sm leading-relaxed text-[var(--color-mkt-slate)]">{f.body}</p>
+                <p className="mt-2 text-sm leading-relaxed text-[var(--color-mkt-slate)]">
+                  {f.body}
+                </p>
               </div>
             ))}
           </div>

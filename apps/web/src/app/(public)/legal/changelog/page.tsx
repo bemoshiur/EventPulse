@@ -43,13 +43,11 @@ export default async function ChangelogIndexPage() {
 
       <section className="relative">
         <div className="mx-auto max-w-3xl px-6 py-16 text-center md:py-24">
-          <p className="text-xs font-semibold tracking-widest text-mkt-red uppercase">
-            Changelog
-          </p>
-          <h1 className="mt-3 text-3xl font-semibold text-mkt-ink md:text-5xl">
+          <p className="text-mkt-red text-xs font-semibold tracking-widest uppercase">Changelog</p>
+          <h1 className="text-mkt-ink mt-3 text-3xl font-semibold md:text-5xl">
             What&rsquo;s shipped.
           </h1>
-          <p className="mt-4 text-base leading-relaxed text-mkt-slate">
+          <p className="text-mkt-slate mt-4 text-base leading-relaxed">
             Every release of Event Pulse, in reverse chronological order. Features, improvements,
             fixes, security updates &mdash; transparent and dated.
           </p>
@@ -60,12 +58,12 @@ export default async function ChangelogIndexPage() {
         <section className="relative">
           <div className="mx-auto max-w-5xl px-6 pb-8">
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-xs text-mkt-slate">Browse by version:</span>
+              <span className="text-mkt-slate text-xs">Browse by version:</span>
               {versions.map((v) => (
                 <Link
                   key={v}
                   href={`/legal/changelog/v/${v}`}
-                  className="inline-flex h-8 items-center rounded-full bg-white/70 px-3 text-xs font-semibold text-mkt-ink backdrop-blur transition hover:bg-mkt-red/10 hover:text-mkt-red"
+                  className="text-mkt-ink hover:bg-mkt-red/10 hover:text-mkt-red inline-flex h-8 items-center rounded-full bg-white/70 px-3 text-xs font-semibold backdrop-blur transition"
                 >
                   v{v}
                 </Link>
@@ -79,9 +77,7 @@ export default async function ChangelogIndexPage() {
         <div className="mx-auto max-w-3xl px-6 pb-24">
           {items.length === 0 ? (
             <div className="mkt-card p-10 text-center">
-              <p className="text-sm text-mkt-slate">
-                Nothing to show yet. Check back soon.
-              </p>
+              <p className="text-mkt-slate text-sm">Nothing to show yet. Check back soon.</p>
             </div>
           ) : (
             <ul className="space-y-6">
@@ -96,13 +92,11 @@ export default async function ChangelogIndexPage() {
                         >
                           {cat.label}
                         </span>
-                        <span className="text-xs text-mkt-slate">
+                        <span className="text-mkt-slate text-xs">
                           v{item.version} &middot; {formatDate(item.publishedAt)}
                         </span>
                       </div>
-                      <h2 className="mt-3 text-lg font-semibold text-mkt-ink">
-                        {item.title}
-                      </h2>
+                      <h2 className="text-mkt-ink mt-3 text-lg font-semibold">{item.title}</h2>
                       <ChangelogBody html={item.bodyHtml} />
                     </div>
                   </li>
@@ -137,7 +131,7 @@ export default async function ChangelogIndexPage() {
 function ChangelogBody({ html }: { html: string }) {
   return (
     <div
-      className="prose-changelog mt-3 text-sm leading-relaxed text-mkt-slate"
+      className="prose-changelog text-mkt-slate mt-3 text-sm leading-relaxed"
       // eslint-disable-next-line react/no-danger -- see ChangelogBody jsdoc; security boundary is the seed-time sanitizer
       dangerouslySetInnerHTML={{ __html: html }}
     />

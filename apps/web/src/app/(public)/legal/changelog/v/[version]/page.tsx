@@ -53,15 +53,9 @@ export default async function ChangelogVersionPage({ params }: Props) {
 
       <section className="relative">
         <div className="mx-auto max-w-3xl px-6 py-16 text-center md:py-24">
-          <p className="text-xs font-semibold tracking-widest text-mkt-red uppercase">
-            Changelog
-          </p>
-          <h1 className="mt-3 text-3xl font-semibold text-mkt-ink md:text-5xl">
-            v{version}
-          </h1>
-          <p className="mt-3 text-sm text-mkt-slate">
-            {formatDate(items[0]!.publishedAt)}
-          </p>
+          <p className="text-mkt-red text-xs font-semibold tracking-widest uppercase">Changelog</p>
+          <h1 className="text-mkt-ink mt-3 text-3xl font-semibold md:text-5xl">v{version}</h1>
+          <p className="text-mkt-slate mt-3 text-sm">{formatDate(items[0]!.publishedAt)}</p>
         </div>
       </section>
 
@@ -80,9 +74,7 @@ export default async function ChangelogVersionPage({ params }: Props) {
                         {cat.label}
                       </span>
                     </div>
-                    <h2 className="mt-3 text-lg font-semibold text-mkt-ink">
-                      {item.title}
-                    </h2>
+                    <h2 className="text-mkt-ink mt-3 text-lg font-semibold">{item.title}</h2>
                     <ChangelogBody html={item.bodyHtml} />
                   </div>
                 </li>
@@ -91,10 +83,7 @@ export default async function ChangelogVersionPage({ params }: Props) {
           </ul>
 
           <div className="mt-10 text-center">
-            <Link
-              href="/legal/changelog"
-              className="text-sm text-mkt-red hover:underline"
-            >
+            <Link href="/legal/changelog" className="text-mkt-red text-sm hover:underline">
               ← All releases
             </Link>
           </div>
@@ -117,7 +106,7 @@ export default async function ChangelogVersionPage({ params }: Props) {
 function ChangelogBody({ html }: { html: string }) {
   return (
     <div
-      className="prose-changelog mt-3 text-sm leading-relaxed text-mkt-slate"
+      className="prose-changelog text-mkt-slate mt-3 text-sm leading-relaxed"
       // eslint-disable-next-line react/no-danger -- body_html sanitized at seed/publish time via shared renderer
       dangerouslySetInnerHTML={{ __html: html }}
     />

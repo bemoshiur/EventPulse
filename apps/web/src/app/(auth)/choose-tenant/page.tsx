@@ -18,7 +18,6 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
-
 function apiBase(): string {
   const fromEnv = process.env['NEXT_PUBLIC_API_BASE_URL']
   return fromEnv && fromEnv.length > 0 ? fromEnv.replace(/\/$/, '') : ''
@@ -116,9 +115,7 @@ export function ChooseTenant() {
   return (
     <div className="mkt-card w-full max-w-md rounded-3xl p-8 sm:p-10">
       <header className="text-center">
-        <h1 className="text-mkt-ink text-2xl font-semibold tracking-tight">
-          Choose a space
-        </h1>
+        <h1 className="text-mkt-ink text-2xl font-semibold tracking-tight">Choose a space</h1>
         <p className="text-mkt-slate mt-2 text-sm">
           Pick which organiser account you want to work in.
         </p>
