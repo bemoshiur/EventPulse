@@ -30,28 +30,25 @@ const COLUMNS = [
 
 export function MarketingFooter() {
   return (
-    <footer className="mt-24 border-t border-[var(--ep-line)]/60 bg-[var(--ep-paper)]/40 backdrop-blur-md">
+    <footer className="border-mkt-line bg-mkt-soft border-t font-[family-name:var(--font-bangla)]">
       <div className="mx-auto max-w-6xl px-6 py-16">
         <div className="grid grid-cols-2 gap-12 md:grid-cols-4">
           <div>
             <Link
               href="/"
-              className="font-display flex items-center gap-2 text-base font-semibold text-[var(--ep-ink)]"
+              className="text-mkt-ink flex items-center gap-2 text-base font-bold tracking-tight"
             >
-              <span
-                aria-hidden="true"
-                className="inline-block size-2.5 rounded-full bg-gradient-to-br from-[var(--ep-violet)] to-[var(--ep-cerulean)]"
-              />
+              <span aria-hidden="true" className="bg-mkt-red inline-block size-2.5 rounded-full" />
               Event Pulse
             </Link>
-            <p className="mt-4 text-sm leading-relaxed text-[var(--ep-graphite)]">
+            <p className="text-mkt-slate mt-4 text-sm leading-relaxed">
               Built for Bangladesh. Hosted by Public Pulse Agency &middot; TiCON System Limited.
             </p>
           </div>
 
           {COLUMNS.map((col) => (
             <div key={col.heading}>
-              <h3 className="text-xs font-semibold tracking-widest text-[var(--ep-graphite)] uppercase">
+              <h3 className="text-mkt-slate text-xs font-semibold tracking-[0.18em] uppercase">
                 {col.heading}
               </h3>
               <ul className="mt-4 space-y-2">
@@ -59,7 +56,7 @@ export function MarketingFooter() {
                   <li key={link.href}>
                     <Link
                       href={link.href}
-                      className="text-sm text-[var(--ep-graphite)] transition hover:text-[var(--ep-ink)]"
+                      className="text-mkt-slate hover:text-mkt-red text-sm transition"
                     >
                       {link.label}
                     </Link>
@@ -70,9 +67,9 @@ export function MarketingFooter() {
           ))}
         </div>
 
-        <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-[var(--ep-line)]/60 pt-6 text-xs text-[var(--ep-graphite)] md:flex-row">
+        <div className="border-mkt-line text-mkt-slate mt-12 flex flex-col items-center justify-between gap-3 border-t pt-6 text-xs md:flex-row">
           <span>&copy; 2026 Public Pulse Agency &middot; TiCON System Limited</span>
-          <span>Dhaka, Bangladesh</span>
+          <span>Dhaka, Bangladesh 🇧🇩</span>
         </div>
       </div>
     </footer>

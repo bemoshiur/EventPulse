@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
-import { GlassCard } from '@/components/ui/glass-card'
 import { MarketingFooter } from '@/components/marketing/marketing-footer'
 import { MarketingNavbar } from '@/components/marketing/marketing-navbar'
 
@@ -131,13 +130,11 @@ export default function FeaturesPage() {
 
       <section className="relative">
         <div className="mx-auto max-w-4xl px-6 py-16 text-center md:py-24">
-          <p className="text-xs font-semibold tracking-widest text-[var(--ep-violet)] uppercase">
-            Features
-          </p>
-          <h1 className="font-display mt-3 text-3xl font-semibold text-[var(--ep-ink)] md:text-5xl">
+          <p className="text-mkt-red text-xs font-semibold tracking-widest uppercase">Features</p>
+          <h1 className="text-mkt-ink mt-3 text-3xl font-semibold md:text-5xl">
             Everything you need to sell a ticket.
           </h1>
-          <p className="mt-4 text-base leading-relaxed text-[var(--ep-graphite)]">
+          <p className="text-mkt-slate mt-4 text-base leading-relaxed">
             Built around the operational realities of running events in Bangladesh — bKash-first
             payments, bilingual UI, BFIU-grade audit trails, and a settlement engine that pays you
             in five days.
@@ -149,22 +146,20 @@ export default function FeaturesPage() {
         <section key={section.title} className="relative">
           <div className="mx-auto max-w-6xl px-6 pb-16 md:pb-24">
             <header className="mb-10">
-              <p className="text-xs font-semibold tracking-widest text-[var(--ep-violet)] uppercase">
+              <p className="text-mkt-red text-xs font-semibold tracking-widest uppercase">
                 {section.eyebrow}
               </p>
-              <h2 className="font-display mt-2 text-2xl font-semibold text-[var(--ep-ink)] md:text-3xl">
+              <h2 className="text-mkt-ink mt-2 text-2xl font-semibold md:text-3xl">
                 {section.title}
               </h2>
             </header>
 
             <div className="grid gap-5 md:grid-cols-2">
               {section.features.map((feature) => (
-                <GlassCard key={feature.title} className="p-7">
-                  <h3 className="text-base font-semibold text-[var(--ep-ink)]">{feature.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-[var(--ep-graphite)]">
-                    {feature.body}
-                  </p>
-                </GlassCard>
+                <div key={feature.title} className="mkt-card p-7">
+                  <h3 className="text-mkt-ink text-base font-semibold">{feature.title}</h3>
+                  <p className="text-mkt-slate mt-2 text-sm leading-relaxed">{feature.body}</p>
+                </div>
               ))}
             </div>
           </div>
@@ -173,22 +168,22 @@ export default function FeaturesPage() {
 
       <section className="relative">
         <div className="mx-auto max-w-3xl px-6 pb-24 text-center">
-          <h2 className="font-display text-2xl font-semibold text-[var(--ep-ink)] md:text-3xl">
+          <h2 className="text-mkt-ink text-2xl font-semibold md:text-3xl">
             See what 0.25% looks like for your event.
           </h2>
-          <p className="mt-3 text-sm leading-relaxed text-[var(--ep-graphite)]">
+          <p className="text-mkt-slate mt-3 text-sm leading-relaxed">
             Run the numbers on the Pricing page, then sign up to publish.
           </p>
           <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <Link
               href="/pricing"
-              className="inline-flex h-11 items-center rounded-md border border-[var(--ep-line)] bg-[var(--ep-paper)]/70 px-7 text-sm font-semibold text-[var(--ep-ink)] backdrop-blur transition hover:-translate-y-0.5 hover:shadow-sm"
+              className="border-mkt-line text-mkt-ink inline-flex h-11 items-center rounded-md border bg-white/70 px-7 text-sm font-semibold backdrop-blur transition hover:-translate-y-0.5 hover:shadow-sm"
             >
               Pricing calculator
             </Link>
             <Link
               href="/sign-up"
-              className="inline-flex h-11 items-center rounded-md bg-gradient-to-r from-[var(--ep-violet)] to-[var(--ep-indigo)] px-7 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              className="bg-mkt-red inline-flex h-11 items-center rounded-md px-7 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
               Get started
             </Link>
