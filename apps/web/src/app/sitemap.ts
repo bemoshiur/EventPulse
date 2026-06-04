@@ -1,5 +1,7 @@
 import type { MetadataRoute } from 'next'
 
+import { getAllBlogPosts } from '@/lib/blog'
+
 const SITE = 'https://eventpulse.com.bd'
 
 // Public, indexable marketing + trust + legal routes. Bilingual EN/বাংলা is
@@ -16,6 +18,7 @@ const ROUTES: {
   { path: '/how-it-works', priority: 0.8, changeFrequency: 'monthly' },
   { path: '/about', priority: 0.5, changeFrequency: 'yearly' },
   { path: '/faq', priority: 0.6, changeFrequency: 'monthly' },
+  { path: '/blog', priority: 0.7, changeFrequency: 'weekly' },
   { path: '/book-a-demo', priority: 0.5, changeFrequency: 'yearly' },
   { path: '/pricing', priority: 0.9, changeFrequency: 'monthly' },
   { path: '/contact', priority: 0.6, changeFrequency: 'yearly' },
@@ -44,9 +47,18 @@ const ROUTES: {
 ]
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  return ROUTES.map((r) => ({
-    url: `${SITE}${r.path === '/' ? '' : r.path}`,
-    changeFrequency: r.changeFrequency,
-    priority: r.priority,
+  const blog: MetadataRoute.Sitemap = getAllBlogPosts().map((p) => ({
+    url: `${SITE}/blog/${p.slug}`,
+    lastModified: p.date,
+    changeFrequency: 'yearly',
+    priority: 0.5,
   }))
+  return [
+    ...ROUTES.map((r) => ({
+      url: `${SITE}${r.path === '/' ? '' : r.path}`,
+      changeFrequency: r.changeFrequency,
+      priority: r.priority,
+    })),
+    ...blog,
+  ]
 }

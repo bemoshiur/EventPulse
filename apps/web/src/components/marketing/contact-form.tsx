@@ -188,7 +188,7 @@ export function ContactForm() {
       {status === 'error' && errorMessage && (
         <div
           role="alert"
-          className="text-mkt-ink rounded-md bg-[var(--mkt-red)]/10 px-4 py-3 text-sm"
+          className="text-mkt-ink rounded-md bg-[var(--color-mkt-red)]/10 px-4 py-3 text-sm"
         >
           {errorMessage}
         </div>

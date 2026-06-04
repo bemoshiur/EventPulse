@@ -187,7 +187,7 @@ export default function FeaturesPage() {
           <p className="text-xs font-semibold tracking-widest text-[var(--color-mkt-red)] uppercase">
             Features · <Bn>ফিচার</Bn>
           </p>
-          <h1 className="font-display mt-3 text-3xl font-semibold text-[var(--mkt-ink)] md:text-5xl">
+          <h1 className="font-display mt-3 text-3xl font-semibold text-[var(--color-mkt-ink)] md:text-5xl">
             Everything you need to sell a ticket.
           </h1>
           <p className="mt-4 text-lg font-medium text-[var(--color-mkt-slate)]">
@@ -209,7 +209,7 @@ export default function FeaturesPage() {
               <p className="text-xs font-semibold tracking-widest text-[var(--color-mkt-red)] uppercase">
                 {section.eyebrow} · <Bn>{section.eyebrowBn}</Bn>
               </p>
-              <h2 className="font-display mt-2 text-2xl font-semibold text-[var(--mkt-ink)] md:text-3xl">
+              <h2 className="font-display mt-2 text-2xl font-semibold text-[var(--color-mkt-ink)] md:text-3xl">
                 {section.title}
               </h2>
             </header>
@@ -217,7 +217,9 @@ export default function FeaturesPage() {
             <div className="grid gap-5 md:grid-cols-2">
               {section.features.map((feature) => (
                 <GlassCard key={feature.title} className="p-7">
-                  <h3 className="text-base font-semibold text-[var(--mkt-ink)]">{feature.title}</h3>
+                  <h3 className="text-base font-semibold text-[var(--color-mkt-ink)]">
+                    {feature.title}
+                  </h3>
                   <p className="mt-2 text-sm leading-relaxed text-[var(--color-mkt-slate)]">
                     {feature.body}
                   </p>
@@ -235,7 +237,7 @@ export default function FeaturesPage() {
             <p className="text-xs font-semibold tracking-widest text-[var(--color-mkt-red)] uppercase">
               How a sale flows · <Bn>বিক্রির ধাপ</Bn>
             </p>
-            <h2 className="font-display mt-2 text-2xl font-semibold text-[var(--mkt-ink)] md:text-3xl">
+            <h2 className="font-display mt-2 text-2xl font-semibold text-[var(--color-mkt-ink)] md:text-3xl">
               From your buyer’s tap to your bank account.
             </h2>
           </div>
@@ -243,10 +245,10 @@ export default function FeaturesPage() {
             {FLOW.map((f) => (
               <div
                 key={f.n}
-                className="rounded-2xl border border-[var(--mkt-line)]/70 bg-[var(--white)]/60 p-6 backdrop-blur"
+                className="rounded-2xl border border-[var(--color-mkt-line)]/70 bg-[var(--color-mkt-paper)]/60 p-6 backdrop-blur"
               >
                 <span className="ep-gradient-text font-display text-3xl font-bold">{f.n}</span>
-                <h3 className="font-display mt-3 text-lg font-semibold text-[var(--mkt-ink)]">
+                <h3 className="font-display mt-3 text-lg font-semibold text-[var(--color-mkt-ink)]">
                   {f.title}
                 </h3>
                 <p className="mt-2 text-sm leading-relaxed text-[var(--color-mkt-slate)]">
@@ -265,7 +267,7 @@ export default function FeaturesPage() {
             <p className="text-xs font-semibold tracking-widest text-[var(--color-mkt-red)] uppercase">
               FAQ
             </p>
-            <h2 className="font-display mt-2 text-2xl font-semibold text-[var(--mkt-ink)] md:text-3xl">
+            <h2 className="font-display mt-2 text-2xl font-semibold text-[var(--color-mkt-ink)] md:text-3xl">
               Common questions.
             </h2>
           </div>
@@ -273,9 +275,9 @@ export default function FeaturesPage() {
             {FAQS.map((f) => (
               <details
                 key={f.q}
-                className="group rounded-xl border border-[var(--mkt-line)]/70 bg-[var(--white)]/60 p-5 backdrop-blur"
+                className="group rounded-xl border border-[var(--color-mkt-line)]/70 bg-[var(--color-mkt-paper)]/60 p-5 backdrop-blur"
               >
-                <summary className="flex cursor-pointer list-none items-center justify-between text-left text-base font-semibold text-[var(--mkt-ink)]">
+                <summary className="flex cursor-pointer list-none items-center justify-between text-left text-base font-semibold text-[var(--color-mkt-ink)]">
                   {f.q}
                   <span
                     aria-hidden="true"
@@ -294,7 +296,7 @@ export default function FeaturesPage() {
       {/* CTA */}
       <section className="relative">
         <div className="mx-auto max-w-3xl px-6 pb-24 text-center">
-          <h2 className="font-display text-2xl font-semibold text-[var(--mkt-ink)] md:text-3xl">
+          <h2 className="font-display text-2xl font-semibold text-[var(--color-mkt-ink)] md:text-3xl">
             See what 0.25% looks like for your event.
           </h2>
           <p className="mt-3 text-sm leading-relaxed text-[var(--color-mkt-slate)]">
@@ -304,13 +306,13 @@ export default function FeaturesPage() {
           <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <Link
               href="/pricing"
-              className="inline-flex h-11 items-center rounded-md border border-[var(--mkt-line)] bg-[var(--white)]/70 px-7 text-sm font-semibold text-[var(--mkt-ink)] backdrop-blur transition hover:-translate-y-0.5 hover:shadow-sm"
+              className="inline-flex h-11 items-center rounded-md border border-[var(--color-mkt-line)] bg-[var(--color-mkt-paper)]/70 px-7 text-sm font-semibold text-[var(--color-mkt-ink)] backdrop-blur transition hover:-translate-y-0.5 hover:shadow-sm"
             >
               Pricing calculator
             </Link>
             <Link
               href="/sign-up"
-              className="inline-flex h-11 items-center rounded-md bg-gradient-to-r from-[var(--color-mkt-red)] to-[var(--mkt-red)] px-7 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              className="inline-flex h-11 items-center rounded-md bg-gradient-to-r from-[var(--color-mkt-red)] to-[var(--color-mkt-red)] px-7 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
               Get started
             </Link>
