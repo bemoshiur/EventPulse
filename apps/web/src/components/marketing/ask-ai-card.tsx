@@ -1,4 +1,5 @@
 import { Bot } from 'lucide-react'
+import Link from 'next/link'
 
 /**
  * Answer-engine card: invites visitors to ask their assistant about Event Pulse.
@@ -42,12 +43,12 @@ export function AskAiCard() {
             {l.label}
           </a>
         ))}
-        <a
+        <Link
           href="/contact"
           className="text-mkt-red inline-flex h-10 items-center px-3 text-sm font-semibold hover:underline"
         >
           Talk to us →
-        </a>
+        </Link>
       </div>
     </div>
   )
