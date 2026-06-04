@@ -14,6 +14,7 @@
  * are unverified until the truth gate runs real paid orders.
  */
 
+import Link from 'next/link'
 import { useMemo } from 'react'
 
 import {
@@ -127,12 +128,59 @@ export function SalesDashboard() {
     <section aria-label="Sales metrics" className="space-y-8">
       {!hasAnyRevenue ? (
         <div
-          className="rounded-2xl border border-[var(--ep-cerulean)]/40 bg-[var(--ep-cerulean)]/5 p-6 text-sm text-[var(--ep-cerulean)]"
+          className="rounded-2xl border border-[var(--ep-line)]/60 bg-[var(--ep-paper)]/70 p-8 backdrop-blur"
           data-testid="empty-state"
         >
-          No sales yet. Once attendees register for your events, headline numbers + the
-          sales-over-time chart light up here. Free-event registrations count as paid orders (BDT
-          0).
+          <p className="text-xs font-semibold tracking-widest text-[var(--ep-violet)] uppercase">
+            Welcome 👋
+          </p>
+          <h3 className="font-display mt-2 text-2xl font-semibold text-[var(--ep-ink)]">
+            Let’s get your first event live.
+          </h3>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--ep-graphite)]">
+            Your sales, attendees, and payouts will light up here once people start registering. It
+            takes about 90 seconds to publish — free events go live instantly.
+          </p>
+          <ol className="mt-5 grid gap-3 sm:grid-cols-3">
+            {[
+              [
+                '1',
+                'Create your event',
+                'Pick a type, add the basics — we generate a branded page.',
+              ],
+              ['2', 'Add tickets & publish', 'Set tiers and a sales window, then share your link.'],
+              [
+                '3',
+                'Get paid T+5',
+                'Net proceeds settle to your account five business days later.',
+              ],
+            ].map(([n, t, d]) => (
+              <li
+                key={n}
+                className="rounded-xl border border-[var(--ep-line)]/60 bg-[var(--ep-paper)]/60 p-4"
+              >
+                <span className="ep-gradient-text font-display text-xl font-bold">{n}</span>
+                <p className="mt-1 text-sm font-semibold text-[var(--ep-ink)]">{t}</p>
+                <p className="mt-1 text-xs leading-relaxed text-[var(--ep-graphite)]">{d}</p>
+              </li>
+            ))}
+          </ol>
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Link
+              href="/events/new"
+              className="inline-flex h-11 items-center justify-center rounded-md bg-gradient-to-r from-[var(--ep-violet)] to-[var(--ep-indigo)] px-6 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              Create your first event
+            </Link>
+            <a
+              href="https://eventpulse.com.bd/demo"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex h-11 items-center justify-center rounded-md border border-[var(--ep-line)] px-6 text-sm font-semibold text-[var(--ep-ink)] transition hover:-translate-y-0.5 hover:shadow-sm"
+            >
+              Watch the 90-second demo
+            </a>
+          </div>
         </div>
       ) : null}
 

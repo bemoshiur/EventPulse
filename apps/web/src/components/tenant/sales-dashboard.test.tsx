@@ -118,11 +118,15 @@ describe('SalesDashboard — loading + empty + happy', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/loading sales metrics/i)
   })
 
-  it('renders the empty-state banner when no revenue + no orders', async () => {
+  it('renders the welcome onboarding empty-state when no revenue + no orders', async () => {
     fetchMock.mockResolvedValue(jsonResponse(makeEnvelope()))
     render(withProviders(<SalesDashboard />))
     await waitFor(() => expect(screen.getByTestId('empty-state')).toBeInTheDocument())
-    expect(screen.getByTestId('empty-state')).toHaveTextContent(/no sales yet/i)
+    expect(screen.getByTestId('empty-state')).toHaveTextContent(/get your first event live/i)
+    expect(screen.getByRole('link', { name: /create your first event/i })).toHaveAttribute(
+      'href',
+      '/events/new',
+    )
   })
 
   it('happy path: KPI cards render with formatted BDT values; bucket pills + tables render', async () => {
