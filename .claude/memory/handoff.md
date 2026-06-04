@@ -1,9 +1,22 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-06-04 — **Day 47.** 🚀 **PRODUCTION CUTOVER DONE (v0.4.0) + STAGING DECOMMISSIONED.** Prod is the only environment now. **LAUNCH TARGET: 2026-06-10.**
-**Driver:** Claude Code (Opus 4.8). **🛑 $30/mo AWS ceiling (just got ~$25/mo back from killing staging).**
+**Last update:** 2026-06-04 — **Day 47.** 🚀 **PROD CUTOVER (v0.4.0) → v0.4.1 (auth front-door fix) + STAGING DECOMMISSIONED.** Prod is the only environment. **LAUNCH TARGET: 2026-06-10.**
+**Driver:** Claude Code (Opus 4.8). **🛑 $30/mo AWS ceiling (got ~$25/mo back from killing staging).**
 
-## ✅ Production is live on v0.4.0 (commit 732bf7b)
+## ✅ Prod is live on v0.4.1 (commit 3fef86c) — auth front-door fixed
+
+Operator hit "nothing works / can't tell how to log in." Diagnosed: the engine was fine (CORS + login endpoint + email all verified live); the FRONT-END entry was broken. Fixed + deployed v0.4.1 (#299), browser-verified on prod:
+- **`/sign-up` works** (was 404 — every marketing "Start free" CTA pointed at it). Passwordless: new email → magic-link consume CREATES the account (display name derived from email via `deriveDisplayName`); existing email signs in. `password/signup` untouched.
+- **Auth pages no longer statically cached** — `export const dynamic` on `(auth)/layout`. They were prerendered `s-maxage=1y`, so a browser could pin a STALE login shell → broken form / "Network error" on submit (the operator's symptom). Now `no-store`.
+- Sign-in ↔ sign-up cross-links fixed; favicon added (`app/icon.svg`).
+- **Login map:** admin = `app.eventpulse.com.bd/admin-sign-in`; organiser/tenant = `/sign-in`; new = `/sign-up`. All email-magic-link only.
+
+### ⚠️ Still unbuilt (honest gap): self-service "create your first event"
+A NEW user can now sign up + log in, but lands on `/choose-tenant` EMPTY ("Host an event" → just `/`). The §2.4 Path-A self-service hosting (personal-tenant auto-provision + `hosting/new` event-create UI) is **Phase 2 and NOT built**. Marketing still advertises "create your first event in 90 seconds" — that flow doesn't exist yet. Realistic launch model = admin onboards organisers; they log in. **Building self-service create-first-event is the next real feature.**
+
+## ✅ (from v0.4.0) — cutover baseline
+
+Deployed via `deploy-prod.yml` (`--ref prod`). All session work live + verified on prod:
 
 Deployed via `deploy-prod.yml` (`--ref prod`, tag v0.4.0). All session work is live + verified on prod:
 - **Email-only auth** — Google/third-party login REMOVED (#294): sign-in shows only the magic link; `/api/v1/auth/oauth/google/start` → 404.
