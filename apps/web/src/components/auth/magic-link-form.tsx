@@ -23,7 +23,10 @@ function apiBase(): string {
   return fromEnv && fromEnv.length > 0 ? fromEnv.replace(/\/$/, '') : ''
 }
 
-export function MagicLinkForm({ audience }: { audience?: 'super-admin' | 'attendee' } = {}) {
+export function MagicLinkForm({
+  audience,
+  purpose = 'signin',
+}: { audience?: 'super-admin' | 'attendee'; purpose?: 'signin' | 'signup' } = {}) {
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -43,7 +46,7 @@ export function MagicLinkForm({ audience }: { audience?: 'super-admin' | 'attend
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           email: trimmed,
-          purpose: 'signin',
+          purpose,
           ...(audience ? { audience } : {}),
         }),
       })
@@ -67,8 +70,8 @@ export function MagicLinkForm({ audience }: { audience?: 'super-admin' | 'attend
       <div className="border-ep-line rounded-md border bg-white/60 p-4 text-sm">
         <p className="text-ep-ink font-medium">Check your email.</p>
         <p className="text-ep-graphite mt-1">
-          We sent a sign-in link to <span className="font-medium">{email}</span>. The link is good
-          for 15 minutes.
+          We sent a {purpose === 'signup' ? 'link to create your account' : 'sign-in link'} to{' '}
+          <span className="font-medium">{email}</span>. It’s good for 15 minutes.
         </p>
         <button
           type="button"
