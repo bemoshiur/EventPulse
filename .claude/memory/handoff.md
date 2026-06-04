@@ -1,6 +1,6 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-06-04 — **Day 47.** 🚀 **PROD v0.4.2 — self-service "create your first event" now LIVE.** (v0.4.0 cutover → v0.4.1 auth front-door → v0.4.2 self-service hosting; staging decommissioned.) Prod is the only environment. **LAUNCH TARGET: 2026-06-10.**
+**Last update:** 2026-06-04 — **Day 47.** 🚀 **PROD v0.4.3 — full self-serve loop LIVE: sign up → create → publish → share.** (v0.4.0 cutover → v0.4.1 auth front-door → v0.4.2 self-service create → v0.4.3 publish+share manage hub; staging decommissioned.) Prod is the only environment. **LAUNCH TARGET: 2026-06-10.**
 **Driver:** Claude Code (Opus 4.8). **🛑 $30/mo AWS ceiling (got ~$25/mo back from killing staging).**
 
 ## ✅ Prod is live on v0.4.1 (commit 3fef86c) — auth front-door fixed
@@ -15,7 +15,13 @@ Operator hit "nothing works / can't tell how to log in." Diagnosed: the engine w
 
 A new user can now sign up + log in → `/choose-tenant` → **"Create your first event"** → `POST /my/hosting/start` auto-provisions their **personal tenant** (`ensurePersonalTenant`: type=individual, is_personal, owner, status=active so free hosting needs no KYC §13.5) + enters its context → `/events/new` (renders the existing `EventForm`) → `POST /tenant/events` → event's tickets page. Dashboard has "+ Create event"; existing-tenant users get "+ Host a new event". Verified on prod: `/my/hosting/start`→401(gated), `/events/new`→200. DB-gated CI test covers the provisioning.
 
-**Still MVP-shaped (next polish, NOT blocking):** after creating a DRAFT event there's no slick publish/share UI in the self-serve path yet (publish endpoint exists: `POST /tenant/events/:id/publish`); add-paid-tier → KYC gate is the §13.4 graduation flow. The core 404 dead-end is gone — a user can create an event end-to-end. **Operator should live-test** (needs their inbox for the magic link).
+### ✅ NEW (v0.4.3) — publish + share manage hub (loop complete)
+
+Create now lands on **`/events/[eventId]`** (the manage hub, `EventManage` component): **Publish** (draft→published via `POST /tenant/events/:id/transition {to:'published'}`, free = no KYC) → once live, the **public share URL** `eventpulse.com.bd/{tenantSlug}/{eventSlug}` (slug from `GET /tenant/me` → `data.tenant.slug`) with Copy link + View page (the existing `(public)/[tenant]/[event]` landing page is the target). Cards to Tickets/Attendees/Check-in. TDD'd (`event-manage.test.tsx`). Verified on prod: `/events/[id]`→200, commit `21c354c`.
+
+**Full organiser journey now exists end-to-end, no admin:** sign up → create → publish → share a working public link.
+
+**Still next polish (NOT blocking launch):** add-paid-tier → KYC graduation (§13.4); richer event-edit; an events LIST page (dashboard + manage-hub are the only entry points to an event today — no "all my events" list yet). **Operator should live-test the loop** (needs their inbox for the magic link).
 
 ## ✅ (from v0.4.0) — cutover baseline
 
