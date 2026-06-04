@@ -50,6 +50,7 @@ const KYC_LABEL: Record<string, string> = {
 export function ChooseTenant() {
   const [state, setState] = useState<State>({ kind: 'loading' })
   const [switchingId, setSwitchingId] = useState<string | null>(null)
+  const [hosting, setHosting] = useState(false)
 
   useEffect(() => {
     void (async () => {
@@ -92,6 +93,27 @@ export function ChooseTenant() {
     }
   }
 
+  // Start hosting: provision the caller's personal tenant (idempotent) + enter
+  // its context, then land on the create-event page.
+  async function startHosting() {
+    setHosting(true)
+    try {
+      const res = await fetch(`${apiBase()}/api/v1/my/hosting/start`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      if (res.ok) {
+        window.location.assign('/events/new')
+        return
+      }
+      setHosting(false)
+      setState({ kind: 'error', message: 'Could not start hosting. Please try again.' })
+    } catch {
+      setHosting(false)
+      setState({ kind: 'error', message: 'Network error. Please try again.' })
+    }
+  }
+
   return (
     <GlassCard variant="strong" className="w-full max-w-md rounded-3xl p-8 sm:p-10">
       <header className="text-center">
@@ -127,14 +149,16 @@ export function ChooseTenant() {
         {state.kind === 'ready' && state.contexts.length === 0 && (
           <div className="text-center">
             <p className="text-ep-graphite text-sm">
-              You’re signed in, but you don’t host any events yet.
+              You’re signed in. Ready to host your first event?
             </p>
-            <Link
-              href="/"
-              className="bg-ep-violet mt-6 inline-flex h-11 items-center rounded-md px-6 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg"
+            <button
+              type="button"
+              onClick={() => void startHosting()}
+              disabled={hosting}
+              className="bg-ep-violet mt-6 inline-flex h-11 items-center rounded-md px-6 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Host an event
-            </Link>
+              {hosting ? 'Setting up…' : 'Create your first event'}
+            </button>
           </div>
         )}
 
@@ -164,6 +188,16 @@ export function ChooseTenant() {
                 </button>
               </li>
             ))}
+            <li>
+              <button
+                type="button"
+                onClick={() => void startHosting()}
+                disabled={hosting || switchingId !== null}
+                className="text-ep-violet w-full rounded-lg px-4 py-2 text-center text-sm font-medium hover:underline disabled:opacity-60"
+              >
+                {hosting ? 'Setting up…' : '+ Host a new event'}
+              </button>
+            </li>
           </ul>
         )}
       </div>

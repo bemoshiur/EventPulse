@@ -75,10 +75,21 @@ describe('ChooseTenant', () => {
     expect(await axe(container)).toHaveNoViolations()
   })
 
-  it('shows the empty state when the user has no tenants', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonRes(200, { data: { contexts: [] } })))
+  it('empty state offers "Create your first event" (starts hosting → /events/new)', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonRes(200, { data: { contexts: [] } })) // GET load
+      .mockResolvedValueOnce(jsonRes(200, { data: { tenantId: TENANT_A, slug: 'me' } })) // POST start
+    vi.stubGlobal('fetch', fetchMock)
     render(<ChooseTenant />)
-    expect(await screen.findByText(/don’t host any events yet/i)).toBeInTheDocument()
+
+    const cta = await screen.findByRole('button', { name: /create your first event/i })
+    await userEvent.click(cta)
+
+    await waitFor(() => expect(assignSpy).toHaveBeenCalledWith('/events/new'))
+    const [url, opts] = fetchMock.mock.calls[1]!
+    expect(String(url)).toContain('/api/v1/my/hosting/start')
+    expect(opts).toMatchObject({ method: 'POST', credentials: 'include' })
   })
 
   it('selecting a tenant POSTs the switch then navigates to /dashboard', async () => {

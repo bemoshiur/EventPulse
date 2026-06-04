@@ -29,6 +29,7 @@ import { eventsRoutes } from './routes/tenant/events.js'
 import { kycDraftRoutes } from './routes/tenant/kyc-drafts.js'
 import { kycRoutes } from './routes/tenant/kyc.js'
 import { myContextsRoutes } from './routes/my/contexts.js'
+import { myHostingRoutes } from './routes/my/hosting.js'
 import { meRoutes } from './routes/tenant/me.js'
 import { tenantReportsRoutes } from './routes/tenant/reports.js'
 import { tenantOrderRefundRoutes, tenantRefundRoutes } from './routes/tenant/refunds.js'
@@ -147,6 +148,9 @@ export function createApp() {
   // requireUser (any audience) inside the router; the switch route re-checks
   // tenant_users membership before minting a tenant session.
   app.route('/api/v1/my/contexts', myContextsRoutes)
+  // Self-service hosting (§10.3) — POST /start provisions the caller's personal
+  // tenant + enters its tenant context. Same /my namespace (attendee-context caller).
+  app.route('/api/v1/my/hosting', myHostingRoutes)
   app.route('/api/v1/tenant/me', meRoutes)
   app.route('/api/v1/tenant/account-type', accountTypeRoutes)
   app.route('/api/v1/tenant/kyc', kycRoutes)

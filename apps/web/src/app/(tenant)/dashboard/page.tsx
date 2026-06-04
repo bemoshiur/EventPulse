@@ -17,17 +17,27 @@
  * is the expected look on a fresh tenant.
  */
 
+import Link from 'next/link'
+
 import { SalesDashboard } from '@/components/tenant/sales-dashboard'
 
 export default function TenantDashboardPage() {
   return (
     <div className="space-y-8 text-white">
-      <header>
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <p className="mt-2 text-base text-white/70">
-          Sales performance across your events — gross, net to you, tickets sold, and the last 30
-          days at a glance.
-        </p>
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <p className="mt-2 text-base text-white/70">
+            Sales performance across your events — gross, net to you, tickets sold, and the last 30
+            days at a glance.
+          </p>
+        </div>
+        <Link
+          href="/events/new"
+          className="bg-ep-violet inline-flex h-11 shrink-0 items-center rounded-md px-5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+        >
+          + Create event
+        </Link>
       </header>
       <SalesDashboard />
     </div>
