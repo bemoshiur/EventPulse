@@ -217,7 +217,9 @@ export default function FeaturesPage() {
             <div className="grid gap-5 md:grid-cols-2">
               {section.features.map((feature) => (
                 <GlassCard key={feature.title} className="p-7">
-                  <h3 className="text-base font-semibold text-[var(--color-mkt-ink)]">{feature.title}</h3>
+                  <h3 className="text-base font-semibold text-[var(--color-mkt-ink)]">
+                    {feature.title}
+                  </h3>
                   <p className="mt-2 text-sm leading-relaxed text-[var(--color-mkt-slate)]">
                     {feature.body}
                   </p>

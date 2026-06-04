@@ -77,7 +77,9 @@ export default function ContactPage() {
               </GlassCard>
 
               <GlassCard className="p-6">
-                <h3 className="text-sm font-semibold text-[var(--color-mkt-ink)]">Response times</h3>
+                <h3 className="text-sm font-semibold text-[var(--color-mkt-ink)]">
+                  Response times
+                </h3>
                 <ul className="mt-3 space-y-2 text-sm text-[var(--color-mkt-slate)]">
                   <li>Support &mdash; within 24 hours</li>
                   <li>Sales &mdash; within 1 business day</li>

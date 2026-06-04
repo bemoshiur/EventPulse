@@ -228,7 +228,9 @@ export default function PricingPage() {
             </GlassCard>
 
             <GlassCard className="p-6">
-              <h3 className="text-sm font-semibold text-[var(--color-mkt-ink)]">When do I get paid?</h3>
+              <h3 className="text-sm font-semibold text-[var(--color-mkt-ink)]">
+                When do I get paid?
+              </h3>
               <p className="mt-2 text-sm leading-relaxed text-[var(--color-mkt-slate)]">
                 T+5 business days. Net proceeds settle to your bank account at launch. bKash, Nagad,
                 Rocket, and Upay payout adapters arrive in Phase 2.

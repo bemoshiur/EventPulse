@@ -54,7 +54,9 @@ function Section({
       <p className="text-xs font-semibold tracking-widest text-[var(--color-mkt-red)] uppercase">
         {eyebrow}
       </p>
-      <h2 className="mt-2 text-2xl font-semibold text-[var(--color-mkt-ink)] md:text-3xl">{title}</h2>
+      <h2 className="mt-2 text-2xl font-semibold text-[var(--color-mkt-ink)] md:text-3xl">
+        {title}
+      </h2>
       <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--color-mkt-slate)]">
         {intro}
       </p>
@@ -68,7 +70,9 @@ function Section({
             >
               <GlassCard className="h-full p-5">
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-base font-semibold text-[var(--color-mkt-ink)]">{row.title}</h3>
+                  <h3 className="text-base font-semibold text-[var(--color-mkt-ink)]">
+                    {row.title}
+                  </h3>
                   {row.currentVersion.isDraft ? (
                     <span className="rounded-full bg-[var(--ep-amber)]/15 px-2 py-0.5 text-xs font-medium text-[var(--ep-amber)]">
                       Draft
