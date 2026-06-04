@@ -1,6 +1,6 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-06-04 — **Day 47.** 🚀 **PROD CUTOVER (v0.4.0) → v0.4.1 (auth front-door fix) + STAGING DECOMMISSIONED.** Prod is the only environment. **LAUNCH TARGET: 2026-06-10.**
+**Last update:** 2026-06-04 — **Day 47.** 🚀 **PROD v0.4.2 — self-service "create your first event" now LIVE.** (v0.4.0 cutover → v0.4.1 auth front-door → v0.4.2 self-service hosting; staging decommissioned.) Prod is the only environment. **LAUNCH TARGET: 2026-06-10.**
 **Driver:** Claude Code (Opus 4.8). **🛑 $30/mo AWS ceiling (got ~$25/mo back from killing staging).**
 
 ## ✅ Prod is live on v0.4.1 (commit 3fef86c) — auth front-door fixed
@@ -11,8 +11,11 @@ Operator hit "nothing works / can't tell how to log in." Diagnosed: the engine w
 - Sign-in ↔ sign-up cross-links fixed; favicon added (`app/icon.svg`).
 - **Login map:** admin = `app.eventpulse.com.bd/admin-sign-in`; organiser/tenant = `/sign-in`; new = `/sign-up`. All email-magic-link only.
 
-### ⚠️ Still unbuilt (honest gap): self-service "create your first event"
-A NEW user can now sign up + log in, but lands on `/choose-tenant` EMPTY ("Host an event" → just `/`). The §2.4 Path-A self-service hosting (personal-tenant auto-provision + `hosting/new` event-create UI) is **Phase 2 and NOT built**. Marketing still advertises "create your first event in 90 seconds" — that flow doesn't exist yet. Realistic launch model = admin onboards organisers; they log in. **Building self-service create-first-event is the next real feature.**
+### ✅ NEW (v0.4.2) — self-service "create your first event" is BUILT (§2.4 Path A)
+
+A new user can now sign up + log in → `/choose-tenant` → **"Create your first event"** → `POST /my/hosting/start` auto-provisions their **personal tenant** (`ensurePersonalTenant`: type=individual, is_personal, owner, status=active so free hosting needs no KYC §13.5) + enters its context → `/events/new` (renders the existing `EventForm`) → `POST /tenant/events` → event's tickets page. Dashboard has "+ Create event"; existing-tenant users get "+ Host a new event". Verified on prod: `/my/hosting/start`→401(gated), `/events/new`→200. DB-gated CI test covers the provisioning.
+
+**Still MVP-shaped (next polish, NOT blocking):** after creating a DRAFT event there's no slick publish/share UI in the self-serve path yet (publish endpoint exists: `POST /tenant/events/:id/publish`); add-paid-tier → KYC gate is the §13.4 graduation flow. The core 404 dead-end is gone — a user can create an event end-to-end. **Operator should live-test** (needs their inbox for the magic link).
 
 ## ✅ (from v0.4.0) — cutover baseline
 
