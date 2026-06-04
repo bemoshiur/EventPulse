@@ -3,6 +3,15 @@
 **Last update:** 2026-06-04 — **Day 47.** 🚀 **PROD v0.4.3 — full self-serve loop LIVE: sign up → create → publish → share.** (v0.4.0 cutover → v0.4.1 auth front-door → v0.4.2 self-service create → v0.4.3 publish+share manage hub; staging decommissioned.) Prod is the only environment. **LAUNCH TARGET: 2026-06-10.**
 **Driver:** Claude Code (Opus 4.8). **🛑 $30/mo AWS ceiling (got ~$25/mo back from killing staging).**
 
+## ⏸️ NEXT SESSION — marketing-site refresh (in flight, paused mid-task)
+
+Operator asked: make the marketing site look like **tenderpulse.com.bd** (a rich, content-dense, bilingual EN+বাংলা SaaS site) — home + **every detail page, full of content**. Studied the reference (structure: hero → trust logos → problem → platform → use-cases → security → workflow → stats → pricing → FAQ → CTA → deep footer; light/white theme, Hind Siliguri, eyebrow labels, red-orange CTA).
+
+- **DONE: home page rebuilt** (`apps/web/src/app/page.tsx`) — TenderPulse-grade, bilingual, content-rich (hero → sector trust-bar → problem(3) → pillars(3) → use-cases(6) → how-it-works(3) → money/trust + settlement-preview card → stats band → testimonial → pricing teaser → FAQ `<details>` → CTA). Fixed stale "Google/Apple sign-up" copy. Verified in a real browser (looks great). On branch **`feat/marketing-refresh`**, **PR #305 OPEN** (CI was mid-flight; **NOT merged, NOT deployed** — prod still v0.4.3, clean).
+- **Operator decisions (locked):** (1) **deploy the home now as v0.4.4** so they can see it live → first action next session: get #305 green, merge, deploy-prod v0.4.4 (operator already authorized this deploy). (2) **full TenderPulse-style rewrite of ALL detail pages** — `/features` (202-line base), `/pricing` (284-line base), `/trust` landing, `/contact`, + use-cases content — each rich + bilingual + gradient-mesh hero + per-page FAQ to match the home's depth.
+- **Reusable bits:** `Bn` bilingual span pattern (`font-[family-name:var(--font-bangla)]`), `Eyebrow`, GradientMesh + GlassCard, `--ep-*` tokens, `ep-reveal`/`text-hero`/`ep-gradient-text` utilities. Detail pages currently lack GradientMesh — add for visual consistency.
+- **Resume:** `git checkout feat/marketing-refresh` (home commit is here) OR if #305 got merged, branch fresh from main. Deploy v0.4.4 first, then detail-page rewrites.
+
 ## ✅ Prod is live on v0.4.1 (commit 3fef86c) — auth front-door fixed
 
 Operator hit "nothing works / can't tell how to log in." Diagnosed: the engine was fine (CORS + login endpoint + email all verified live); the FRONT-END entry was broken. Fixed + deployed v0.4.1 (#299), browser-verified on prod:
