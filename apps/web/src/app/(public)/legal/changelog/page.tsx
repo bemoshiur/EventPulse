@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
-import { GlassCard } from '@/components/ui/glass-card'
 import { MarketingFooter } from '@/components/marketing/marketing-footer'
 import { MarketingNavbar } from '@/components/marketing/marketing-navbar'
 import { fetchChangelogIndex } from '@/lib/changelog'
@@ -15,17 +14,17 @@ export const metadata: Metadata = {
 }
 
 const CATEGORY_STYLES: Record<string, { label: string; class: string }> = {
-  feature: { label: 'Feature', class: 'bg-[var(--ep-violet)]/15 text-[var(--ep-violet)]' },
+  feature: { label: 'Feature', class: 'bg-mkt-red/15 text-mkt-red' },
   improvement: {
     label: 'Improvement',
-    class: 'bg-[var(--ep-cerulean)]/15 text-[var(--ep-cerulean)]',
+    class: 'bg-[var(--mkt-red)]/15 text-mkt-red',
   },
-  fix: { label: 'Fix', class: 'bg-[var(--ep-mint)]/15 text-[var(--ep-mint)]' },
-  breaking: { label: 'Breaking', class: 'bg-[var(--ep-rose)]/15 text-[var(--ep-rose)]' },
-  security: { label: 'Security', class: 'bg-[var(--ep-amber)]/15 text-[var(--ep-amber)]' },
+  fix: { label: 'Fix', class: 'bg-[var(--emerald-600)]/15 text-emerald-600' },
+  breaking: { label: 'Breaking', class: 'bg-[var(--mkt-red)]/15 text-mkt-red' },
+  security: { label: 'Security', class: 'bg-[var(--ep-amber)]/15 text-mkt-red' },
   deprecation: {
     label: 'Deprecation',
-    class: 'bg-[var(--ep-graphite)]/15 text-[var(--ep-graphite)]',
+    class: 'bg-[var(--color-mkt-slate)]/15 text-mkt-slate',
   },
 }
 
@@ -44,13 +43,11 @@ export default async function ChangelogIndexPage() {
 
       <section className="relative">
         <div className="mx-auto max-w-3xl px-6 py-16 text-center md:py-24">
-          <p className="text-xs font-semibold tracking-widest text-[var(--ep-violet)] uppercase">
-            Changelog
-          </p>
-          <h1 className="font-display mt-3 text-3xl font-semibold text-[var(--ep-ink)] md:text-5xl">
+          <p className="text-mkt-red text-xs font-semibold tracking-widest uppercase">Changelog</p>
+          <h1 className="text-mkt-ink mt-3 text-3xl font-semibold md:text-5xl">
             What&rsquo;s shipped.
           </h1>
-          <p className="mt-4 text-base leading-relaxed text-[var(--ep-graphite)]">
+          <p className="text-mkt-slate mt-4 text-base leading-relaxed">
             Every release of Event Pulse, in reverse chronological order. Features, improvements,
             fixes, security updates &mdash; transparent and dated.
           </p>
@@ -61,12 +58,12 @@ export default async function ChangelogIndexPage() {
         <section className="relative">
           <div className="mx-auto max-w-5xl px-6 pb-8">
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-xs text-[var(--ep-graphite)]">Browse by version:</span>
+              <span className="text-mkt-slate text-xs">Browse by version:</span>
               {versions.map((v) => (
                 <Link
                   key={v}
                   href={`/legal/changelog/v/${v}`}
-                  className="inline-flex h-8 items-center rounded-full bg-[var(--ep-paper)]/70 px-3 text-xs font-semibold text-[var(--ep-ink)] backdrop-blur transition hover:bg-[var(--ep-violet)]/10 hover:text-[var(--ep-violet)]"
+                  className="text-mkt-ink hover:bg-mkt-red/10 hover:text-mkt-red inline-flex h-8 items-center rounded-full bg-white/70 px-3 text-xs font-semibold backdrop-blur transition"
                 >
                   v{v}
                 </Link>
@@ -79,33 +76,29 @@ export default async function ChangelogIndexPage() {
       <section className="relative">
         <div className="mx-auto max-w-3xl px-6 pb-24">
           {items.length === 0 ? (
-            <GlassCard className="p-10 text-center">
-              <p className="text-sm text-[var(--ep-graphite)]">
-                Nothing to show yet. Check back soon.
-              </p>
-            </GlassCard>
+            <div className="mkt-card p-10 text-center">
+              <p className="text-mkt-slate text-sm">Nothing to show yet. Check back soon.</p>
+            </div>
           ) : (
             <ul className="space-y-6">
               {items.map((item) => {
                 const cat = CATEGORY_STYLES[item.category] ?? CATEGORY_STYLES.feature!
                 return (
                   <li key={item.slug}>
-                    <GlassCard className="p-7">
+                    <div className="mkt-card p-7">
                       <div className="flex items-center gap-3">
                         <span
                           className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${cat.class}`}
                         >
                           {cat.label}
                         </span>
-                        <span className="text-xs text-[var(--ep-graphite)]">
+                        <span className="text-mkt-slate text-xs">
                           v{item.version} &middot; {formatDate(item.publishedAt)}
                         </span>
                       </div>
-                      <h2 className="mt-3 text-lg font-semibold text-[var(--ep-ink)]">
-                        {item.title}
-                      </h2>
+                      <h2 className="text-mkt-ink mt-3 text-lg font-semibold">{item.title}</h2>
                       <ChangelogBody html={item.bodyHtml} />
-                    </GlassCard>
+                    </div>
                   </li>
                 )
               })}
@@ -138,7 +131,7 @@ export default async function ChangelogIndexPage() {
 function ChangelogBody({ html }: { html: string }) {
   return (
     <div
-      className="prose-changelog mt-3 text-sm leading-relaxed text-[var(--ep-graphite)]"
+      className="prose-changelog text-mkt-slate mt-3 text-sm leading-relaxed"
       // eslint-disable-next-line react/no-danger -- see ChangelogBody jsdoc; security boundary is the seed-time sanitizer
       dangerouslySetInnerHTML={{ __html: html }}
     />

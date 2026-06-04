@@ -15,7 +15,6 @@ import { Suspense, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
-import { GlassCard } from '@/components/ui/glass-card'
 import { consumeErrorMessage, consumeHomePath } from '@/lib/auth-portal'
 
 function apiBase(): string {
@@ -63,26 +62,24 @@ function MagicConsume() {
   }, [params])
 
   return (
-    <GlassCard variant="strong" className="w-full max-w-md rounded-3xl p-8 text-center sm:p-10">
-      <h1 className="font-display text-ep-ink text-2xl font-semibold tracking-tight">
-        Event Pulse
-      </h1>
+    <div className="mkt-card w-full max-w-md rounded-3xl p-8 text-center sm:p-10">
+      <h1 className="text-mkt-ink text-2xl font-semibold tracking-tight">Event Pulse</h1>
       {state.kind === 'loading' ? (
-        <p className="text-ep-graphite mt-4 text-sm">Signing you in…</p>
+        <p className="text-mkt-slate mt-4 text-sm">Signing you in…</p>
       ) : (
         <div className="mt-4">
-          <p role="alert" className="text-ep-rose text-sm">
+          <p role="alert" className="text-mkt-red text-sm">
             {state.message}
           </p>
           <Link
             href="/sign-in"
-            className="text-ep-violet mt-6 inline-block text-sm font-semibold hover:underline"
+            className="text-mkt-red mt-6 inline-block text-sm font-semibold hover:underline"
           >
             Back to sign in
           </Link>
         </div>
       )}
-    </GlassCard>
+    </div>
   )
 }
 
@@ -90,9 +87,9 @@ export default function MagicConsumePage() {
   return (
     <Suspense
       fallback={
-        <GlassCard variant="strong" className="w-full max-w-md rounded-3xl p-8 text-center sm:p-10">
-          <p className="text-ep-graphite text-sm">Loading…</p>
-        </GlassCard>
+        <div className="mkt-card w-full max-w-md rounded-3xl p-8 text-center sm:p-10">
+          <p className="text-mkt-slate text-sm">Loading…</p>
+        </div>
       }
     >
       <MagicConsume />

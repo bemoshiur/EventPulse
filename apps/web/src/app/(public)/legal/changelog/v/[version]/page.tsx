@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { GlassCard } from '@/components/ui/glass-card'
 import { MarketingFooter } from '@/components/marketing/marketing-footer'
 import { MarketingNavbar } from '@/components/marketing/marketing-navbar'
 import { fetchChangelogByVersion } from '@/lib/changelog'
@@ -14,17 +13,17 @@ interface Props {
 }
 
 const CATEGORY_STYLES: Record<string, { label: string; class: string }> = {
-  feature: { label: 'Feature', class: 'bg-[var(--ep-violet)]/15 text-[var(--ep-violet)]' },
+  feature: { label: 'Feature', class: 'bg-mkt-red/15 text-mkt-red' },
   improvement: {
     label: 'Improvement',
-    class: 'bg-[var(--ep-cerulean)]/15 text-[var(--ep-cerulean)]',
+    class: 'bg-[var(--mkt-red)]/15 text-mkt-red',
   },
-  fix: { label: 'Fix', class: 'bg-[var(--ep-mint)]/15 text-[var(--ep-mint)]' },
-  breaking: { label: 'Breaking', class: 'bg-[var(--ep-rose)]/15 text-[var(--ep-rose)]' },
-  security: { label: 'Security', class: 'bg-[var(--ep-amber)]/15 text-[var(--ep-amber)]' },
+  fix: { label: 'Fix', class: 'bg-[var(--emerald-600)]/15 text-emerald-600' },
+  breaking: { label: 'Breaking', class: 'bg-[var(--mkt-red)]/15 text-mkt-red' },
+  security: { label: 'Security', class: 'bg-[var(--ep-amber)]/15 text-mkt-red' },
   deprecation: {
     label: 'Deprecation',
-    class: 'bg-[var(--ep-graphite)]/15 text-[var(--ep-graphite)]',
+    class: 'bg-[var(--color-mkt-slate)]/15 text-mkt-slate',
   },
 }
 
@@ -54,15 +53,9 @@ export default async function ChangelogVersionPage({ params }: Props) {
 
       <section className="relative">
         <div className="mx-auto max-w-3xl px-6 py-16 text-center md:py-24">
-          <p className="text-xs font-semibold tracking-widest text-[var(--ep-violet)] uppercase">
-            Changelog
-          </p>
-          <h1 className="font-display mt-3 text-3xl font-semibold text-[var(--ep-ink)] md:text-5xl">
-            v{version}
-          </h1>
-          <p className="mt-3 text-sm text-[var(--ep-graphite)]">
-            {formatDate(items[0]!.publishedAt)}
-          </p>
+          <p className="text-mkt-red text-xs font-semibold tracking-widest uppercase">Changelog</p>
+          <h1 className="text-mkt-ink mt-3 text-3xl font-semibold md:text-5xl">v{version}</h1>
+          <p className="text-mkt-slate mt-3 text-sm">{formatDate(items[0]!.publishedAt)}</p>
         </div>
       </section>
 
@@ -73,7 +66,7 @@ export default async function ChangelogVersionPage({ params }: Props) {
               const cat = CATEGORY_STYLES[item.category] ?? CATEGORY_STYLES.feature!
               return (
                 <li key={item.slug}>
-                  <GlassCard className="p-7">
+                  <div className="mkt-card p-7">
                     <div className="flex items-center gap-3">
                       <span
                         className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${cat.class}`}
@@ -81,21 +74,16 @@ export default async function ChangelogVersionPage({ params }: Props) {
                         {cat.label}
                       </span>
                     </div>
-                    <h2 className="mt-3 text-lg font-semibold text-[var(--ep-ink)]">
-                      {item.title}
-                    </h2>
+                    <h2 className="text-mkt-ink mt-3 text-lg font-semibold">{item.title}</h2>
                     <ChangelogBody html={item.bodyHtml} />
-                  </GlassCard>
+                  </div>
                 </li>
               )
             })}
           </ul>
 
           <div className="mt-10 text-center">
-            <Link
-              href="/legal/changelog"
-              className="text-sm text-[var(--ep-violet)] hover:underline"
-            >
+            <Link href="/legal/changelog" className="text-mkt-red text-sm hover:underline">
               ← All releases
             </Link>
           </div>
@@ -118,7 +106,7 @@ export default async function ChangelogVersionPage({ params }: Props) {
 function ChangelogBody({ html }: { html: string }) {
   return (
     <div
-      className="prose-changelog mt-3 text-sm leading-relaxed text-[var(--ep-graphite)]"
+      className="prose-changelog text-mkt-slate mt-3 text-sm leading-relaxed"
       // eslint-disable-next-line react/no-danger -- body_html sanitized at seed/publish time via shared renderer
       dangerouslySetInnerHTML={{ __html: html }}
     />

@@ -18,8 +18,6 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
-import { GlassCard } from '@/components/ui/glass-card'
-
 function apiBase(): string {
   const fromEnv = process.env['NEXT_PUBLIC_API_BASE_URL']
   return fromEnv && fromEnv.length > 0 ? fromEnv.replace(/\/$/, '') : ''
@@ -115,31 +113,29 @@ export function ChooseTenant() {
   }
 
   return (
-    <GlassCard variant="strong" className="w-full max-w-md rounded-3xl p-8 sm:p-10">
+    <div className="mkt-card w-full max-w-md rounded-3xl p-8 sm:p-10">
       <header className="text-center">
-        <h1 className="font-display text-ep-ink text-2xl font-semibold tracking-tight">
-          Choose a space
-        </h1>
-        <p className="text-ep-graphite mt-2 text-sm">
+        <h1 className="text-mkt-ink text-2xl font-semibold tracking-tight">Choose a space</h1>
+        <p className="text-mkt-slate mt-2 text-sm">
           Pick which organiser account you want to work in.
         </p>
       </header>
 
       <div className="mt-8">
         {state.kind === 'loading' && (
-          <p role="status" className="text-ep-graphite text-center text-sm">
+          <p role="status" className="text-mkt-slate text-center text-sm">
             Loading your spaces…
           </p>
         )}
 
         {state.kind === 'error' && (
           <div className="text-center">
-            <p role="alert" className="text-ep-rose text-sm">
+            <p role="alert" className="text-mkt-red text-sm">
               {state.message}
             </p>
             <Link
               href="/sign-in"
-              className="text-ep-violet mt-6 inline-block text-sm font-semibold hover:underline"
+              className="text-mkt-red mt-6 inline-block text-sm font-semibold hover:underline"
             >
               Back to sign in
             </Link>
@@ -148,14 +144,14 @@ export function ChooseTenant() {
 
         {state.kind === 'ready' && state.contexts.length === 0 && (
           <div className="text-center">
-            <p className="text-ep-graphite text-sm">
+            <p className="text-mkt-slate text-sm">
               You’re signed in. Ready to host your first event?
             </p>
             <button
               type="button"
               onClick={() => void startHosting()}
               disabled={hosting}
-              className="bg-ep-violet mt-6 inline-flex h-11 items-center rounded-md px-6 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
+              className="bg-mkt-red mt-6 inline-flex h-11 items-center rounded-md px-6 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
             >
               {hosting ? 'Setting up…' : 'Create your first event'}
             </button>
@@ -170,19 +166,19 @@ export function ChooseTenant() {
                   type="button"
                   onClick={() => void choose(ctx.id)}
                   disabled={switchingId !== null}
-                  className="border-ep-line hover:border-ep-violet flex w-full items-center justify-between rounded-lg border bg-white/60 px-4 py-3 text-left backdrop-blur transition hover:-translate-y-0.5 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+                  className="border-mkt-line hover:border-mkt-red flex w-full items-center justify-between rounded-lg border bg-white/60 px-4 py-3 text-left backdrop-blur transition hover:-translate-y-0.5 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <span className="min-w-0">
-                    <span className="text-ep-ink block truncate text-sm font-semibold">
+                    <span className="text-mkt-ink block truncate text-sm font-semibold">
                       {ctx.name}
                     </span>
-                    <span className="text-ep-graphite block truncate text-xs">
+                    <span className="text-mkt-slate block truncate text-xs">
                       @{ctx.slug}
                       {ctx.isPersonal ? ' · Personal' : ''} ·{' '}
                       {KYC_LABEL[ctx.kycStatus] ?? ctx.kycStatus}
                     </span>
                   </span>
-                  <span className="text-ep-violet ml-3 shrink-0 text-sm" aria-hidden="true">
+                  <span className="text-mkt-red ml-3 shrink-0 text-sm" aria-hidden="true">
                     {switchingId === ctx.id ? '…' : '→'}
                   </span>
                 </button>
@@ -193,7 +189,7 @@ export function ChooseTenant() {
                 type="button"
                 onClick={() => void startHosting()}
                 disabled={hosting || switchingId !== null}
-                className="text-ep-violet w-full rounded-lg px-4 py-2 text-center text-sm font-medium hover:underline disabled:opacity-60"
+                className="text-mkt-red w-full rounded-lg px-4 py-2 text-center text-sm font-medium hover:underline disabled:opacity-60"
               >
                 {hosting ? 'Setting up…' : '+ Host a new event'}
               </button>
@@ -201,7 +197,7 @@ export function ChooseTenant() {
           </ul>
         )}
       </div>
-    </GlassCard>
+    </div>
   )
 }
 

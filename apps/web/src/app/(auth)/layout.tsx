@@ -1,5 +1,3 @@
-import { GradientMesh } from '@/components/ui/gradient-mesh'
-
 /**
  * Auth pages are rendered per-request (never statically cached). Without this,
  * Next prerenders the login shells with `s-maxage=1y`, so a browser/CDN can pin
@@ -12,8 +10,7 @@ export const dynamic = 'force-dynamic'
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <main className="relative min-h-screen">
-      <GradientMesh variant="calm" />
+    <main className="mkt-hero text-mkt-ink relative min-h-screen font-[family-name:var(--font-bangla)]">
       <div className="mx-auto flex min-h-screen items-center justify-center px-4 py-12">
         {children}
       </div>

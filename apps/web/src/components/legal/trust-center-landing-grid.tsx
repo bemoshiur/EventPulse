@@ -9,6 +9,7 @@
  * Server-only.
  */
 
+import { GlassCard } from '@/components/ui/glass-card'
 import type { LegalDocumentLandingRow } from '@/lib/legal'
 
 interface Props {
@@ -50,9 +51,13 @@ function Section({
 }) {
   return (
     <section>
-      <p className="text-mkt-red text-xs font-semibold tracking-widest uppercase">{eyebrow}</p>
-      <h2 className="text-mkt-ink mt-2 text-2xl font-semibold md:text-3xl">{title}</h2>
-      <p className="text-mkt-slate mt-3 max-w-2xl text-sm leading-relaxed">{intro}</p>
+      <p className="text-xs font-semibold tracking-widest text-[var(--color-mkt-red)] uppercase">
+        {eyebrow}
+      </p>
+      <h2 className="mt-2 text-2xl font-semibold text-[var(--mkt-ink)] md:text-3xl">{title}</h2>
+      <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--color-mkt-slate)]">
+        {intro}
+      </p>
 
       <ul className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {rows.map((row) => (
@@ -61,18 +66,22 @@ function Section({
               href={row.canonicalUrlPath}
               className="block transition hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
             >
-              <div className="mkt-card h-full p-5">
+              <GlassCard className="h-full p-5">
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-mkt-ink text-base font-semibold">{row.title}</h3>
+                  <h3 className="text-base font-semibold text-[var(--mkt-ink)]">{row.title}</h3>
                   {row.currentVersion.isDraft ? (
-                    <span className="bg-mkt-red/10 text-mkt-red rounded-full px-2 py-0.5 text-xs font-medium">
+                    <span className="rounded-full bg-[var(--ep-amber)]/15 px-2 py-0.5 text-xs font-medium text-[var(--ep-amber)]">
                       Draft
                     </span>
                   ) : null}
                 </div>
-                <p className="text-mkt-slate mt-2 text-sm leading-relaxed">{row.oneLiner}</p>
-                <p className="text-mkt-slate mt-3 text-xs">Version {row.currentVersion.version}</p>
-              </div>
+                <p className="mt-2 text-sm leading-relaxed text-[var(--color-mkt-slate)]">
+                  {row.oneLiner}
+                </p>
+                <p className="mt-3 text-xs text-[var(--color-mkt-slate)]">
+                  Version {row.currentVersion.version}
+                </p>
+              </GlassCard>
             </a>
           </li>
         ))}

@@ -15,9 +15,9 @@ const TOPICS = [
 type Status = 'idle' | 'submitting' | 'submitted' | 'error' | 'rate_limited'
 
 const inputBase =
-  'mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-[var(--ep-paper)]/80 px-3 py-2 text-sm text-[var(--ep-ink)] backdrop-blur placeholder:text-[var(--ep-graphite)]/60 focus:border-[var(--ep-violet)] focus:outline-none focus:ring-2 focus:ring-[var(--ep-violet)]/30'
+  'mt-1 block w-full rounded-md border border-mkt-line bg-white/80 px-3 py-2 text-sm text-mkt-ink backdrop-blur placeholder:text-mkt-slate/60 focus:border-[var(--color-mkt-red)] focus:outline-none focus:ring-2 focus:ring-[var(--color-mkt-red)]/30'
 
-const labelBase = 'text-xs font-semibold text-[var(--ep-ink)]'
+const labelBase = 'text-xs font-semibold text-mkt-ink'
 
 export function ContactForm() {
   const [status, setStatus] = useState<Status>('idle')
@@ -61,9 +61,9 @@ export function ContactForm() {
 
   if (status === 'submitted') {
     return (
-      <div role="status" className="rounded-lg bg-[var(--ep-mint)]/10 px-6 py-8 text-center">
-        <h3 className="text-base font-semibold text-[var(--ep-ink)]">Message sent.</h3>
-        <p className="mt-2 text-sm leading-relaxed text-[var(--ep-graphite)]">
+      <div role="status" className="rounded-lg bg-[var(--emerald-600)]/10 px-6 py-8 text-center">
+        <h3 className="text-mkt-ink text-base font-semibold">Message sent.</h3>
+        <p className="text-mkt-slate mt-2 text-sm leading-relaxed">
           We&rsquo;ll respond within 24 hours for support, 72 hours for security disclosures. Thank
           you for reaching out.
         </p>
@@ -76,13 +76,13 @@ export function ContactForm() {
       <div className="grid gap-5 md:grid-cols-2">
         <div>
           <label htmlFor="name" className={labelBase}>
-            Name <span className="text-[var(--ep-rose)]">*</span>
+            Name <span className="text-mkt-red">*</span>
           </label>
           <input id="name" name="name" type="text" required maxLength={120} className={inputBase} />
         </div>
         <div>
           <label htmlFor="email" className={labelBase}>
-            Email <span className="text-[var(--ep-rose)]">*</span>
+            Email <span className="text-mkt-red">*</span>
           </label>
           <input
             id="email"
@@ -136,7 +136,7 @@ export function ContactForm() {
 
       <div>
         <label htmlFor="subject" className={labelBase}>
-          Subject <span className="text-[var(--ep-rose)]">*</span>
+          Subject <span className="text-mkt-red">*</span>
         </label>
         <input
           id="subject"
@@ -151,7 +151,7 @@ export function ContactForm() {
 
       <div>
         <label htmlFor="message" className={labelBase}>
-          Message <span className="text-[var(--ep-rose)]">*</span>
+          Message <span className="text-mkt-red">*</span>
         </label>
         <textarea
           id="message"
@@ -180,7 +180,7 @@ export function ContactForm() {
       {status === 'rate_limited' && (
         <div
           role="alert"
-          className="rounded-md bg-[var(--ep-amber)]/10 px-4 py-3 text-sm text-[var(--ep-ink)]"
+          className="text-mkt-ink rounded-md bg-[var(--ep-amber)]/10 px-4 py-3 text-sm"
         >
           You&rsquo;ve sent several messages recently. Please wait an hour and try again.
         </div>
@@ -188,20 +188,20 @@ export function ContactForm() {
       {status === 'error' && errorMessage && (
         <div
           role="alert"
-          className="rounded-md bg-[var(--ep-rose)]/10 px-4 py-3 text-sm text-[var(--ep-ink)]"
+          className="text-mkt-ink rounded-md bg-[var(--mkt-red)]/10 px-4 py-3 text-sm"
         >
           {errorMessage}
         </div>
       )}
 
       <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
-        <p className="text-xs text-[var(--ep-graphite)]">
+        <p className="text-mkt-slate text-xs">
           We respond to support within 24h, security disclosures within 72h.
         </p>
         <button
           type="submit"
           disabled={status === 'submitting'}
-          className="inline-flex h-11 items-center rounded-md bg-gradient-to-r from-[var(--ep-violet)] to-[var(--ep-indigo)] px-7 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
+          className="bg-mkt-red inline-flex h-11 items-center rounded-md px-7 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
         >
           {status === 'submitting' ? 'Sending…' : 'Send message'}
         </button>

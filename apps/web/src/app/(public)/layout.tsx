@@ -7,10 +7,13 @@
  * 2026-05-19); no TanStack, no auth context.
  */
 
+import { GradientMesh } from '@/components/ui/gradient-mesh'
+
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
-    <main className="text-mkt-ink min-h-screen bg-white font-[family-name:var(--font-bangla)]">
-      {children}
+    <main className="relative min-h-screen bg-[var(--white)]">
+      <GradientMesh variant="calm" />
+      <div className="relative">{children}</div>
     </main>
   )
 }
