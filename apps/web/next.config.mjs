@@ -2,6 +2,9 @@
 const nextConfig = {
   reactStrictMode: true,
   typedRoutes: true,
+  // Hide the dev-mode build-activity indicator (the small spinning logo in the
+  // corner during `next dev`). Cosmetic; never rendered in production anyway.
+  devIndicators: false,
   transpilePackages: ['@eventpulse/shared-types', '@eventpulse/shared-utils'],
   // ESM-typed workspace packages (`"type": "module"`) use `.js`
   // extensions in their relative imports per TS5+ NodeNext convention,

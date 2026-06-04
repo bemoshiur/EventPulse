@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 
 import { ContactForm } from '@/components/marketing/contact-form'
-import { GlassCard } from '@/components/ui/glass-card'
 import { MarketingFooter } from '@/components/marketing/marketing-footer'
 import { MarketingNavbar } from '@/components/marketing/marketing-navbar'
 
@@ -27,13 +26,11 @@ export default function ContactPage() {
 
       <section className="relative">
         <div className="mx-auto max-w-3xl px-6 py-16 text-center md:py-24">
-          <p className="text-xs font-semibold tracking-widest text-[var(--ep-violet)] uppercase">
-            Contact
-          </p>
-          <h1 className="font-display mt-3 text-3xl font-semibold text-[var(--ep-ink)] md:text-5xl">
+          <p className="text-mkt-red text-xs font-semibold tracking-widest uppercase">Contact</p>
+          <h1 className="text-mkt-ink mt-3 text-3xl font-semibold md:text-5xl">
             Tell us what you need.
           </h1>
-          <p className="mt-4 text-base leading-relaxed text-[var(--ep-graphite)]">
+          <p className="text-mkt-slate mt-4 text-base leading-relaxed">
             Sales questions, support, legal compliance, partnership ideas, or security disclosures —
             pick the topic that fits and send a note.
           </p>
@@ -43,48 +40,48 @@ export default function ContactPage() {
       <section className="relative">
         <div className="mx-auto max-w-5xl px-6 pb-16">
           <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
-            <GlassCard variant="strong" className="p-8 md:p-10">
+            <div className="mkt-card p-8 md:p-10">
               <ContactForm />
-            </GlassCard>
+            </div>
 
             <div className="space-y-6">
-              <GlassCard className="p-6">
-                <h3 className="text-sm font-semibold text-[var(--ep-ink)]">Direct emails</h3>
+              <div className="mkt-card p-6">
+                <h3 className="text-mkt-ink text-sm font-semibold">Direct emails</h3>
                 <ul className="mt-3 space-y-2 text-sm">
                   {DIRECT_EMAILS.map((row) => (
                     <li key={row.email} className="flex flex-col">
-                      <span className="text-xs text-[var(--ep-graphite)]">{row.topic}</span>
+                      <span className="text-mkt-slate text-xs">{row.topic}</span>
                       <a
                         href={`mailto:${row.email}`}
-                        className="font-mono text-sm text-[var(--ep-ink)] transition hover:text-[var(--ep-violet)]"
+                        className="text-mkt-ink hover:text-mkt-red font-mono text-sm transition"
                       >
                         {row.email}
                       </a>
                     </li>
                   ))}
                 </ul>
-              </GlassCard>
+              </div>
 
-              <GlassCard className="p-6">
-                <h3 className="text-sm font-semibold text-[var(--ep-ink)]">Office</h3>
-                <p className="mt-3 text-sm leading-relaxed text-[var(--ep-graphite)]">
+              <div className="mkt-card p-6">
+                <h3 className="text-mkt-ink text-sm font-semibold">Office</h3>
+                <p className="text-mkt-slate mt-3 text-sm leading-relaxed">
                   Public Pulse Agency
                   <br />
                   TiCON System Limited
                   <br />
                   Dhaka, Bangladesh
                 </p>
-              </GlassCard>
+              </div>
 
-              <GlassCard className="p-6">
-                <h3 className="text-sm font-semibold text-[var(--ep-ink)]">Response times</h3>
-                <ul className="mt-3 space-y-2 text-sm text-[var(--ep-graphite)]">
+              <div className="mkt-card p-6">
+                <h3 className="text-mkt-ink text-sm font-semibold">Response times</h3>
+                <ul className="text-mkt-slate mt-3 space-y-2 text-sm">
                   <li>Support &mdash; within 24 hours</li>
                   <li>Sales &mdash; within 1 business day</li>
                   <li>Security disclosures &mdash; within 72 hours</li>
                   <li>Legal &amp; press &mdash; within 3 business days</li>
                 </ul>
-              </GlassCard>
+              </div>
             </div>
           </div>
         </div>

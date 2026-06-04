@@ -15,17 +15,14 @@ export function MarketingNavbar({
   return (
     <nav
       aria-label="Primary"
-      className="sticky top-0 z-40 border-b border-[var(--ep-line)]/40 bg-[var(--ep-paper)]/60 backdrop-blur-xl"
+      className="border-mkt-line sticky top-0 z-40 border-b bg-white/90 font-[family-name:var(--font-bangla)] backdrop-blur-xl"
     >
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         <Link
           href="/"
-          className="font-display flex items-center gap-2 text-base font-semibold text-[var(--ep-ink)]"
+          className="text-mkt-ink flex items-center gap-2 text-base font-bold tracking-tight"
         >
-          <span
-            aria-hidden="true"
-            className="inline-block size-2.5 rounded-full bg-gradient-to-br from-[var(--ep-violet)] to-[var(--ep-cerulean)]"
-          />
+          <span aria-hidden="true" className="bg-mkt-red inline-block size-2.5 rounded-full" />
           Event Pulse
         </Link>
 
@@ -40,8 +37,8 @@ export function MarketingNavbar({
                   aria-current={active ? 'page' : undefined}
                   className={
                     active
-                      ? 'inline-flex h-9 items-center rounded-md px-3 text-sm font-semibold text-[var(--ep-violet)]'
-                      : 'inline-flex h-9 items-center rounded-md px-3 text-sm font-medium text-[var(--ep-graphite)] transition hover:text-[var(--ep-ink)]'
+                      ? 'text-mkt-red inline-flex h-9 items-center rounded-md px-3 text-sm font-semibold'
+                      : 'text-mkt-slate hover:text-mkt-ink inline-flex h-9 items-center rounded-md px-3 text-sm font-medium transition'
                   }
                 >
                   {link.label}
@@ -54,13 +51,13 @@ export function MarketingNavbar({
         <div className="flex items-center gap-2">
           <Link
             href="/sign-in"
-            className="hidden h-9 items-center rounded-md px-3 text-sm font-medium text-[var(--ep-graphite)] transition hover:text-[var(--ep-ink)] md:inline-flex"
+            className="text-mkt-slate hover:text-mkt-ink hidden h-9 items-center rounded-md px-3 text-sm font-medium transition md:inline-flex"
           >
             Sign in
           </Link>
           <Link
             href="/sign-up"
-            className="inline-flex h-9 items-center rounded-md bg-gradient-to-r from-[var(--ep-violet)] to-[var(--ep-indigo)] px-4 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            className="bg-mkt-red inline-flex h-9 items-center rounded-lg px-4 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[var(--color-mkt-red-dark)] hover:shadow-md"
           >
             Get started
           </Link>
