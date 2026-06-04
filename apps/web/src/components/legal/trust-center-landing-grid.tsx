@@ -51,11 +51,13 @@ function Section({
 }) {
   return (
     <section>
-      <p className="text-xs font-semibold tracking-widest text-[var(--ep-violet)] uppercase">
+      <p className="text-xs font-semibold tracking-widest text-[var(--color-mkt-red)] uppercase">
         {eyebrow}
       </p>
-      <h2 className="mt-2 text-2xl font-semibold text-[var(--ep-ink)] md:text-3xl">{title}</h2>
-      <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--ep-graphite)]">{intro}</p>
+      <h2 className="mt-2 text-2xl font-semibold text-[var(--mkt-ink)] md:text-3xl">{title}</h2>
+      <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--color-mkt-slate)]">
+        {intro}
+      </p>
 
       <ul className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {rows.map((row) => (
@@ -66,17 +68,17 @@ function Section({
             >
               <GlassCard className="h-full p-5">
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-base font-semibold text-[var(--ep-ink)]">{row.title}</h3>
+                  <h3 className="text-base font-semibold text-[var(--mkt-ink)]">{row.title}</h3>
                   {row.currentVersion.isDraft ? (
                     <span className="rounded-full bg-[var(--ep-amber)]/15 px-2 py-0.5 text-xs font-medium text-[var(--ep-amber)]">
                       Draft
                     </span>
                   ) : null}
                 </div>
-                <p className="mt-2 text-sm leading-relaxed text-[var(--ep-graphite)]">
+                <p className="mt-2 text-sm leading-relaxed text-[var(--color-mkt-slate)]">
                   {row.oneLiner}
                 </p>
-                <p className="mt-3 text-xs text-[var(--ep-graphite)]">
+                <p className="mt-3 text-xs text-[var(--color-mkt-slate)]">
                   Version {row.currentVersion.version}
                 </p>
               </GlassCard>

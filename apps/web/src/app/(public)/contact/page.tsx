@@ -27,13 +27,13 @@ export default function ContactPage() {
 
       <section className="relative">
         <div className="mx-auto max-w-3xl px-6 py-16 text-center md:py-24">
-          <p className="text-xs font-semibold tracking-widest text-[var(--ep-violet)] uppercase">
+          <p className="text-xs font-semibold tracking-widest text-[var(--color-mkt-red)] uppercase">
             Contact
           </p>
-          <h1 className="font-display mt-3 text-3xl font-semibold text-[var(--ep-ink)] md:text-5xl">
+          <h1 className="font-display mt-3 text-3xl font-semibold text-[var(--mkt-ink)] md:text-5xl">
             Tell us what you need.
           </h1>
-          <p className="mt-4 text-base leading-relaxed text-[var(--ep-graphite)]">
+          <p className="mt-4 text-base leading-relaxed text-[var(--color-mkt-slate)]">
             Sales questions, support, legal compliance, partnership ideas, or security disclosures —
             pick the topic that fits and send a note.
           </p>
@@ -49,14 +49,14 @@ export default function ContactPage() {
 
             <div className="space-y-6">
               <GlassCard className="p-6">
-                <h3 className="text-sm font-semibold text-[var(--ep-ink)]">Direct emails</h3>
+                <h3 className="text-sm font-semibold text-[var(--mkt-ink)]">Direct emails</h3>
                 <ul className="mt-3 space-y-2 text-sm">
                   {DIRECT_EMAILS.map((row) => (
                     <li key={row.email} className="flex flex-col">
-                      <span className="text-xs text-[var(--ep-graphite)]">{row.topic}</span>
+                      <span className="text-xs text-[var(--color-mkt-slate)]">{row.topic}</span>
                       <a
                         href={`mailto:${row.email}`}
-                        className="font-mono text-sm text-[var(--ep-ink)] transition hover:text-[var(--ep-violet)]"
+                        className="font-mono text-sm text-[var(--mkt-ink)] transition hover:text-[var(--color-mkt-red)]"
                       >
                         {row.email}
                       </a>
@@ -66,8 +66,8 @@ export default function ContactPage() {
               </GlassCard>
 
               <GlassCard className="p-6">
-                <h3 className="text-sm font-semibold text-[var(--ep-ink)]">Office</h3>
-                <p className="mt-3 text-sm leading-relaxed text-[var(--ep-graphite)]">
+                <h3 className="text-sm font-semibold text-[var(--mkt-ink)]">Office</h3>
+                <p className="mt-3 text-sm leading-relaxed text-[var(--color-mkt-slate)]">
                   Public Pulse Agency
                   <br />
                   TiCON System Limited
@@ -77,8 +77,8 @@ export default function ContactPage() {
               </GlassCard>
 
               <GlassCard className="p-6">
-                <h3 className="text-sm font-semibold text-[var(--ep-ink)]">Response times</h3>
-                <ul className="mt-3 space-y-2 text-sm text-[var(--ep-graphite)]">
+                <h3 className="text-sm font-semibold text-[var(--mkt-ink)]">Response times</h3>
+                <ul className="mt-3 space-y-2 text-sm text-[var(--color-mkt-slate)]">
                   <li>Support &mdash; within 24 hours</li>
                   <li>Sales &mdash; within 1 business day</li>
                   <li>Security disclosures &mdash; within 72 hours</li>

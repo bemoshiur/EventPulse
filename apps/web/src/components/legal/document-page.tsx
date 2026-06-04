@@ -33,18 +33,18 @@ export function LegalDocumentPage({ doc }: { doc: LegalDocumentRender }) {
   const v = doc.currentVersion
   return (
     <article className="mx-auto max-w-3xl px-6 py-16 md:py-24">
-      <nav aria-label="Breadcrumb" className="mb-6 text-sm text-[var(--ep-graphite)]">
-        <Link href="/trust" className="hover:text-[var(--ep-violet)]">
+      <nav aria-label="Breadcrumb" className="text-mkt-slate mb-6 text-sm">
+        <Link href="/trust" className="hover:text-mkt-red">
           Trust Center
         </Link>
         <span aria-hidden="true" className="px-2">
           ·
         </span>
-        <span className="text-[var(--ep-ink)]">{doc.title}</span>
+        <span className="text-mkt-ink">{doc.title}</span>
       </nav>
 
-      <h1 className="text-3xl font-semibold text-[var(--ep-ink)] md:text-4xl">{doc.title}</h1>
-      <p className="mt-3 text-sm text-[var(--ep-graphite)]">
+      <h1 className="text-mkt-ink text-3xl font-semibold md:text-4xl">{doc.title}</h1>
+      <p className="text-mkt-slate mt-3 text-sm">
         Effective {formatDate(v.effectiveAt)} · Version {v.version}
         {v.materialChange ? ' · Material change' : ''}
       </p>
@@ -57,10 +57,10 @@ export function LegalDocumentPage({ doc }: { doc: LegalDocumentRender }) {
 
       <BodyHtml html={v.bodyHtml} />
 
-      <hr className="mt-16 border-[var(--ep-line)]" />
-      <p className="mt-8 text-sm text-[var(--ep-graphite)]">
+      <hr className="border-mkt-line mt-16" />
+      <p className="text-mkt-slate mt-8 text-sm">
         Questions about this document?{' '}
-        <Link href="/contact" className="text-[var(--ep-violet)] hover:underline">
+        <Link href="/contact" className="text-mkt-red hover:underline">
           Contact us →
         </Link>
       </p>
@@ -75,7 +75,7 @@ function BodyHtml({ html }: { html: string }) {
   // boundary is the unified pipeline, not this renderer.
   const props = {
     className:
-      'prose prose-neutral mt-8 max-w-none text-[var(--ep-ink)] prose-headings:text-[var(--ep-ink)] prose-a:text-[var(--ep-violet)]',
+      'prose prose-neutral mt-8 max-w-none text-mkt-ink prose-headings:text-mkt-ink prose-a:text-mkt-red',
     dangerouslySetInnerHTML: { __html: html },
   }
   return <div {...props} />

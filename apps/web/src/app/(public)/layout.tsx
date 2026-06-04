@@ -11,7 +11,7 @@ import { GradientMesh } from '@/components/ui/gradient-mesh'
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
-    <main className="relative min-h-screen bg-[var(--ep-mist)]">
+    <main className="relative min-h-screen bg-[var(--white)]">
       <GradientMesh variant="calm" />
       <div className="relative">{children}</div>
     </main>

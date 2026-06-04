@@ -17,13 +17,13 @@ export default async function TrustCenterLanding() {
   return (
     <div className="px-6 py-16 md:py-24">
       <header className="mx-auto mb-16 max-w-3xl text-center">
-        <p className="text-xs font-semibold tracking-widest text-[var(--ep-violet)] uppercase">
+        <p className="text-xs font-semibold tracking-widest text-mkt-red uppercase">
           Trust Center
         </p>
-        <h1 className="mt-3 text-3xl font-semibold text-[var(--ep-ink)] md:text-5xl">
+        <h1 className="mt-3 text-3xl font-semibold text-mkt-ink md:text-5xl">
           What Event Pulse stands for
         </h1>
-        <p className="mt-4 text-base leading-relaxed text-[var(--ep-graphite)]">
+        <p className="mt-4 text-base leading-relaxed text-mkt-slate">
           Six legal contracts and twelve trust artefacts — the contractual foundation of our
           relationship with you, and the standards we hold ourselves to.
         </p>

@@ -20,12 +20,12 @@ export function DraftBanner({ version }: { version: string }) {
     <div
       role="alert"
       aria-live="polite"
-      className="mb-8 rounded-2xl border border-[var(--ep-amber)]/60 bg-[var(--ep-amber)]/10 p-5 text-[var(--ep-ink)]"
+      className="text-mkt-ink mb-8 rounded-2xl border border-[var(--ep-amber)]/60 bg-[var(--ep-amber)]/10 p-5"
     >
-      <p className="text-xs font-semibold tracking-widest text-[var(--ep-amber)] uppercase">
+      <p className="text-mkt-red text-xs font-semibold tracking-widest uppercase">
         Draft · {version}
       </p>
-      <p className="mt-2 text-sm leading-relaxed text-[var(--ep-graphite)]">
+      <p className="text-mkt-slate mt-2 text-sm leading-relaxed">
         This document is a structural placeholder. Final legal content will be drafted by counsel
         before MVP launch. <strong>No legal effect is intended or implied</strong> by the version
         currently published here.

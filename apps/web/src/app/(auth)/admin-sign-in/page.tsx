@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 import { MagicLinkForm } from '@/components/auth/magic-link-form'
-import { GlassCard } from '@/components/ui/glass-card'
 
 /**
  * Super-admin sign-in (browser-auth Day 46). Distinct from `/sign-in` only in
@@ -17,28 +16,28 @@ export const metadata: Metadata = {
 
 export default function AdminSignInPage() {
   return (
-    <GlassCard variant="strong" className="w-full max-w-md rounded-3xl p-8 sm:p-10">
+    <div className="mkt-card w-full max-w-md rounded-3xl p-8 sm:p-10">
       <header className="text-center">
-        <h1 className="font-display text-ep-ink text-3xl font-semibold tracking-tight">
+        <h1 className="text-mkt-ink text-3xl font-semibold tracking-tight">
           Event Pulse
         </h1>
-        <p className="text-ep-graphite mt-2 text-sm">Super Admin sign in</p>
+        <p className="text-mkt-slate mt-2 text-sm">Super Admin sign in</p>
       </header>
 
       <div className="mt-8">
         <MagicLinkForm audience="super-admin" />
       </div>
 
-      <p className="text-ep-graphite mt-8 text-center text-xs">
+      <p className="text-mkt-slate mt-8 text-center text-xs">
         Internal staff only. We email you a one-time sign-in link.
       </p>
 
-      <p className="text-ep-graphite mt-4 text-center text-sm">
+      <p className="text-mkt-slate mt-4 text-center text-sm">
         Not an admin?{' '}
-        <Link href="/sign-in" className="text-ep-violet font-semibold hover:underline">
+        <Link href="/sign-in" className="text-mkt-red font-semibold hover:underline">
           Regular sign in
         </Link>
       </p>
-    </GlassCard>
+    </div>
   )
 }

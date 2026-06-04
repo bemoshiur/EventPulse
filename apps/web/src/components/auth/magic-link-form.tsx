@@ -67,9 +67,9 @@ export function MagicLinkForm({
 
   if (submitted) {
     return (
-      <div className="border-ep-line rounded-md border bg-white/60 p-4 text-sm">
-        <p className="text-ep-ink font-medium">Check your email.</p>
-        <p className="text-ep-graphite mt-1">
+      <div className="border-mkt-line rounded-md border bg-white/60 p-4 text-sm">
+        <p className="text-mkt-ink font-medium">Check your email.</p>
+        <p className="text-mkt-slate mt-1">
           We sent a {purpose === 'signup' ? 'link to create your account' : 'sign-in link'} to{' '}
           <span className="font-medium">{email}</span>. It’s good for 15 minutes.
         </p>
@@ -79,7 +79,7 @@ export function MagicLinkForm({
             setSubmitted(false)
             setErrorMessage(null)
           }}
-          className="text-ep-violet mt-3 text-xs font-medium hover:underline"
+          className="text-mkt-red mt-3 text-xs font-medium hover:underline"
         >
           Use a different email
         </button>
@@ -90,7 +90,7 @@ export function MagicLinkForm({
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row">
       <div className="relative flex-1">
-        <Mail className="text-ep-graphite/60 pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+        <Mail className="text-mkt-slate/60 pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
         <input
           type="email"
           required
@@ -99,10 +99,10 @@ export function MagicLinkForm({
           onChange={(event) => setEmail(event.target.value)}
           placeholder="you@company.com"
           disabled={submitting}
-          className="border-ep-line text-ep-ink placeholder:text-ep-graphite/50 focus:border-ep-cerulean h-12 w-full rounded-md border bg-white pr-3 pl-9 text-sm focus:outline-none disabled:opacity-60"
+          className="border-mkt-line text-mkt-ink placeholder:text-mkt-slate/50 focus:border-mkt-red h-12 w-full rounded-md border bg-white pr-3 pl-9 text-sm focus:outline-none disabled:opacity-60"
         />
         {errorMessage && (
-          <p role="alert" className="text-ep-rose mt-2 text-xs">
+          <p role="alert" className="text-mkt-red mt-2 text-xs">
             {errorMessage}
           </p>
         )}
@@ -110,7 +110,7 @@ export function MagicLinkForm({
       <button
         type="submit"
         disabled={submitting}
-        className="grad-primary inline-flex h-12 items-center justify-center gap-2 rounded-md px-5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
+        className="bg-mkt-red inline-flex h-12 items-center justify-center gap-2 rounded-lg px-5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[var(--color-mkt-red-dark)] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitting ? 'Sending…' : 'Continue'}
         <ArrowRight className="h-4 w-4" />
