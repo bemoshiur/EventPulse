@@ -24,6 +24,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 
 import { decideAudience, fetchAudienceGrants } from '../auth/audience-grant.js'
+import { deriveDisplayName } from '../auth/display-name.js'
 import { buildConsumeUrl, resolveConsumeBase } from '../auth/consume-url.js'
 import { clearSessionCookie, setSessionCookie } from '../auth/cookie.js'
 import { hashPassword, verifyPassword } from '../auth/hash.js'
@@ -227,13 +228,10 @@ auth.post('/magic-link/consume', zValidator('json', magicConsumeSchema), async (
     if (result.purpose !== 'signup') {
       return c.json({ error: { code: 'NOT_FOUND', message: 'no account for this email' } }, 404)
     }
-    if (!input.fullName) {
-      return c.json(
-        { error: { code: 'VALIDATION_ERROR', message: 'fullName required for signup' } },
-        400,
-      )
-    }
-    user = await createUser({ email: result.email, fullName: input.fullName })
+    // Passwordless signup has no name step — use the supplied name if any, else
+    // derive a friendly display name from the email (editable later in settings).
+    const fullName = input.fullName?.trim() || deriveDisplayName(result.email)
+    user = await createUser({ email: result.email, fullName })
   }
   await markEmailVerified(user.id)
 
