@@ -2,6 +2,10 @@
 
 ## In flight
 
+**Day 47 (2026-06-04, eve) — ⏸️ Marketing-site refresh (TenderPulse-style) — PAUSED, operator shutting down.** Shipped earlier today: **v0.4.2** self-service create-event (personal-tenant provision + `/my/hosting/start` + `/events/new`, DB-gated CI test) + **v0.4.3** publish/share manage hub (`/events/[id]`, draft→published transition + public share URL) — both LIVE on prod, full sign-up→create→publish→share loop complete. Then operator asked to make the marketing site look like tenderpulse.com.bd (rich, bilingual, every page). **HOME page rebuilt + browser-verified** (`app/page.tsx`, TenderPulse-grade, EN+বাংলা) → branch `feat/marketing-refresh`, **PR #305 OPEN (not merged/deployed; prod still v0.4.3)**. **Next session (operator-locked): (1) deploy home as v0.4.4 [authorized], (2) full TenderPulse rewrite of all detail pages — /features, /pricing, /trust, /contact, use-cases.** See handoff.md.
+
+---
+
 **Day 46 (2026-06-04, cont) — ✅ ALL launch-gating Day-46 items below RESOLVED + tenant login built (8 PRs).** The EPS items in the older In-flight entries below are now DONE: (1) **redirect-param bug FIXED** — EPS sends our id as PascalCase `MerchantTransactionId` (read-only prod nginx-log ground truth); handler accepts it (#285, gotcha #286). (2) **fee 175→200 bps** — operator-confirmed; TDD across calculator + `/pricing` (#287, decisions #288). (3) **tenant browser login** — `/choose-tenant` picker + `/my/contexts` GET/switch (requireUser middleware; switch re-checks `tenant_users`, mints tenant session); always-show-a-picker (#289, full TDD). Also: buyer identity → EPS init (#284), EPS return URLs in bootstrap (#282), Dependabot triaged→freeze. **Remaining (BOTH need operator, gated): prod re-smoke to confirm 200 bps + a prod deploy so #285/#287/#289 reach prod.** One deprioritized item: layout auth-gate + `/refresh`. See handoff.md for the canonical current state. Verify-GET + payment already confirmed working last entry.
 
 ---
