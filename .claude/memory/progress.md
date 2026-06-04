@@ -2,6 +2,16 @@
 
 ## In flight
 
+**Day 48 (2026-06-05, cont) — ✅ Clone parity round LIVE (v0.4.7).** Deeper TenderPulse parity + a real bug fix, all on prod:
+- **Footer** rebuilt to TenderPulse 4-band structure (CTA band + 12-col brand/nav grid + trust-dossier strip w/ Operational status + security note + bottom bar).
+- **Blog** built from scratch: `/blog` index (hero + featured + category chips + grid) + `/blog/[slug]` posts (Article JSON-LD + related); 6 original Event Pulse field guides (`lib/blog.ts`); slugs in sitemap.
+- **Nav** rebuilt (correct tokens) + Blog link + Book-a-demo CTA.
+- **BUG FIX (was live):** 45 broken `var(--mkt-*)`/`var(--white)` token refs across 8 detail-page files (features/pricing/contact/changelog/(public) layout) → repaired to `var(--color-mkt-*)`. See gotchas "Marketing pages silently unstyled". Detail pages were degraded on v0.4.5/0.4.6; fixed in v0.4.7.
+- Deploys: v0.4.6 (Phase 10 onboarding) + v0.4.7 (this round) both shipped + verified.
+- **Remaining minor parity:** optional /glossary + /customers pages; product-chatbot widget (needs AI backend) deferred. Pricing intentionally keeps the 0.25% calculator (no prepaid plan-cards, per decision).
+
+---
+
 **Day 48 (2026-06-05) — ✅ TenderPulse clone LIVE (v0.4.5) + architecture decided.** Phases 1–5 + 11 deployed to prod (red/white site, SEO, JSON-LD, sitemap, AEO/llms.txt, /demo, content pages — live + browser-QA'd clean on eventpulse.com.bd). **Phase 10** onboarding (dashboard guided welcome) merged #311, deploys next (v0.4.6). **Phases 6/7/8 CLOSED — operator agreed to KEEP current architecture** (no subdomain→path migration, no prepaid plans, keep inline i18n; see decisions.md 2026-06-05). Phase 9 legal contracts stay counsel-gated; trust artefacts optional/conservative. **Clone complete where it matters.** Only open: deploy Phase 10, optional artefact enrichment, Phase 12 QA.
 
 ---
