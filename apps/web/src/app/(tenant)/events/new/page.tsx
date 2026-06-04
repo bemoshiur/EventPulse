@@ -45,7 +45,7 @@ export function CreateEvent() {
       if (res.ok) {
         const body = (await res.json().catch(() => ({}))) as { data?: { id?: string } }
         const id = body.data?.id
-        window.location.assign(id ? `/events/${id}/tickets` : '/dashboard')
+        window.location.assign(id ? `/events/${id}` : '/dashboard')
         return
       }
       const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } }
