@@ -4,6 +4,16 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## A commit made while transiently on `main` during branch-juggling silently went missing from the feature branch
+
+**Symptom.** The TenderPulse red/white re-theme (home/globals tokens/nav/footer/layout/detail pages, commit `ab730c8`) "disappeared": `feat/marketing-details` had a violet home + `globals.css` with zero `mkt` tokens, so every `mkt-*` class the auth/legal commit used was unstyled — yet nav/footer looked red. Confusing + inconsistent.
+
+**Why it happens.** During a memory-commit dance (`git stash` → `git checkout main` → branch → commit → merge → `git checkout feat/...`), a follow-up `git add -A && git commit` landed `ab730c8` while HEAD was transiently on **local `main`**, not the feature branch. It was then included in a memory branch created off main, but the memory PR squash-merged only the memory diff, so `ab730c8` never reached `origin/main` either — it lived only on local `main`. The feature branch (forked earlier from `b87f670`) never contained it. `git reflog` made it obvious: `HEAD@{6}: commit: ... re-theme` sat between `moving from main to main` entries.
+
+**Fix.** `git diff-tree --name-only -r <lost-commit>` to see what it touched, diff against the feature branch's later commits, then `git checkout <lost-commit> -- <only the files still missing>` (here: `globals.css`, `page.tsx`, `next.config.mjs` — the rest had been re-committed on the branch). Re-commit on the feature branch.
+
+**How to avoid.** Before any `git add -A && commit`, run `git branch --show-current` and confirm it's the feature branch, never `main`. Do memory commits on a dedicated branch from a clean tree; never commit feature work while transiently parked on main during a stash/checkout sequence.
+
 ## deploy-prod must be dispatched from the `prod` branch, not main (OIDC `job_workflow_ref`)
 
 **Symptom.** First v0.4.0 prod-cutover run: `validate-inputs` passed, but the deploy job failed at "Configure AWS credentials via OIDC" → `Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity`.
