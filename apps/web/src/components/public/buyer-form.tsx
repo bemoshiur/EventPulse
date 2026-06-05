@@ -509,7 +509,7 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
                   data-testid="buyer-name"
                 />
                 {clientErrors['name'] && (
-                  <p id="buyer-name-err" className="text-ep-rose mt-1 text-xs">
+                  <p id="buyer-name-err" className="text-mkt-red mt-1 text-xs">
                     {clientErrors['name']}
                   </p>
                 )}
@@ -532,7 +532,7 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
                   data-testid="buyer-email"
                 />
                 {clientErrors['email'] && (
-                  <p id="buyer-email-err" className="text-ep-rose mt-1 text-xs">
+                  <p id="buyer-email-err" className="text-mkt-red mt-1 text-xs">
                     {clientErrors['email']}
                   </p>
                 )}
@@ -556,7 +556,7 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
                   data-testid="buyer-phone"
                 />
                 {clientErrors['phone'] && (
-                  <p id="buyer-phone-err" className="text-ep-rose mt-1 text-xs">
+                  <p id="buyer-phone-err" className="text-mkt-red mt-1 text-xs">
                     {clientErrors['phone']}
                   </p>
                 )}
@@ -582,7 +582,7 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
                   data-testid="buyer-nid"
                 />
                 {clientErrors['nidLast4'] && (
-                  <p id="buyer-nid-err" className="text-ep-rose mt-1 text-xs">
+                  <p id="buyer-nid-err" className="text-mkt-red mt-1 text-xs">
                     {clientErrors['nidLast4']}
                   </p>
                 )}
@@ -593,7 +593,7 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
           {clientErrors['_root'] && (
             <p
               role="alert"
-              className="text-ep-rose mt-4 text-sm"
+              className="text-mkt-red mt-4 text-sm"
               data-testid="buyer-form-root-error"
             >
               {clientErrors['_root']}
@@ -604,10 +604,10 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
           {submitState.kind === 'error' && (
             <div
               role="alert"
-              className="border-ep-rose/30 bg-ep-rose/5 mt-4 rounded-2xl border p-4"
+              className="border-mkt-red/30 bg-mkt-red/5 mt-4 rounded-2xl border p-4"
               data-testid="buyer-form-error"
             >
-              <p className="text-ep-rose text-sm font-medium">
+              <p className="text-mkt-red text-sm font-medium">
                 We couldn&apos;t process your order
               </p>
               <p className="text-ep-graphite mt-1 text-sm">{submitState.message}</p>
