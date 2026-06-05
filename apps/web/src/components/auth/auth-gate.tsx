@@ -62,7 +62,7 @@ export function AuthGate({
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <p role="status" className="text-ep-graphite text-sm">
+      <p role="status" className="text-mkt-slate text-sm">
         Signing you in…
       </p>
     </div>

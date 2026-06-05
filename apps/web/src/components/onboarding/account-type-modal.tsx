@@ -147,7 +147,7 @@ export function AccountTypeModal({ isLoading, onSubmit }: AccountTypeModalProps)
     <AnimatePresence>
       <motion.div
         // Backdrop. No onClick — dismissal is mandatory via the submit button.
-        className="bg-ep-ink/40 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+        className="bg-mkt-ink/40 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={transition}
@@ -208,17 +208,19 @@ export function AccountTypeModal({ isLoading, onSubmit }: AccountTypeModalProps)
                     disabled={isLoading || submitting}
                     className={cn(
                       'group flex flex-col items-start gap-3 rounded-2xl border p-5 text-left',
-                      'focus-visible:ring-ep-cerulean transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+                      'focus-visible:ring-mkt-red transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
                       'disabled:cursor-not-allowed disabled:opacity-50',
                       isSelected
-                        ? 'border-ep-violet bg-mkt-red/5 shadow-glass'
-                        : 'border-mkt-line bg-ep-paper/60 hover:shadow-glass hover:-translate-y-0.5',
+                        ? 'border-mkt-red bg-mkt-red/5 shadow-glass'
+                        : 'border-mkt-line hover:shadow-glass bg-white/60 hover:-translate-y-0.5',
                     )}
                   >
                     <span
                       className={cn(
                         'inline-flex h-10 w-10 items-center justify-center rounded-lg',
-                        isSelected ? 'bg-mkt-red text-ep-paper' : 'bg-ep-mist text-mkt-slate',
+                        isSelected
+                          ? 'bg-mkt-red text-white'
+                          : 'text-mkt-slate bg-[var(--color-mkt-soft)]',
                       )}
                     >
                       <choice.Icon className="h-5 w-5" aria-hidden />
@@ -243,7 +245,7 @@ export function AccountTypeModal({ isLoading, onSubmit }: AccountTypeModalProps)
             {submitError ? (
               <div
                 role="alert"
-                className="border-ep-rose/40 bg-ep-rose/10 text-mkt-red mt-5 rounded-md border px-4 py-3 text-sm"
+                className="border-mkt-red/40 bg-mkt-red/10 text-mkt-red mt-5 rounded-md border px-4 py-3 text-sm"
               >
                 {submitError}
               </div>
@@ -256,8 +258,8 @@ export function AccountTypeModal({ isLoading, onSubmit }: AccountTypeModalProps)
                 disabled={!selected || submitting || isLoading}
                 className={cn(
                   'inline-flex h-11 items-center justify-center gap-2 rounded-md px-6 text-sm font-medium',
-                  'focus-visible:ring-ep-cerulean transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
-                  'bg-mkt-red text-ep-paper hover:shadow-glass hover:-translate-y-0.5',
+                  'focus-visible:ring-mkt-red transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+                  'bg-mkt-red hover:shadow-glass text-white hover:-translate-y-0.5',
                   'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none',
                 )}
               >

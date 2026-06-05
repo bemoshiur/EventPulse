@@ -336,19 +336,19 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
         aria-labelledby={statusRegionId}
         data-testid="buyer-form-success-free"
       >
-        <div className="border-ep-mint/30 bg-ep-mint/5 rounded-2xl border p-6">
-          <h2 id={statusRegionId} className="text-ep-ink font-display text-xl font-semibold">
+        <div className="rounded-2xl border border-emerald-600/30 bg-emerald-600/5 p-6">
+          <h2 id={statusRegionId} className="text-mkt-ink font-display text-xl font-semibold">
             You&apos;re registered
-            <span className="text-ep-graphite ml-2 text-base font-normal" lang="bn">
+            <span className="text-mkt-slate ml-2 text-base font-normal" lang="bn">
               · আপনি নিবন্ধিত হয়েছেন
             </span>
           </h2>
-          <p className="text-ep-graphite mt-3 text-sm">
+          <p className="text-mkt-slate mt-3 text-sm">
             Your ticket{tierSelections.reduce((s, t) => s + t.quantity, 0) > 1 ? 's are' : ' is'} on
-            the way to <strong className="text-ep-ink">{buyer.email}</strong>. Check your inbox in
+            the way to <strong className="text-mkt-ink">{buyer.email}</strong>. Check your inbox in
             the next few minutes.
           </p>
-          <p className="text-ep-graphite/70 mt-4 font-mono text-xs">
+          <p className="text-mkt-slate/70 mt-4 font-mono text-xs">
             Order reference: <span data-testid="success-order-id">{submitState.orderId}</span>
           </p>
         </div>
@@ -362,15 +362,15 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
       aria-labelledby={formHeadingId}
       data-testid="buyer-form"
     >
-      <h2 id={formHeadingId} className="font-display text-ep-ink text-2xl font-semibold">
+      <h2 id={formHeadingId} className="font-display text-mkt-ink text-2xl font-semibold">
         Tickets
-        <span className="text-ep-graphite ml-2 text-base font-normal" lang="bn">
+        <span className="text-mkt-slate ml-2 text-base font-normal" lang="bn">
           · টিকিট
         </span>
       </h2>
 
       {tiers.length === 0 ? (
-        <p className="text-ep-graphite mt-4 text-sm" data-testid="tickets-empty">
+        <p className="text-mkt-slate mt-4 text-sm" data-testid="tickets-empty">
           Tickets coming soon.
         </p>
       ) : (
@@ -384,16 +384,16 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
               return (
                 <li key={tier.id}>
                   <div
-                    className="border-ep-line bg-ep-paper rounded-2xl border p-5 shadow-sm"
+                    className="border-mkt-line rounded-2xl border bg-white p-5 shadow-sm"
                     data-testid={`tier-card-${tier.id}`}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="min-w-0 flex-1">
-                        <h3 className="text-ep-ink text-lg font-semibold">{tier.name}</h3>
+                        <h3 className="text-mkt-ink text-lg font-semibold">{tier.name}</h3>
                         {tier.description && (
-                          <p className="text-ep-graphite mt-1 text-sm">{tier.description}</p>
+                          <p className="text-mkt-slate mt-1 text-sm">{tier.description}</p>
                         )}
-                        <p className="text-ep-graphite mt-2 text-xs">
+                        <p className="text-mkt-slate mt-2 text-xs">
                           {available <= 0
                             ? 'Sold out'
                             : !sellable
@@ -404,7 +404,7 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-ep-ink text-2xl font-semibold tabular-nums">
+                        <p className="text-mkt-ink text-2xl font-semibold tabular-nums">
                           {tier.isComplimentary || BigInt(tier.pricePaisa) === 0n
                             ? 'Free'
                             : `৳ ${formatBdt(tier.pricePaisa)}`}
@@ -412,7 +412,7 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
                         <div className="mt-3 flex items-center justify-end gap-2">
                           <label
                             htmlFor={`qty-${tier.id}`}
-                            className="text-ep-graphite text-xs tracking-wide uppercase"
+                            className="text-mkt-slate text-xs tracking-wide uppercase"
                           >
                             Qty
                           </label>
@@ -431,7 +431,7 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
                                 maxPerOrder,
                               )
                             }
-                            className="border-ep-line w-16 rounded-md border px-2 py-1 text-right text-sm tabular-nums disabled:bg-gray-100"
+                            className="border-mkt-line w-16 rounded-md border px-2 py-1 text-right text-sm tabular-nums disabled:bg-gray-100"
                             data-testid={`qty-input-${tier.id}`}
                           />
                         </div>
@@ -446,16 +446,16 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
           {/* ─── subtotal preview (UX only — server is authoritative) ─── */}
           {hasAnyTier && (
             <div
-              className="border-ep-line mt-4 rounded-2xl border p-4 text-right"
+              className="border-mkt-line mt-4 rounded-2xl border p-4 text-right"
               data-testid="subtotal-preview"
             >
-              <p className="text-ep-graphite text-xs tracking-wide uppercase">Subtotal · উপমোট</p>
-              <p className="text-ep-ink mt-1 text-xl font-semibold tabular-nums">
+              <p className="text-mkt-slate text-xs tracking-wide uppercase">Subtotal · উপমোট</p>
+              <p className="text-mkt-ink mt-1 text-xl font-semibold tabular-nums">
                 {previewSubtotalPaisa === 0n ? 'Free' : `৳ ${formatBdt(previewSubtotalPaisa)}`}
               </p>
               {!isFreeEvent && (
                 <>
-                  <p className="text-ep-graphite/70 mt-1 text-xs">
+                  <p className="text-mkt-slate/70 mt-1 text-xs">
                     Final total including fees shown at checkout.
                   </p>
                   {/*
@@ -468,7 +468,7 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
                     Bilingual per R12 (Bengali alongside English at the
                     buyer-facing surface).
                   */}
-                  <p className="text-ep-graphite/70 mt-2 text-xs" data-testid="bkash-only-notice">
+                  <p className="text-mkt-slate/70 mt-2 text-xs" data-testid="bkash-only-notice">
                     Currently accepting <strong>bKash</strong> payments only. More methods coming
                     soon.
                     <br />
@@ -484,16 +484,16 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
 
           {/* ─── buyer info ─── */}
           <fieldset className="mt-8">
-            <legend id={buyerHeadingId} className="font-display text-ep-ink text-xl font-semibold">
+            <legend id={buyerHeadingId} className="font-display text-mkt-ink text-xl font-semibold">
               Your details
-              <span className="text-ep-graphite ml-2 text-base font-normal" lang="bn">
+              <span className="text-mkt-slate ml-2 text-base font-normal" lang="bn">
                 · আপনার তথ্য
               </span>
             </legend>
 
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
-                <label htmlFor="buyer-name" className="text-ep-ink block text-sm font-medium">
+                <label htmlFor="buyer-name" className="text-mkt-ink block text-sm font-medium">
                   Full name <span lang="bn">/ পুরো নাম</span>
                 </label>
                 <input
@@ -503,7 +503,7 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
                   required
                   value={buyer.name}
                   onChange={(e) => setBuyer((b) => ({ ...b, name: e.target.value }))}
-                  className="border-ep-line bg-ep-paper mt-1 block w-full rounded-md border px-3 py-2 text-sm"
+                  className="border-mkt-line mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm"
                   aria-invalid={clientErrors['name'] ? 'true' : 'false'}
                   aria-describedby={clientErrors['name'] ? 'buyer-name-err' : undefined}
                   data-testid="buyer-name"
@@ -516,7 +516,7 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
               </div>
 
               <div>
-                <label htmlFor="buyer-email" className="text-ep-ink block text-sm font-medium">
+                <label htmlFor="buyer-email" className="text-mkt-ink block text-sm font-medium">
                   Email <span lang="bn">/ ইমেইল</span>
                 </label>
                 <input
@@ -526,7 +526,7 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
                   required
                   value={buyer.email}
                   onChange={(e) => setBuyer((b) => ({ ...b, email: e.target.value }))}
-                  className="border-ep-line bg-ep-paper mt-1 block w-full rounded-md border px-3 py-2 text-sm"
+                  className="border-mkt-line mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm"
                   aria-invalid={clientErrors['email'] ? 'true' : 'false'}
                   aria-describedby={clientErrors['email'] ? 'buyer-email-err' : undefined}
                   data-testid="buyer-email"
@@ -539,7 +539,7 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
               </div>
 
               <div>
-                <label htmlFor="buyer-phone" className="text-ep-ink block text-sm font-medium">
+                <label htmlFor="buyer-phone" className="text-mkt-ink block text-sm font-medium">
                   Phone <span lang="bn">/ ফোন</span>
                 </label>
                 <input
@@ -550,7 +550,7 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
                   required
                   value={buyer.phone}
                   onChange={(e) => setBuyer((b) => ({ ...b, phone: e.target.value }))}
-                  className="border-ep-line bg-ep-paper mt-1 block w-full rounded-md border px-3 py-2 text-sm"
+                  className="border-mkt-line mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm"
                   aria-invalid={clientErrors['phone'] ? 'true' : 'false'}
                   aria-describedby={clientErrors['phone'] ? 'buyer-phone-err' : undefined}
                   data-testid="buyer-phone"
@@ -563,8 +563,8 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
               </div>
 
               <div className="md:col-span-2">
-                <label htmlFor="buyer-nid" className="text-ep-ink block text-sm font-medium">
-                  NID last 4 digits <span className="text-ep-graphite/70">(optional)</span>
+                <label htmlFor="buyer-nid" className="text-mkt-ink block text-sm font-medium">
+                  NID last 4 digits <span className="text-mkt-slate/70">(optional)</span>
                 </label>
                 <input
                   id="buyer-nid"
@@ -576,7 +576,7 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
                   onChange={(e) =>
                     setBuyer((b) => ({ ...b, nidLast4: e.target.value.replace(/\D/g, '') }))
                   }
-                  className="border-ep-line bg-ep-paper mt-1 block w-24 rounded-md border px-3 py-2 text-sm tabular-nums"
+                  className="border-mkt-line mt-1 block w-24 rounded-md border bg-white px-3 py-2 text-sm tabular-nums"
                   aria-invalid={clientErrors['nidLast4'] ? 'true' : 'false'}
                   aria-describedby={clientErrors['nidLast4'] ? 'buyer-nid-err' : undefined}
                   data-testid="buyer-nid"
@@ -610,18 +610,18 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
               <p className="text-mkt-red text-sm font-medium">
                 We couldn&apos;t process your order
               </p>
-              <p className="text-ep-graphite mt-1 text-sm">{submitState.message}</p>
+              <p className="text-mkt-slate mt-1 text-sm">{submitState.message}</p>
             </div>
           )}
 
           {submitState.kind === 'blocked' && (
             <div
               role="status"
-              className="border-ep-amber/30 bg-ep-amber/5 mt-4 rounded-2xl border p-4"
+              className="mt-4 rounded-2xl border border-amber-600/30 bg-amber-600/5 p-4"
               data-testid="buyer-form-blocked"
             >
-              <p className="text-ep-ink text-sm font-medium">Payments temporarily unavailable</p>
-              <p className="text-ep-graphite mt-1 text-sm">
+              <p className="text-mkt-ink text-sm font-medium">Payments temporarily unavailable</p>
+              <p className="text-mkt-slate mt-1 text-sm">
                 Your order is saved (reference{' '}
                 <span className="font-mono">{submitState.orderId}</span>), but online payments are
                 currently disabled in this environment. The organiser will follow up by email to
@@ -658,16 +658,16 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
             against an unavailable document.
           */}
           <details
-            className="border-ep-line/60 bg-ep-paper/40 mt-6 rounded-2xl border"
+            className="border-mkt-line/60 mt-6 rounded-2xl border bg-white/40"
             data-testid="buyer-terms-panel"
           >
-            <summary className="text-ep-ink cursor-pointer px-4 py-3 text-sm font-medium">
+            <summary className="text-mkt-ink cursor-pointer px-4 py-3 text-sm font-medium">
               Buyer Terms ({buyerTermsVersion ?? 'unavailable'}) · ক্রেতা শর্তাবলী
             </summary>
             <div className="px-4 pb-4">
               {buyerTermsBodyHtml ? (
                 <div
-                  className="text-ep-graphite prose prose-sm max-w-none text-sm"
+                  className="text-mkt-slate prose prose-sm max-w-none text-sm"
                   data-testid="buyer-terms-body"
                   // The body_html is pre-rendered + sanitized server-side
                   // via the rehype-sanitize allowlist in
@@ -678,7 +678,7 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
                   dangerouslySetInnerHTML={{ __html: buyerTermsBodyHtml }}
                 />
               ) : (
-                <p className="text-ep-graphite text-sm" data-testid="buyer-terms-body-unavailable">
+                <p className="text-mkt-slate text-sm" data-testid="buyer-terms-body-unavailable">
                   The terms document is temporarily unavailable. You can read it at{' '}
                   <Link className="underline" href="/buyer-terms">
                     /buyer-terms
@@ -690,7 +690,7 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
           </details>
 
           <div className="mt-6 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-ep-graphite/80 text-xs" data-testid="buyer-terms-clickwrap">
+            <p className="text-mkt-slate/80 text-xs" data-testid="buyer-terms-clickwrap">
               <span lang="bn" className="block">
                 {isFreeEvent ? '"Confirm registration"' : '"Continue with bKash"'} বাটনে ক্লিক করে
                 আপনি Event Pulse-এর Buyer Terms ({buyerTermsVersion ?? '—'}) এবং{' '}

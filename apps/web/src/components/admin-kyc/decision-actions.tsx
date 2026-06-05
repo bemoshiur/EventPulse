@@ -68,7 +68,7 @@ function ApproveModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="approve-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-mkt-soft)] p-4"
     >
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
         <h3 id="approve-modal-title" className="text-lg font-semibold text-[var(--color-mkt-ink)]">
@@ -149,7 +149,7 @@ function RejectModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="reject-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-mkt-soft)] p-4"
     >
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
         <h3 id="reject-modal-title" className="text-lg font-semibold text-[var(--color-mkt-ink)]">

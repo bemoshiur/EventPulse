@@ -103,12 +103,12 @@ export default function AdminTicketTiersPage() {
                             <div className="flex items-center gap-2">
                               <h2 className="text-mkt-ink text-lg font-semibold">{tier.name}</h2>
                               {tier.isComplimentary && (
-                                <span className="bg-ep-mint/20 text-mkt-ink rounded-full px-2 py-0.5 text-xs">
+                                <span className="text-mkt-ink rounded-full bg-emerald-600/20 px-2 py-0.5 text-xs">
                                   Complimentary
                                 </span>
                               )}
                               {archived && (
-                                <span className="bg-ep-line/60 text-mkt-slate rounded-full px-2 py-0.5 text-xs">
+                                <span className="bg-mkt-line/60 text-mkt-slate rounded-full px-2 py-0.5 text-xs">
                                   Archived
                                 </span>
                               )}

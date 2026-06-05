@@ -62,12 +62,12 @@ export function TicketTierList({ tiers, onEdit, onArchive, busyTierId }: TicketT
                   <div className="flex items-center gap-2">
                     <h3 className="text-mkt-ink text-lg font-semibold">{tier.name}</h3>
                     {isComp && (
-                      <span className="bg-ep-mint/20 text-mkt-ink rounded-full px-2 py-0.5 text-xs">
+                      <span className="text-mkt-ink rounded-full bg-emerald-600/20 px-2 py-0.5 text-xs">
                         Complimentary
                       </span>
                     )}
                     {archived && (
-                      <span className="bg-ep-line/60 text-mkt-slate rounded-full px-2 py-0.5 text-xs">
+                      <span className="bg-mkt-line/60 text-mkt-slate rounded-full px-2 py-0.5 text-xs">
                         Archived
                       </span>
                     )}
@@ -111,7 +111,7 @@ export function TicketTierList({ tiers, onEdit, onArchive, busyTierId }: TicketT
                     type="button"
                     onClick={() => onEdit(tier)}
                     disabled={archived || busyTierId === tier.id}
-                    className="border-mkt-line text-mkt-slate hover:text-mkt-ink hover:border-ep-cerulean inline-flex h-9 items-center rounded-md border px-3 text-sm font-medium transition disabled:opacity-50"
+                    className="border-mkt-line text-mkt-slate hover:text-mkt-ink hover:border-mkt-red inline-flex h-9 items-center rounded-md border px-3 text-sm font-medium transition disabled:opacity-50"
                     data-testid={`tier-edit-${tier.id}`}
                   >
                     Edit
@@ -120,7 +120,7 @@ export function TicketTierList({ tiers, onEdit, onArchive, busyTierId }: TicketT
                     type="button"
                     onClick={() => onArchive(tier)}
                     disabled={archived || busyTierId === tier.id}
-                    className="text-mkt-red hover:bg-ep-rose/10 inline-flex h-9 items-center rounded-md border border-transparent px-3 text-sm font-medium transition disabled:opacity-50"
+                    className="text-mkt-red hover:bg-mkt-red/10 inline-flex h-9 items-center rounded-md border border-transparent px-3 text-sm font-medium transition disabled:opacity-50"
                     data-testid={`tier-archive-${tier.id}`}
                   >
                     {archived ? 'Archived' : 'Archive'}
