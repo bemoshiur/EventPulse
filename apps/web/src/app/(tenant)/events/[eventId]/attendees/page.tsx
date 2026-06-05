@@ -33,10 +33,10 @@ export default function TenantAttendeesPage() {
   const tiers = (tierRows ?? []).map((t) => ({ id: t.id, name: t.name }))
 
   return (
-    <div className="space-y-8 text-mkt-ink">
+    <div className="text-mkt-ink space-y-8">
       <header>
         <h1 className="text-3xl font-bold">Attendees</h1>
-        <p className="mt-2 text-base text-mkt-slate">
+        <p className="text-mkt-slate mt-2 text-base">
           Everyone registered for this event. Filter, search, and see live check-in status pulled
           straight from the door scanner.
         </p>

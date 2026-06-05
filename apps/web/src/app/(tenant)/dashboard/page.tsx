@@ -23,11 +23,11 @@ import { SalesDashboard } from '@/components/tenant/sales-dashboard'
 
 export default function TenantDashboardPage() {
   return (
-    <div className="space-y-8 text-mkt-ink">
+    <div className="text-mkt-ink space-y-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="mt-2 text-base text-mkt-slate">
+          <p className="text-mkt-slate mt-2 text-base">
             Sales performance across your events — gross, net to you, tickets sold, and the last 30
             days at a glance.
           </p>

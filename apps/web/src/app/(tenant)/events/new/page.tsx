@@ -56,17 +56,17 @@ export function CreateEvent() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 text-mkt-ink">
+    <div className="text-mkt-ink mx-auto max-w-2xl space-y-6">
       <header>
         <h1 className="text-3xl font-bold">Create your event</h1>
-        <p className="mt-2 text-mkt-slate">
+        <p className="text-mkt-slate mt-2">
           Fill in the basics — you can add ticket tiers and publish next. Free events go live
           without verification.
         </p>
       </header>
 
       <div>
-        <label htmlFor="event-type" className="mb-1 block text-sm font-medium text-mkt-slate">
+        <label htmlFor="event-type" className="text-mkt-slate mb-1 block text-sm font-medium">
           What kind of event?
         </label>
         <select
