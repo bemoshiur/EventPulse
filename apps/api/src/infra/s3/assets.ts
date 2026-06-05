@@ -23,11 +23,15 @@ const REGION = process.env['AWS_REGION'] ?? 'ap-southeast-1'
 const DEFAULT_ASSETS_BUCKET = 'eventpulse-assets-prod-739275468267'
 const UPLOAD_EXPIRES_SECONDS = 300
 
+// Raster formats only. SVG is deliberately excluded: an SVG can embed
+// <script>, and these objects are public-read + served with their own
+// Content-Type, so a direct hit on the asset URL would execute the script
+// (stored XSS / phishing — and same-origin if assets ever move behind a custom
+// domain). PNG/JPG/WebP cover every legitimate cover + logo use case.
 export const ASSET_CONTENT_TYPES = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
-  'image/svg+xml': 'svg',
 } as const
 
 export type AssetContentType = keyof typeof ASSET_CONTENT_TYPES
