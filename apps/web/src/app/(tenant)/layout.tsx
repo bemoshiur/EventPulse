@@ -1,6 +1,5 @@
 import { AuthGate } from '@/components/auth/auth-gate'
 import { QueryProvider } from '@/components/providers/query-provider'
-import { GradientMesh } from '@/components/ui/gradient-mesh'
 import { TenantTypeGate } from '@/components/onboarding/tenant-type-gate'
 
 /**
@@ -20,8 +19,7 @@ import { TenantTypeGate } from '@/components/onboarding/tenant-type-gate'
  */
 export default function TenantLayout({ children }: { children: React.ReactNode }) {
   return (
-    <main className="relative min-h-screen">
-      <GradientMesh variant="calm" />
+    <main className="text-mkt-ink relative min-h-screen bg-[var(--color-mkt-soft)] font-[family-name:var(--font-bangla)]">
       <AuthGate audience="tenant" wrongAudiencePath="/choose-tenant">
         <QueryProvider>
           <TenantTypeGate>

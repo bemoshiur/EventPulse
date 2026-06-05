@@ -59,14 +59,14 @@ export default function EventManagePage() {
 
   if (state.kind === 'loading') {
     return (
-      <p role="status" className="text-white/70">
+      <p role="status" className="text-mkt-slate">
         Loading…
       </p>
     )
   }
   if (state.kind === 'error') {
     return (
-      <p role="alert" className="text-ep-rose">
+      <p role="alert" className="text-mkt-red">
         {state.message}
       </p>
     )

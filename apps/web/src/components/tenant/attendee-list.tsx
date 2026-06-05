@@ -63,12 +63,12 @@ function relativeTime(iso: string): string {
 function StatusBadge({ status }: { status: string }) {
   const tone =
     status === 'paid' || status === 'completed'
-      ? 'bg-[var(--ep-mint)]/15 text-[var(--ep-mint)]'
+      ? 'bg-[var(--ep-mint)]/15 text-emerald-600'
       : status === 'refunded'
         ? 'bg-[var(--ep-amber)]/15 text-[var(--ep-amber)]'
         : status === 'cancelled' || status === 'failed'
-          ? 'bg-[var(--ep-rose)]/15 text-[var(--ep-rose)]'
-          : 'bg-[var(--ep-cerulean)]/15 text-[var(--ep-cerulean)]'
+          ? 'bg-[var(--ep-rose)]/15 text-mkt-red'
+          : 'bg-[var(--ep-cerulean)]/15 text-mkt-red'
   return (
     <span
       className={`rounded-full px-2 py-0.5 text-xs font-medium tracking-wide uppercase ${tone}`}
@@ -81,15 +81,13 @@ function StatusBadge({ status }: { status: string }) {
 function CheckInPill({ row }: { row: AttendeeListRow }) {
   if (row.checkedInAt) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--ep-mint)]/15 px-2 py-0.5 text-xs font-medium text-[var(--ep-mint)]">
+      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--ep-mint)]/15 px-2 py-0.5 text-xs font-medium text-emerald-600">
         ✓ {relativeTime(row.checkedInAt)}
-        {row.checkedInGate ? (
-          <span className="text-[var(--ep-graphite)]">· {row.checkedInGate}</span>
-        ) : null}
+        {row.checkedInGate ? <span className="text-mkt-slate">· {row.checkedInGate}</span> : null}
       </span>
     )
   }
-  return <span className="text-xs text-[var(--ep-graphite)]">—</span>
+  return <span className="text-mkt-slate text-xs">—</span>
 }
 
 export function AttendeeList({ eventId, tiers }: AttendeeListProps) {
@@ -139,11 +137,11 @@ export function AttendeeList({ eventId, tiers }: AttendeeListProps) {
   return (
     <section aria-label="Attendees" className="space-y-6">
       {/* Filter bar */}
-      <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-[var(--ep-line)] bg-white/40 p-4">
+      <div className="border-mkt-line flex flex-wrap items-end gap-4 rounded-2xl border bg-white p-4">
         <form onSubmit={onSearchSubmit} className="min-w-[240px] flex-1">
           <label
             htmlFor="attendee-search"
-            className="mb-1 block text-xs font-medium tracking-wide text-[var(--ep-graphite)] uppercase"
+            className="text-mkt-slate mb-1 block text-xs font-medium tracking-wide uppercase"
           >
             Search
           </label>
@@ -153,14 +151,14 @@ export function AttendeeList({ eventId, tiers }: AttendeeListProps) {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Name or email…"
-            className="w-full rounded-md border border-[var(--ep-line)] bg-white px-3 py-2 text-sm text-[var(--ep-ink)]"
+            className="border-mkt-line text-mkt-ink w-full rounded-md border bg-white px-3 py-2 text-sm"
           />
         </form>
 
         <div>
           <label
             htmlFor="tier-filter"
-            className="mb-1 block text-xs font-medium tracking-wide text-[var(--ep-graphite)] uppercase"
+            className="text-mkt-slate mb-1 block text-xs font-medium tracking-wide uppercase"
           >
             Tier
           </label>
@@ -170,7 +168,7 @@ export function AttendeeList({ eventId, tiers }: AttendeeListProps) {
             onChange={(e) =>
               onFilterChange({ tierId: e.target.value === '' ? undefined : e.target.value })
             }
-            className="rounded-md border border-[var(--ep-line)] bg-white px-3 py-2 text-sm text-[var(--ep-ink)]"
+            className="border-mkt-line text-mkt-ink rounded-md border bg-white px-3 py-2 text-sm"
           >
             <option value="">All tiers</option>
             {tiers.map((t) => (
@@ -184,7 +182,7 @@ export function AttendeeList({ eventId, tiers }: AttendeeListProps) {
         <div>
           <label
             htmlFor="checkin-filter"
-            className="mb-1 block text-xs font-medium tracking-wide text-[var(--ep-graphite)] uppercase"
+            className="text-mkt-slate mb-1 block text-xs font-medium tracking-wide uppercase"
           >
             Check-in
           </label>
@@ -192,7 +190,7 @@ export function AttendeeList({ eventId, tiers }: AttendeeListProps) {
             id="checkin-filter"
             value={filter.checkIn ?? 'all'}
             onChange={(e) => onFilterChange({ checkIn: e.target.value as CheckInFilter })}
-            className="rounded-md border border-[var(--ep-line)] bg-white px-3 py-2 text-sm text-[var(--ep-ink)]"
+            className="border-mkt-line text-mkt-ink rounded-md border bg-white px-3 py-2 text-sm"
           >
             {CHECK_IN_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -205,7 +203,7 @@ export function AttendeeList({ eventId, tiers }: AttendeeListProps) {
         <div>
           <label
             htmlFor="order-status-filter"
-            className="mb-1 block text-xs font-medium tracking-wide text-[var(--ep-graphite)] uppercase"
+            className="text-mkt-slate mb-1 block text-xs font-medium tracking-wide uppercase"
           >
             Order status
           </label>
@@ -213,7 +211,7 @@ export function AttendeeList({ eventId, tiers }: AttendeeListProps) {
             id="order-status-filter"
             value={filter.orderStatus ?? 'all'}
             onChange={(e) => onFilterChange({ orderStatus: e.target.value as OrderStatusFilter })}
-            className="rounded-md border border-[var(--ep-line)] bg-white px-3 py-2 text-sm text-[var(--ep-ink)]"
+            className="border-mkt-line text-mkt-ink rounded-md border bg-white px-3 py-2 text-sm"
           >
             {ORDER_STATUS_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -229,7 +227,7 @@ export function AttendeeList({ eventId, tiers }: AttendeeListProps) {
         <a
           href={buildExportHref()}
           download
-          className="inline-flex items-center gap-2 rounded-md border border-[var(--ep-violet)]/40 bg-[var(--ep-violet)]/10 px-3 py-2 text-sm font-medium text-[var(--ep-violet)] hover:bg-[var(--ep-violet)]/20"
+          className="bg-mkt-red/10 text-mkt-red hover:bg-mkt-red/20 inline-flex items-center gap-2 rounded-md border border-[var(--ep-violet)]/40 px-3 py-2 text-sm font-medium"
           data-testid="export-csv-link"
         >
           ⬇ Export CSV
@@ -241,27 +239,27 @@ export function AttendeeList({ eventId, tiers }: AttendeeListProps) {
         <div
           role="status"
           aria-live="polite"
-          className="rounded-2xl border border-[var(--ep-line)] bg-white/40 p-6 text-sm text-[var(--ep-graphite)]"
+          className="border-mkt-line text-mkt-slate rounded-2xl border bg-white p-6 text-sm"
         >
           Loading attendees…
         </div>
       ) : error ? (
         <div
           role="alert"
-          className="rounded-2xl border border-[var(--ep-rose)]/40 bg-[var(--ep-rose)]/5 p-6 text-sm text-[var(--ep-rose)]"
+          className="text-mkt-red rounded-2xl border border-[var(--ep-rose)]/40 bg-[var(--ep-rose)]/5 p-6 text-sm"
         >
           Failed to load attendees: {(error as Error).message}
         </div>
       ) : !data || data.data.length === 0 ? (
-        <div className="rounded-2xl border border-[var(--ep-line)] bg-white/40 p-6 text-sm text-[var(--ep-graphite)]">
+        <div className="border-mkt-line text-mkt-slate rounded-2xl border bg-white p-6 text-sm">
           No attendees match the current filters.
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-2xl border border-[var(--ep-line)] bg-white/40">
+          <div className="border-mkt-line overflow-x-auto rounded-2xl border bg-white">
             <table className="w-full table-auto border-collapse text-sm">
               <thead>
-                <tr className="border-b border-[var(--ep-line)] text-left text-xs tracking-wide text-[var(--ep-graphite)] uppercase">
+                <tr className="border-mkt-line text-mkt-slate border-b text-left text-xs tracking-wide uppercase">
                   <th className="px-4 py-3">Name</th>
                   <th className="px-4 py-3">Email</th>
                   <th className="px-4 py-3">Tier</th>
@@ -274,29 +272,25 @@ export function AttendeeList({ eventId, tiers }: AttendeeListProps) {
                 {data.data.map((row) => (
                   <tr
                     key={row.id}
-                    className="border-b border-[var(--ep-line)] transition-colors hover:bg-[var(--ep-mist)]"
+                    className="border-mkt-line border-b transition-colors hover:bg-[var(--color-mkt-soft)]"
                   >
-                    <td className="px-4 py-3 font-medium text-[var(--ep-ink)]">
+                    <td className="text-mkt-ink px-4 py-3 font-medium">
                       {row.attendeeName}
                       {row.voidedAt ? (
-                        <span className="ml-2 inline-flex rounded-full bg-[var(--ep-rose)]/15 px-2 py-0.5 text-xs text-[var(--ep-rose)]">
+                        <span className="text-mkt-red ml-2 inline-flex rounded-full bg-[var(--ep-rose)]/15 px-2 py-0.5 text-xs">
                           voided
                         </span>
                       ) : null}
                     </td>
-                    <td className="px-4 py-3 text-[var(--ep-graphite)]">
-                      {row.attendeeEmail ?? '—'}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--ep-ink)]">{row.tierName}</td>
+                    <td className="text-mkt-slate px-4 py-3">{row.attendeeEmail ?? '—'}</td>
+                    <td className="text-mkt-ink px-4 py-3">{row.tierName}</td>
                     <td className="px-4 py-3">
                       <StatusBadge status={row.orderStatus} />
                     </td>
                     <td className="px-4 py-3">
                       <CheckInPill row={row} />
                     </td>
-                    <td className="px-4 py-3 text-[var(--ep-graphite)]">
-                      {relativeTime(row.createdAt)}
-                    </td>
+                    <td className="text-mkt-slate px-4 py-3">{relativeTime(row.createdAt)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -305,7 +299,7 @@ export function AttendeeList({ eventId, tiers }: AttendeeListProps) {
 
           {/* Pagination */}
           {data.meta.hasMore || cursor ? (
-            <div className="flex items-center justify-between text-sm text-[var(--ep-graphite)]">
+            <div className="text-mkt-slate flex items-center justify-between text-sm">
               <span>
                 {data.data.length} shown {isFetching ? '· refreshing…' : ''}
               </span>
@@ -314,7 +308,7 @@ export function AttendeeList({ eventId, tiers }: AttendeeListProps) {
                   <button
                     type="button"
                     onClick={() => setCursor(undefined)}
-                    className="rounded-md border border-[var(--ep-line)] bg-white px-3 py-1.5 text-sm text-[var(--ep-ink)] hover:bg-[var(--ep-mist)]"
+                    className="border-mkt-line text-mkt-ink rounded-md border bg-white px-3 py-1.5 text-sm hover:bg-[var(--color-mkt-soft)]"
                   >
                     Back to top
                   </button>
@@ -323,7 +317,7 @@ export function AttendeeList({ eventId, tiers }: AttendeeListProps) {
                   <button
                     type="button"
                     onClick={() => setCursor(data.meta.nextCursor!)}
-                    className="rounded-md bg-[var(--ep-violet)] px-3 py-1.5 text-sm font-medium text-white hover:bg-[var(--ep-indigo)]"
+                    className="bg-mkt-red rounded-md px-3 py-1.5 text-sm font-medium text-white hover:bg-[var(--ep-indigo)]"
                   >
                     Next page
                   </button>

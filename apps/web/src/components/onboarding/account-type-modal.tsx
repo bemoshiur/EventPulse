@@ -37,7 +37,6 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Building2, User } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { GlassCard } from '@/components/ui/glass-card'
 import { cn } from '@/lib/utils'
 
 import type { TenantType } from '@/hooks/use-tenant-type'
@@ -172,17 +171,17 @@ export function AccountTypeModal({ isLoading, onSubmit }: AccountTypeModalProps)
           animate={animate}
           transition={transition}
         >
-          <GlassCard variant="strong" className="p-6 sm:p-8">
+          <div className="mkt-card p-6 sm:p-8">
             <header className="mb-6 text-center">
               <h2
                 id="account-type-title"
-                className="font-display text-ep-ink text-2xl font-medium sm:text-3xl"
+                className="font-display text-mkt-ink text-2xl font-medium sm:text-3xl"
               >
                 Choose your account type
               </h2>
               <p
                 id="account-type-title-bn"
-                className="font-bangla text-ep-graphite/80 mt-2 text-base"
+                className="font-bangla text-mkt-slate/80 mt-2 text-base"
               >
                 অ্যাকাউন্টের ধরন নির্বাচন করুন
               </p>
@@ -212,29 +211,27 @@ export function AccountTypeModal({ isLoading, onSubmit }: AccountTypeModalProps)
                       'focus-visible:ring-ep-cerulean transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
                       'disabled:cursor-not-allowed disabled:opacity-50',
                       isSelected
-                        ? 'border-ep-violet bg-ep-violet/5 shadow-glass'
-                        : 'border-ep-line bg-ep-paper/60 hover:shadow-glass hover:-translate-y-0.5',
+                        ? 'border-ep-violet bg-mkt-red/5 shadow-glass'
+                        : 'border-mkt-line bg-ep-paper/60 hover:shadow-glass hover:-translate-y-0.5',
                     )}
                   >
                     <span
                       className={cn(
                         'inline-flex h-10 w-10 items-center justify-center rounded-lg',
-                        isSelected ? 'bg-ep-violet text-ep-paper' : 'bg-ep-mist text-ep-graphite',
+                        isSelected ? 'bg-mkt-red text-ep-paper' : 'bg-ep-mist text-mkt-slate',
                       )}
                     >
                       <choice.Icon className="h-5 w-5" aria-hidden />
                     </span>
                     <div>
-                      <div className="font-display text-ep-ink text-lg font-medium">
+                      <div className="font-display text-mkt-ink text-lg font-medium">
                         {choice.enLabel}
                       </div>
-                      <div className="font-bangla text-ep-graphite/80 text-sm">
-                        {choice.bnLabel}
-                      </div>
+                      <div className="font-bangla text-mkt-slate/80 text-sm">{choice.bnLabel}</div>
                     </div>
-                    <p className="text-ep-graphite text-sm">
+                    <p className="text-mkt-slate text-sm">
                       {choice.enDescription}
-                      <span className="font-bangla text-ep-graphite/75 mt-1 block">
+                      <span className="font-bangla text-mkt-slate/75 mt-1 block">
                         {choice.bnDescription}
                       </span>
                     </p>
@@ -246,7 +243,7 @@ export function AccountTypeModal({ isLoading, onSubmit }: AccountTypeModalProps)
             {submitError ? (
               <div
                 role="alert"
-                className="border-ep-rose/40 bg-ep-rose/10 text-ep-rose mt-5 rounded-md border px-4 py-3 text-sm"
+                className="border-ep-rose/40 bg-ep-rose/10 text-mkt-red mt-5 rounded-md border px-4 py-3 text-sm"
               >
                 {submitError}
               </div>
@@ -260,7 +257,7 @@ export function AccountTypeModal({ isLoading, onSubmit }: AccountTypeModalProps)
                 className={cn(
                   'inline-flex h-11 items-center justify-center gap-2 rounded-md px-6 text-sm font-medium',
                   'focus-visible:ring-ep-cerulean transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
-                  'bg-ep-violet text-ep-paper hover:shadow-glass hover:-translate-y-0.5',
+                  'bg-mkt-red text-ep-paper hover:shadow-glass hover:-translate-y-0.5',
                   'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none',
                 )}
               >
@@ -268,7 +265,7 @@ export function AccountTypeModal({ isLoading, onSubmit }: AccountTypeModalProps)
                 <span className="font-bangla text-xs opacity-75">চালিয়ে যান</span>
               </button>
             </div>
-          </GlassCard>
+          </div>
         </motion.div>
       </motion.div>
     </AnimatePresence>

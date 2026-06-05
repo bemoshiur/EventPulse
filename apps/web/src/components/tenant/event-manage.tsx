@@ -95,19 +95,19 @@ export function EventManage({ event, tenantSlug }: EventManageProps) {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 text-white">
+    <div className="text-mkt-ink mx-auto max-w-2xl space-y-6">
       <header className="space-y-2">
-        <span className="inline-flex items-center rounded-full bg-white/10 px-3 py-1 text-xs font-medium tracking-wide text-white/80 uppercase">
+        <span className="text-mkt-slate inline-flex items-center rounded-full bg-[var(--color-mkt-soft)] px-3 py-1 text-xs font-medium tracking-wide uppercase">
           {status.replace(/_/g, ' ')}
         </span>
         <h1 className="text-3xl font-bold">{event.title}</h1>
-        <p className="text-white/70">{formatWhen(event.startsAt)} · Asia/Dhaka</p>
+        <p className="text-mkt-slate">{formatWhen(event.startsAt)} · Asia/Dhaka</p>
       </header>
 
       {status === 'draft' && (
-        <section className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-6">
+        <section className="border-mkt-line space-y-3 rounded-2xl border bg-white p-6">
           <h2 className="text-lg font-semibold">Ready to go live?</h2>
-          <p className="text-sm text-white/70">
+          <p className="text-mkt-slate text-sm">
             Publishing makes your event page public at the link below. Free events go live
             immediately — no verification needed.
           </p>
@@ -115,12 +115,12 @@ export function EventManage({ event, tenantSlug }: EventManageProps) {
             type="button"
             onClick={() => void publish()}
             disabled={busy}
-            className="bg-ep-violet inline-flex h-11 items-center rounded-md px-6 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
+            className="bg-mkt-red inline-flex h-11 items-center rounded-md px-6 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
           >
             {busy ? 'Publishing…' : 'Publish event'}
           </button>
           {error && (
-            <p role="alert" className="text-ep-rose text-sm">
+            <p role="alert" className="text-mkt-red text-sm">
               {error}
             </p>
           )}
@@ -128,9 +128,9 @@ export function EventManage({ event, tenantSlug }: EventManageProps) {
       )}
 
       {isLive && (
-        <section className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-6">
+        <section className="border-mkt-line space-y-3 rounded-2xl border bg-white p-6">
           <h2 className="text-lg font-semibold">Share your event</h2>
-          <p className="text-sm text-white/70">Your public event page is live. Share this link:</p>
+          <p className="text-mkt-slate text-sm">Your public event page is live. Share this link:</p>
           <div className="flex flex-col gap-2 sm:flex-row">
             <code className="text-ep-mint min-w-0 flex-1 truncate rounded-md bg-black/30 px-3 py-2 text-sm">
               {publicLabel}
@@ -138,7 +138,7 @@ export function EventManage({ event, tenantSlug }: EventManageProps) {
             <button
               type="button"
               onClick={() => void copyLink()}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-white/20 px-4 text-sm font-medium text-white transition hover:bg-white/10"
+              className="border-mkt-line text-mkt-ink inline-flex h-10 items-center justify-center rounded-md border px-4 text-sm font-medium transition hover:bg-[var(--color-mkt-soft)]"
             >
               {copied ? 'Copied!' : 'Copy link'}
             </button>
@@ -146,7 +146,7 @@ export function EventManage({ event, tenantSlug }: EventManageProps) {
               href={publicUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex h-10 items-center justify-center rounded-md border border-white/20 px-4 text-sm font-medium text-white transition hover:bg-white/10"
+              className="border-mkt-line text-mkt-ink inline-flex h-10 items-center justify-center rounded-md border px-4 text-sm font-medium transition hover:bg-[var(--color-mkt-soft)]"
             >
               View page
             </a>
@@ -163,7 +163,7 @@ export function EventManage({ event, tenantSlug }: EventManageProps) {
           <Link
             key={l.href}
             href={l.href}
-            className="hover:border-ep-violet rounded-xl border border-white/10 bg-white/5 px-4 py-4 text-center text-sm font-medium transition hover:-translate-y-0.5"
+            className="hover:border-ep-violet border-mkt-line rounded-xl border bg-white px-4 py-4 text-center text-sm font-medium transition hover:-translate-y-0.5"
           >
             {l.label}
           </Link>

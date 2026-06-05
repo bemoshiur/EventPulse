@@ -146,14 +146,14 @@ export function EventForm({ type, formId, onValidSubmit, initialValues }: EventF
       noValidate
     >
       <header>
-        <h2 className="text-2xl font-semibold text-[var(--ep-ink)]">{cfg.taglineEn}</h2>
-        <p className="text-sm text-[var(--ep-graphite)]">{cfg.taglineBn}</p>
+        <h2 className="text-mkt-ink text-2xl font-semibold">{cfg.taglineEn}</h2>
+        <p className="text-mkt-slate text-sm">{cfg.taglineBn}</p>
       </header>
 
       <input type="hidden" {...register('type')} />
 
       <div>
-        <label htmlFor="event-title" className="block text-sm font-medium text-[var(--ep-ink)]">
+        <label htmlFor="event-title" className="text-mkt-ink block text-sm font-medium">
           Title <span className="opacity-70">· শিরোনাম</span>
         </label>
         <input
@@ -163,48 +163,42 @@ export function EventForm({ type, formId, onValidSubmit, initialValues }: EventF
           aria-invalid={errors.title ? true : undefined}
           aria-describedby={errors.title ? 'event-title-error' : undefined}
           {...register('title')}
-          className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+          className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
         />
         {errors.title ? (
-          <p id="event-title-error" className="mt-1 text-xs text-[var(--ep-rose)]">
+          <p id="event-title-error" className="text-mkt-red mt-1 text-xs">
             {errors.title.message}
           </p>
         ) : null}
       </div>
 
       <div>
-        <label htmlFor="event-title-bn" className="block text-sm font-medium text-[var(--ep-ink)]">
+        <label htmlFor="event-title-bn" className="text-mkt-ink block text-sm font-medium">
           Title (Bangla, optional) <span className="opacity-70">· বাংলা শিরোনাম</span>
         </label>
         <input
           id="event-title-bn"
           type="text"
           {...register('titleBn')}
-          className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+          className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
         />
       </div>
 
       <div>
-        <label
-          htmlFor="event-description"
-          className="block text-sm font-medium text-[var(--ep-ink)]"
-        >
+        <label htmlFor="event-description" className="text-mkt-ink block text-sm font-medium">
           Description <span className="opacity-70">· {cfg.descriptionPromptEn}</span>
         </label>
         <textarea
           id="event-description"
           rows={4}
           {...register('description')}
-          className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+          className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
         />
       </div>
 
       <fieldset className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
-          <label
-            htmlFor="event-starts-at"
-            className="block text-sm font-medium text-[var(--ep-ink)]"
-          >
+          <label htmlFor="event-starts-at" className="text-mkt-ink block text-sm font-medium">
             Starts at <span className="opacity-70">· শুরু</span>
           </label>
           <input
@@ -213,15 +207,15 @@ export function EventForm({ type, formId, onValidSubmit, initialValues }: EventF
             defaultValue={isoLocal(tomorrowNoonBdt)}
             aria-invalid={errors.startsAt ? true : undefined}
             {...register('startsAt')}
-            className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+            className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
           />
           {errors.startsAt ? (
-            <p className="mt-1 text-xs text-[var(--ep-rose)]">{errors.startsAt.message}</p>
+            <p className="text-mkt-red mt-1 text-xs">{errors.startsAt.message}</p>
           ) : null}
         </div>
 
         <div>
-          <label htmlFor="event-ends-at" className="block text-sm font-medium text-[var(--ep-ink)]">
+          <label htmlFor="event-ends-at" className="text-mkt-ink block text-sm font-medium">
             Ends at <span className="opacity-70">· শেষ</span>
           </label>
           <input
@@ -230,16 +224,16 @@ export function EventForm({ type, formId, onValidSubmit, initialValues }: EventF
             defaultValue={isoLocal(defaultEndsAt)}
             aria-invalid={errors.endsAt ? true : undefined}
             {...register('endsAt')}
-            className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+            className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
           />
           {errors.endsAt ? (
-            <p className="mt-1 text-xs text-[var(--ep-rose)]">{errors.endsAt.message}</p>
+            <p className="text-mkt-red mt-1 text-xs">{errors.endsAt.message}</p>
           ) : null}
         </div>
       </fieldset>
 
-      <fieldset className="space-y-3 rounded-lg border border-[var(--ep-line)] p-4">
-        <legend className="px-1 text-sm font-medium text-[var(--ep-ink)]">
+      <fieldset className="border-mkt-line space-y-3 rounded-lg border p-4">
+        <legend className="text-mkt-ink px-1 text-sm font-medium">
           Venue <span className="opacity-70">· ভেন্যু</span>
         </legend>
 
@@ -255,59 +249,59 @@ export function EventForm({ type, formId, onValidSubmit, initialValues }: EventF
         {venueType === 'online' ? (
           <div className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-[var(--ep-ink)]">
+              <label className="text-mkt-ink block text-sm font-medium">
                 Platform <span className="opacity-70">· প্ল্যাটফর্ম</span>
               </label>
               <input
                 type="text"
                 placeholder="Zoom, Google Meet, etc."
                 {...register('venue.platform')}
-                className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+                className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-[var(--ep-ink)]">
+              <label className="text-mkt-ink block text-sm font-medium">
                 Join URL <span className="opacity-70">· জয়েন URL</span>
               </label>
               <input
                 type="url"
                 placeholder="https://..."
                 {...register('venue.url')}
-                className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+                className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
               />
             </div>
           </div>
         ) : (
           <div className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-[var(--ep-ink)]">
+              <label className="text-mkt-ink block text-sm font-medium">
                 Venue name <span className="opacity-70">· ভেন্যুর নাম</span>
               </label>
               <input
                 type="text"
                 placeholder={cfg.venueNamePlaceholderEn}
                 {...register('venue.name')}
-                className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+                className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-[var(--ep-ink)]">
+              <label className="text-mkt-ink block text-sm font-medium">
                 Address <span className="opacity-70">· ঠিকানা</span>
               </label>
               <input
                 type="text"
                 {...register('venue.address')}
-                className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+                className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-[var(--ep-ink)]">
+                <label className="text-mkt-ink block text-sm font-medium">
                   Division <span className="opacity-70">· বিভাগ</span>
                 </label>
                 <select
                   {...register('venue.division')}
-                  className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm"
+                  className="border-mkt-line mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm"
                 >
                   {BD_DIVISIONS.map((d) => (
                     <option key={d} value={d}>
@@ -317,13 +311,13 @@ export function EventForm({ type, formId, onValidSubmit, initialValues }: EventF
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-[var(--ep-ink)]">
+                <label className="text-mkt-ink block text-sm font-medium">
                   District <span className="opacity-70">· জেলা</span>
                 </label>
                 <input
                   type="text"
                   {...register('venue.district')}
-                  className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+                  className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
                 />
               </div>
             </div>
@@ -333,23 +327,23 @@ export function EventForm({ type, formId, onValidSubmit, initialValues }: EventF
 
       <fieldset className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
-          <label className="block text-sm font-medium text-[var(--ep-ink)]">
+          <label className="text-mkt-ink block text-sm font-medium">
             Capacity (optional) <span className="opacity-70">· ধারণক্ষমতা</span>
           </label>
           <input
             type="number"
             min={1}
             {...register('capacity', { valueAsNumber: true })}
-            className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+            className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-[var(--ep-ink)]">
+          <label className="text-mkt-ink block text-sm font-medium">
             Visibility <span className="opacity-70">· দৃশ্যমানতা</span>
           </label>
           <select
             {...register('visibility')}
-            className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm"
+            className="border-mkt-line mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm"
           >
             {EVENT_VISIBILITIES.map((v) => (
               <option key={v} value={v}>
@@ -364,7 +358,7 @@ export function EventForm({ type, formId, onValidSubmit, initialValues }: EventF
         <button
           type="submit"
           disabled={isSubmitting}
-          className="inline-flex h-11 items-center rounded-md bg-[var(--ep-violet)] px-5 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:shadow-md disabled:opacity-60"
+          className="bg-mkt-red inline-flex h-11 items-center rounded-md px-5 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:shadow-md disabled:opacity-60"
         >
           {isSubmitting ? 'Saving…' : 'Save draft'}
         </button>
