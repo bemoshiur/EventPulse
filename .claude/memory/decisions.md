@@ -4,6 +4,26 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-05 (Day 48 cont) · Whole app unified on ONE red/white theme (supersedes "app keeps §1.5 violet")
+
+**Context:** Operator saw the authenticated `/events/new` page still on the violet/glass/GradientMesh §1.5 theme and asked why it didn't match the red/white marketing site. The earlier clone program had deliberately kept the app on §1.5 violet (handoff Day 47/48). Operator then asked to audit ALL pages and re-theme.
+
+**Decision:** Re-theme the entire authenticated app to the `mkt-*` red/white system. Tenant portal (16 files), admin portal, and KYC wizard all converted (v0.4.13/14). Dropped GradientMesh from the (tenant)/(admin) layouts → light bg. `event-landing` (public buyer page) stays **tenant-branded** via `--brand-*` (intentional — it's the organiser's brand surface, now editable via the Branding settings). Semantic status colours (amber/emerald/rose badges) kept.
+
+**Consequences:** "App keeps §1.5 violet" notes in prior handoffs are superseded — there is now ONE theme everywhere except the tenant-branded public event page. Future app UI uses `mkt-*` tokens. The `ui/glass-card.tsx` + `ui/gradient-mesh.tsx` components are now effectively dead (left in place, unimported). The `var(--ep-*)`→`mkt` sweep must catch BOTH arbitrary (`text-[var(--ep-ink)]`) AND utility (`text-ep-ink`, `bg-ep-paper`, `bg-black/N`) forms — missing the utility form needed a second cleanup pass (gotcha).
+
+---
+
+## 2026-06-05 (Day 48 cont) · Self-service editing suite — edit event, rename handle/slug, event-slug, branding, per-event SEO
+
+**Context:** Operator did a live walk-through of their event (`/moshiur/cosmic-omniverse-expo-2026`) and asked to make every option editable ("moshiur can be renamed and all other options"), add a cover input, and add full SEO/OpenGraph per event.
+
+**Decision:** Shipped (v0.4.15–18): (1) **Edit-event** `/events/[id]/edit` reusing EventForm+PATCH. (2) **Cover-image URL** field (file upload deferred — needs an assets bucket). (3) **Handle/slug rename** — `services/handles` with `handle_history` **30-day redirects** (renames don't break shared links); `PATCH /tenant/me/handle` + `/settings`. (4) **Event-slug rename** — `EventUpdateSchema.slug` + per-tenant uniqueness; **NO redirect** (old event links break — UI warns; `event_slug_history` deferred). (5) **Branding** — `PATCH /tenant/me/brand` (logo URL + hex colours) driving the public event hero. (6) **Per-event SEO** — `lib/event-seo.ts`: full metadata + Schema.org Event JSON-LD.
+
+**Consequences:** Real file-upload (cover + logo) is the next infra ask — a **new public assets S3 bucket** = prod infra change, confirm with operator before building. Auth-page restyle ("like TenderPulse") still pending. Event-slug redirect parity with handle redirect is an open follow-up.
+
+---
+
 ## 2026-06-05 · KEEP current architecture — no subdomain→path migration, no prepaid plans, keep inline i18n (Phases 6/7/8 dropped)
 
 **Supersedes:** the 2026-06-04 "TenderPulse clone program" sub-decisions "subdomains → apex + path routing" and "payment → adopt prepaid plans."
