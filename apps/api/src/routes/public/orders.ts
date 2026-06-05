@@ -43,6 +43,7 @@ import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { z } from 'zod'
 
+import { fetchOrderStatus } from '../../domain/public-orders/status.js'
 import { logger } from '../../lib/logger.js'
 import { idempotencyMiddleware } from '../../middleware/idempotency.js'
 import {
@@ -195,5 +196,27 @@ publicOrdersRoutes.post('/', zValidator('json', createOrderInputSchema), async (
       },
       500,
     )
+  }
+})
+
+// ─── GET /:id/status ───────────────────────────────────────────────────
+//
+// Backs the post-payment /orders/return/* pages. orderId is a uuid (not
+// guessable, not PII). Returns the order outcome + buyer-safe summary +
+// issued tickets so the success page can show the receipt + tickets.
+
+const orderIdParam = z.object({ id: z.string().uuid() })
+
+publicOrdersRoutes.get('/:id/status', zValidator('param', orderIdParam), async (c) => {
+  const { id } = c.req.valid('param')
+  try {
+    const status = await fetchOrderStatus(id)
+    if (!status) {
+      return c.json({ error: { code: 'NOT_FOUND', message: 'order not found' } }, 404)
+    }
+    return c.json({ data: status })
+  } catch (err) {
+    logger.error({ err, orderId: id }, 'public.order.status.failed')
+    return c.json({ error: { code: 'INTERNAL_ERROR', message: 'failed to load order' } }, 500)
   }
 })
