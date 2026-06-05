@@ -2,6 +2,16 @@
 
 ## In flight
 
+**Day 48 (2026-06-05, cont) — ✅ Editing suite + FULL app re-theme + per-event SEO LIVE (v0.4.8→v0.4.18, +v0.4.19 OG-fix).** Big session. All on prod:
+- **v0.4.8** login CORS fix (apex origin) + TiCON removed project-wide + `/glossary` + `/customers`.
+- **v0.4.9–12** 18 legal/trust pages live with real v1.0 content (authored + seeded) + ISR cache-staleness fix.
+- **v0.4.13/14** whole authenticated app (tenant + admin + KYC wizard, ~46 files) re-themed violet/glass → red/white `mkt-*`; GradientMesh dropped from app layouts; residual utility-token cleanup. See decisions.md "Whole app unified on ONE red/white theme".
+- **v0.4.15** edit-event page · **v0.4.16** cover-image field · **v0.4.17** handle/slug rename (+30-day `handle_history` redirects, 7 tests, `/settings`) · **v0.4.18** event-slug rename (uniqueness, no-redirect) + branding (logo+colours `PATCH /tenant/me/brand`) + per-event SEO (`lib/event-seo`: metadata + OpenGraph + Twitter + Schema.org Event JSON-LD, 9 tests).
+- **Verified live:** event page emits JSON-LD `"@type":"Event"`, canonical, keywords, OG. Login works. All 18 legal pages real content.
+- **Open follow-ups:** auth-page restyle (not started); real file-upload (cover/logo) needs a public assets bucket (infra — confirm first); event-slug redirects (`event_slug_history`); dynamic OG image.
+
+---
+
 **Day 48 (2026-06-05, cont) — ✅ Clone parity round LIVE (v0.4.7).** Deeper TenderPulse parity + a real bug fix, all on prod:
 - **Footer** rebuilt to TenderPulse 4-band structure (CTA band + 12-col brand/nav grid + trust-dossier strip w/ Operational status + security note + bottom bar).
 - **Blog** built from scratch: `/blog` index (hero + featured + category chips + grid) + `/blog/[slug]` posts (Article JSON-LD + related); 6 original Event Pulse field guides (`lib/blog.ts`); slugs in sitemap.

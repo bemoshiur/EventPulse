@@ -4,6 +4,32 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## A new DB integration test fails CI with "DATABASE_URL is not set" even though CI has a Postgres service
+
+**Why it happens:** CI runs tests in TWO jobs — a fast **"Unit tests"** job with NO `DATABASE_URL`, and an **integration-tests** job WITH a Postgres service + `DATABASE_URL`. Both run `pnpm test` (all vitest files). A DB-touching test written with a plain `describe(...)` runs in BOTH; in the unit job it hits `withSuperAdmin`/`withTenant` → `DATABASE_URL is not set` → the unit job fails. (Cost a CI round on PR #325, 2026-06-05.)
+
+**Fix:** Gate every DB integration test behind the project's `describeIfDb` pattern (as `ensure-personal-tenant.test.ts` and `events.test.ts` already do):
+```ts
+const HAS_DB = Boolean(process.env['DATABASE_URL'])
+const describeIfDb = HAS_DB ? describe : describe.skip
+describeIfDb('my suite', () => { ... })
+```
+Skips cleanly in the unit job (no DB), runs in the integration job (DB present). A top-level `afterAll(resetPool)` is safe even when skipped (`resetPool` guards on `if (_pool)`).
+
+**How to avoid:** Any test that calls `withTenant`/`withSuperAdmin`/touches the pool MUST use `describeIfDb`. Grep new test files for `describe(` vs `describeIfDb(` before pushing.
+
+---
+
+## `EventUpdateSchema` is `.strict()` — sending the create shape (with `type`) to PATCH /events/:id 400s
+
+**Why it happens:** The edit-event page reused EventForm, whose `onValidSubmit` yields an `EventCreateInput` that includes `type` (+ other create-only fields). `EventUpdateSchema` is `.strict()` and has no `type`, so a `JSON.stringify(values)` PATCH body is rejected as an unrecognized key. The page typechecked + rendered fine — the bug only bit on actual save. (Found + fixed 2026-06-05, v0.4.18.)
+
+**Fix:** On the edit page, build an explicit allowed-field patch object (title, dates, venue, capacity, visibility, bannerImageUrl, slug…) rather than spreading the whole form output.
+
+**How to avoid:** When a form is shared between create (full schema) and edit (`.strict()` partial schema), never forward the raw form output to PATCH — pick the editable fields explicitly.
+
+---
+
 ## Marketing pages silently unstyled — `var(--mkt-ink)` instead of `var(--color-mkt-ink)` (Tailwind v4 token naming)
 
 **Symptom.** After the red/white re-theme, the detail pages (features, pricing, contact, changelog, the `(public)` layout) had wrong heading colours, missing borders, and missing white backgrounds — on the LIVE site. Typecheck + ESLint were green (CSS class strings aren't checked), so it shipped (v0.4.5/0.4.6) before anyone noticed. 45 references across 8 files.
