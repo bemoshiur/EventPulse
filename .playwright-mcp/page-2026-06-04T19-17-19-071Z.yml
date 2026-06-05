@@ -1,0 +1,27 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - heading "Sign in" [level=1] [ref=e6]
+        - paragraph [ref=e7]: Welcome back to Event Pulse.
+      - paragraph [ref=e8]: Enter your email and we’ll send you a one-time sign-in link.
+      - generic [ref=e10]:
+        - generic [ref=e11]:
+          - img
+          - textbox "you@company.com" [ref=e12]
+        - button "Continue" [ref=e13]:
+          - text: Continue
+          - img [ref=e14]
+      - paragraph [ref=e16]:
+        - text: By continuing you agree to our
+        - link "Terms" [ref=e17] [cursor=pointer]:
+          - /url: /terms
+        - text: and
+        - link "Privacy Policy" [ref=e18] [cursor=pointer]:
+          - /url: /privacy
+        - text: .
+      - paragraph [ref=e19]:
+        - text: New to Event Pulse?
+        - link "Create an account" [ref=e20] [cursor=pointer]:
+          - /url: /sign-up
+  - alert [ref=e21]

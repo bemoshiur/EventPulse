@@ -1,6 +1,6 @@
 # Contributing to Event Pulse
 
-Event Pulse is a proprietary SaaS platform. Contributions are accepted from authorised Public Pulse Agency / TiCON System Limited team members and engaged contractors only. External contributions are not solicited.
+Event Pulse is a proprietary SaaS platform. Contributions are accepted from authorised Public Pulse Agency team members and engaged contractors only. External contributions are not solicited.
 
 If you are authorised to contribute, this is how we work.
 

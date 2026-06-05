@@ -70,8 +70,6 @@ export default function ContactPage() {
                 <p className="mt-3 text-sm leading-relaxed text-[var(--color-mkt-slate)]">
                   Public Pulse Agency
                   <br />
-                  TiCON System Limited
-                  <br />
                   Dhaka, Bangladesh
                 </p>
               </GlassCard>

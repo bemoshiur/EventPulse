@@ -2,7 +2,7 @@
 
 > **One prompt. Bootstrap to production.**
 > Version 2.0 · 16 May 2026
-> Author: Moshiur Rahman / Public Pulse Agency / TiCON System Limited
+> Author: Moshiur Rahman / Public Pulse Agency
 
 ---
 
@@ -95,7 +95,7 @@ These decisions are final. Do not propose alternatives without asking.
 | IaC (MVP) | Shell scripts + AWS CLI + ansible playbooks | n/a | Reproducible EC2 setup; not full CDK while we're single-server |
 | IaC (Phase 3+) | AWS CDK in TypeScript | 2.x | When we split out RDS, ALB, multi-AZ |
 | CI/CD | GitHub Actions | n/a | SSH to EC2 via OIDC + bastion, `pm2 reload` on deploy |
-| Region | `ap-southeast-1` (Singapore) | n/a | Matches TiCON pattern |
+| Region | `ap-southeast-1` (Singapore) | n/a | Public Pulse Agency standard |
 | Package manager | pnpm | 9+ | Workspaces for monorepo |
 | Repo structure | Turborepo monorepo | latest | See §4 |
 | Node module style | ESM only | n/a | No CommonJS |

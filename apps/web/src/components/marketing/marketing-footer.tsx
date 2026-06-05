@@ -197,7 +197,7 @@ export function MarketingFooter() {
         <div className="text-mkt-slate mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 py-6 text-xs lg:flex-row lg:px-10">
           <span>
             &copy; 2026 <strong className="text-mkt-ink">Event Pulse</strong> · Public Pulse Agency
-            · TiCON System Limited
+           
           </span>
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
             <Link href="/legal/changelog" className="hover:text-mkt-red transition">

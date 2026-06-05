@@ -1,0 +1,4 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - status [ref=e4]: Signing you in…
+  - alert [ref=e5]

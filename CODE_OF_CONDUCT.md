@@ -14,7 +14,7 @@ The full text is at the link above and at <https://www.contributor-covenant.org/
 
 ## Scope
 
-Applies to everyone participating in Event Pulse work — Public Pulse Agency / TiCON System Limited employees, engaged contractors, vendors with repo access, and any third-party reviewer.
+Applies to everyone participating in Event Pulse work — Public Pulse Agency employees, engaged contractors, vendors with repo access, and any third-party reviewer.
 
 It applies in public project spaces (GitHub issues, PRs, this repository) and when representing the project externally (conferences, posts, customer meetings).
 

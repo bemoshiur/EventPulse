@@ -1,7 +1,7 @@
 # Handoff Protocol — multi-developer awareness
 
 This project may be worked on by Moshiur Rahman and by other developers
-(TiCON engineers, contractors, AI assistants). Claude Code must keep
+(Public Pulse Agency engineers, contractors, AI assistants). Claude Code must keep
 everyone in sync through memory files, not assumptions.
 
 ## Identity awareness
