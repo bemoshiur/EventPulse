@@ -28,6 +28,7 @@ import { requireTenantAuth } from '../../auth/middleware.js'
 import { withTenant } from '../../db/client.js'
 import { tenants } from '../../db/schema/index.js'
 import { logger } from '../../lib/logger.js'
+import { createAssetUploadUrl, UnsupportedAssetTypeError } from '../../infra/s3/assets.js'
 import {
   HandleTakenError,
   InvalidHandleError,
@@ -232,6 +233,59 @@ me.patch('/brand', zValidator('json', brandSchema), async (c) => {
     return c.json(
       {
         error: { code: 'INTERNAL_ERROR', message: 'failed to update brand', request_id: requestId },
+      },
+      500,
+    )
+  }
+})
+
+const assetUploadSchema = z.object({
+  kind: z.enum(['cover', 'logo']),
+  contentType: z.string().min(1).max(100),
+})
+
+/**
+ * POST /api/v1/tenant/me/assets/upload-url — issue a short-lived presigned PUT
+ * for an event cover or tenant logo. The browser uploads the file straight to
+ * the public assets bucket, then persists the returned publicUrl on the event
+ * (banner) or tenant (brand_logo_url). RLS-scoped key prefix (assets/{tenantId}).
+ */
+me.post('/assets/upload-url', zValidator('json', assetUploadSchema), async (c) => {
+  const tenantId = c.get('tenantId')
+  const requestId = c.req.header('x-request-id') ?? null
+  if (!tenantId) {
+    return c.json(
+      {
+        error: { code: 'AUTH_REQUIRED', message: 'tenant context required', request_id: requestId },
+      },
+      401,
+    )
+  }
+  const { kind, contentType } = c.req.valid('json')
+  try {
+    const target = await createAssetUploadUrl({ tenantId, kind, contentType })
+    return c.json({ data: { uploadUrl: target.uploadUrl, publicUrl: target.publicUrl } })
+  } catch (err) {
+    if (err instanceof UnsupportedAssetTypeError) {
+      return c.json(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Unsupported image type — use PNG, JPG, WebP or SVG.',
+            request_id: requestId,
+          },
+        },
+        400,
+      )
+    }
+    logger.error({ err, tenantId, request_id: requestId }, 'asset upload-url failed')
+    return c.json(
+      {
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'failed to create upload URL',
+          request_id: requestId,
+        },
       },
       500,
     )

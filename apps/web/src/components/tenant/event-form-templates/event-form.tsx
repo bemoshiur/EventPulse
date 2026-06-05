@@ -47,6 +47,8 @@ import {
   type EventType,
 } from '@eventpulse/shared-types'
 
+import { ImageUpload } from '@/components/tenant/image-upload'
+
 import { addHours, eventTypeConfig } from './per-type-config'
 
 /** The form binds to the schema's INPUT type (strings for datetime
@@ -96,6 +98,7 @@ export function EventForm({ type, formId, onValidSubmit, initialValues }: EventF
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormShape>({
     mode: 'onBlur',
@@ -199,19 +202,28 @@ export function EventForm({ type, formId, onValidSubmit, initialValues }: EventF
 
       <div>
         <label htmlFor="event-banner" className="text-mkt-ink block text-sm font-medium">
-          Cover image URL <span className="opacity-70">· কভার ছবি (ঐচ্ছিক)</span>
+          Cover image <span className="opacity-70">· কভার ছবি (ঐচ্ছিক)</span>
         </label>
+        <div className="mt-1">
+          <ImageUpload
+            kind="cover"
+            value={watch('bannerImageUrl') ?? ''}
+            onChange={(url) =>
+              setValue('bannerImageUrl', url === '' ? undefined : url, { shouldValidate: true })
+            }
+          />
+        </div>
         <input
           id="event-banner"
           type="url"
           inputMode="url"
-          placeholder="https://…/your-cover.jpg"
+          placeholder="…or paste an image URL"
           aria-invalid={errors.bannerImageUrl ? true : undefined}
           {...register('bannerImageUrl', { setValueAs: (v) => (v === '' ? undefined : v) })}
-          className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
+          className="border-mkt-line focus:border-mkt-red mt-2 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
         />
         <p className="text-mkt-slate mt-1 text-xs">
-          Paste a link to a banner image (JPG/PNG). Leave blank for the default gradient.
+          Upload an image (PNG/JPG/WebP/SVG) or paste a URL. Leave blank for the default gradient.
         </p>
         {errors.bannerImageUrl ? (
           <p className="text-mkt-red mt-1 text-xs">{errors.bannerImageUrl.message}</p>
