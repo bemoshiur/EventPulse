@@ -1,0 +1,8 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - heading "Choose a space" [level=1] [ref=e6]
+        - paragraph [ref=e7]: Pick which organiser account you want to work in.
+      - status [ref=e9]: Loading your spaces…
+  - alert [ref=e10]

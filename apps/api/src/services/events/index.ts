@@ -36,7 +36,7 @@
  *   explicitly change it via PATCH while the event is in 'draft').
  */
 
-import { SQL, and, asc, desc, eq, gt, isNull, lt, sql } from 'drizzle-orm'
+import { SQL, and, asc, desc, eq, gt, isNull, lt, ne, sql } from 'drizzle-orm'
 
 import { withTenant } from '../../db/client.js'
 import { events, tenantFeeConfig } from '../../db/schema/index.js'
@@ -460,6 +460,7 @@ export interface UpdateEventInput {
   eventId: string
   actorUserId: string
   patch: Partial<{
+    slug: string
     title: string
     titleBn: string | null
     description: string | null
@@ -497,8 +498,27 @@ export async function updateEvent(input: UpdateEventInput): Promise<void> {
       throw new EventInvalidStatusForEditError(currentStatus)
     }
 
+    // Slug rename — enforce per-tenant uniqueness before writing (the
+    // (tenant_id, slug) unique index would also catch it, but a pre-check
+    // gives a clean typed error instead of a constraint-violation throw).
+    if ('slug' in input.patch && input.patch.slug) {
+      const clash = await tx
+        .select({ id: events.id })
+        .from(events)
+        .where(
+          and(
+            eq(events.slug, input.patch.slug),
+            ne(events.id, input.eventId),
+            isNull(events.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (clash.length > 0) throw new EventSlugConflictError(input.tenantId, input.patch.slug)
+    }
+
     // Build update object reflecting only present-in-patch fields.
     const setObj: Record<string, unknown> = {}
+    if ('slug' in input.patch) setObj['slug'] = input.patch.slug
     if ('title' in input.patch) setObj['title'] = input.patch.title
     if ('titleBn' in input.patch) setObj['titleBn'] = input.patch.titleBn
     if ('description' in input.patch) setObj['description'] = input.patch.description

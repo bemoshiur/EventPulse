@@ -218,6 +218,19 @@ eventsApp.patch(
           409,
         )
       }
+      if (err instanceof EventSlugConflictError) {
+        return c.json(
+          {
+            error: {
+              code: 'CONFLICT',
+              message:
+                'That event link is already used by another of your events — please choose another.',
+              request_id: requestId,
+            },
+          },
+          409,
+        )
+      }
       logger.error({ err, tenantId, eventId: id, request_id: requestId }, 'event update failed')
       return c.json(
         {

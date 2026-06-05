@@ -162,6 +162,14 @@ export type EventCreateInput = z.infer<typeof EventCreateSchema>
 
 export const EventUpdateSchema = z
   .object({
+    // slug — the event part of the public URL. Editable post-creation; the
+    // service enforces per-tenant uniqueness. Lowercase slug-shaped, 3–120.
+    slug: z
+      .string()
+      .min(3)
+      .max(120)
+      .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, 'must be lowercase letters, numbers and hyphens')
+      .optional(),
     title: titleSchema.optional(),
     titleBn: titleBnSchema,
     description: descriptionSchema,

@@ -25,7 +25,13 @@ interface Tenant {
   name: string
   slug: string
   isPersonal: boolean
+  brandLogoUrl: string | null
+  brandColorPrimary: string | null
+  brandColorAccent: string | null
 }
+
+const DEFAULT_PRIMARY = '#d32f2f'
+const DEFAULT_ACCENT = '#ff6f61'
 
 export function TenantSettings() {
   const [tenant, setTenant] = useState<Tenant | null>(null)
@@ -33,6 +39,14 @@ export function TenantSettings() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
+
+  // Branding
+  const [logoUrl, setLogoUrl] = useState('')
+  const [primary, setPrimary] = useState(DEFAULT_PRIMARY)
+  const [accent, setAccent] = useState(DEFAULT_ACCENT)
+  const [brandBusy, setBrandBusy] = useState(false)
+  const [brandSaved, setBrandSaved] = useState(false)
+  const [brandError, setBrandError] = useState<string | null>(null)
 
   useEffect(() => {
     void (async () => {
@@ -43,13 +57,47 @@ export function TenantSettings() {
           return
         }
         const body = (await res.json()) as { data: { tenant: Tenant } }
-        setTenant(body.data.tenant)
-        setHandle(body.data.tenant.slug)
+        const t = body.data.tenant
+        setTenant(t)
+        setHandle(t.slug)
+        setLogoUrl(t.brandLogoUrl ?? '')
+        setPrimary(t.brandColorPrimary ?? DEFAULT_PRIMARY)
+        setAccent(t.brandColorAccent ?? DEFAULT_ACCENT)
       } catch {
         setError('Network error. Please try again.')
       }
     })()
   }, [])
+
+  async function saveBrand(e: React.FormEvent) {
+    e.preventDefault()
+    setBrandBusy(true)
+    setBrandError(null)
+    setBrandSaved(false)
+    try {
+      const res = await fetch(`${apiBase()}/api/v1/tenant/me/brand`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          logoUrl: logoUrl.trim() === '' ? null : logoUrl.trim(),
+          colorPrimary: primary,
+          colorAccent: accent,
+        }),
+      })
+      if (res.ok) {
+        setBrandSaved(true)
+        setBrandBusy(false)
+        return
+      }
+      const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } }
+      setBrandError(body.error?.message ?? 'Could not save your branding. Please try again.')
+      setBrandBusy(false)
+    } catch {
+      setBrandError('Network error. Please try again.')
+      setBrandBusy(false)
+    }
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault()
@@ -147,6 +195,92 @@ export function TenantSettings() {
             className="bg-mkt-red inline-flex h-11 items-center rounded-md px-6 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? 'Saving…' : 'Save handle'}
+          </button>
+        </form>
+      </section>
+
+      <section className="border-mkt-line space-y-4 rounded-2xl border bg-white p-6">
+        <div>
+          <h2 className="text-lg font-semibold">Branding</h2>
+          <p className="text-mkt-slate mt-1 text-sm">
+            Your logo and colours appear on your public event pages.
+          </p>
+        </div>
+
+        <form onSubmit={saveBrand} className="space-y-4">
+          <div>
+            <label htmlFor="logo" className="text-mkt-ink block text-sm font-medium">
+              Logo URL
+            </label>
+            <input
+              id="logo"
+              type="url"
+              value={logoUrl}
+              onChange={(e) => setLogoUrl(e.target.value)}
+              placeholder="https://…/logo.png"
+              className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
+            />
+            <p className="text-mkt-slate mt-1 text-xs">Paste a hosted image URL (PNG/SVG).</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="primary" className="text-mkt-ink block text-sm font-medium">
+                Primary colour
+              </label>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  id="primary"
+                  type="color"
+                  value={primary}
+                  onChange={(e) => setPrimary(e.target.value)}
+                  className="border-mkt-line h-10 w-12 rounded-md border bg-white"
+                />
+                <span className="text-mkt-slate font-mono text-sm">{primary}</span>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="accent" className="text-mkt-ink block text-sm font-medium">
+                Accent colour
+              </label>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  id="accent"
+                  type="color"
+                  value={accent}
+                  onChange={(e) => setAccent(e.target.value)}
+                  className="border-mkt-line h-10 w-12 rounded-md border bg-white"
+                />
+                <span className="text-mkt-slate font-mono text-sm">{accent}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Live preview of the event hero gradient */}
+          <div
+            className="flex h-20 items-center justify-center rounded-xl text-sm font-semibold text-white"
+            style={{ background: `linear-gradient(135deg, ${primary} 0%, ${accent} 100%)` }}
+          >
+            Event hero preview
+          </div>
+
+          {brandError && (
+            <p role="alert" className="text-mkt-red text-sm">
+              {brandError}
+            </p>
+          )}
+          {brandSaved && (
+            <p role="status" className="text-sm text-emerald-600">
+              Branding saved — it’s live on your event pages.
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={brandBusy}
+            className="bg-mkt-red inline-flex h-11 items-center rounded-md px-6 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {brandBusy ? 'Saving…' : 'Save branding'}
           </button>
         </form>
       </section>
