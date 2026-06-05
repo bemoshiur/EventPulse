@@ -4,6 +4,18 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-05 (Day 48 cont 2) · §29 #9 (AIT withholding) + #10 (VAT/Mushak) RESOLVED — adopted BD tax position
+
+**Context:** Operator directed resolving the open Bangladesh tax classifications in-house, no external counsel review, and adopting concrete positions now (so they no longer block launch).
+
+**Decision (full reasoning in `docs/compliance/bd-tax-regulatory-position.md`):**
+- **AIT / withholding (§29 #9):** Event Pulse is **NOT a withholding agent on organiser settlements** — the T+5 payout is a remittance of the attendee's own funds (the organiser's sales revenue passing through), not a payment by Event Pulse for a supply made *to* Event Pulse (Income Tax Act 2023 deduction-at-source regime, successor to ITO 1984 §§52–53). `orders.withholding_tax_paisa` stays 0 at MVP. Event Pulse's own 0.25% fee is its taxable income; it withholds only on its own domestic vendor payments. Revisit on an NBR marketplace-facilitator rule or own-PSO licence.
+- **VAT / Mushak (§29 #10):** Event Pulse is the **VAT-bearing party only on its 0.25% platform fee** (15% VAT, registers for e-BIN, issues Mushak 6.3 monthly per tenant). **Organisers bear VAT on the ticket face value** per their own registration + event nature. VAT & SD Act 2012.
+
+**Consequences:** §29 #9 and #10 are closed (were "MUST get legal opinion before MVP launch"). The 6 binding contracts proceed as adopted in-house drafts (operator elected no external review). These no longer gate launch; the remaining launch gates are the EPS real-payment cutover + SES (SES now out of sandbox).
+
+---
+
 ## 2026-06-05 (Day 48 cont 2) · Public-read S3 assets bucket for cover/logo uploads (operator-approved)
 
 **Context:** Cover + logo were URL-paste only. Operator approved real file-upload, choosing "public-read bucket" over "private + CloudFront" (offered) to stay simple under the $30/mo ceiling.
