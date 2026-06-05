@@ -13,6 +13,11 @@ import { cors } from 'hono/cors'
 import type { MiddlewareHandler } from 'hono'
 
 const DEFAULT_PORTAL_ORIGINS = [
+  // Apex + www serve the marketing site AND the auth pages (/sign-in, /sign-up),
+  // so the auth API must accept cross-origin calls from them — otherwise login
+  // POSTs from eventpulse.com.bd are CORS-blocked ("Network error" on submit).
+  'https://eventpulse.com.bd',
+  'https://www.eventpulse.com.bd',
   'https://app.eventpulse.com.bd',
   'https://admin.eventpulse.com.bd',
   'https://my.eventpulse.com.bd',
