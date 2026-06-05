@@ -10,7 +10,9 @@
 
 import { useRef, useState } from 'react'
 
-const ACCEPT = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']
+// Raster formats only — SVG is excluded server-side (XSS risk on the public
+// bucket); keep the client allow-list in lock-step.
+const ACCEPT = ['image/png', 'image/jpeg', 'image/webp']
 const MAX_BYTES = 5 * 1024 * 1024
 
 function apiBase(): string {
@@ -118,6 +120,7 @@ export function ImageUpload({
         <input
           ref={inputRef}
           type="file"
+          aria-label={kind === 'logo' ? 'Upload a logo image' : 'Upload a cover image'}
           accept={ACCEPT.join(',')}
           className="hidden"
           onChange={(e) => {

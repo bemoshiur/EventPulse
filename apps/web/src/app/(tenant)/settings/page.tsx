@@ -224,7 +224,7 @@ export function TenantSettings() {
               className="border-mkt-line focus:border-mkt-red mt-2 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
             />
             <p className="text-mkt-slate mt-1 text-xs">
-              Upload an image (PNG/JPG/WebP/SVG) or paste a URL.
+              Upload an image (PNG/JPG/WebP) or paste a URL.
             </p>
           </div>
 
