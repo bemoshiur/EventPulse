@@ -23,6 +23,7 @@
 import { notFound, permanentRedirect } from 'next/navigation'
 
 import { EventLanding } from '@/components/public/event-landing'
+import { buildEventJsonLd, buildEventMetadata } from '@/lib/event-seo'
 import { fetchLegalDocumentByUrlPath } from '@/lib/legal'
 import { fetchHandleRedirect, fetchPublicEvent } from '@/lib/public-events'
 
@@ -35,16 +36,8 @@ export const revalidate = 60
 export async function generateMetadata({ params }: PageProps) {
   const { tenant, event } = await params
   const payload = await fetchPublicEvent(tenant, event)
-  if (!payload) return { title: 'Event not found' }
-  return {
-    title: `${payload.event.title} — ${payload.brand.tenantName}`,
-    description: payload.event.description ?? undefined,
-    openGraph: {
-      title: payload.event.title,
-      description: payload.event.description ?? undefined,
-      images: payload.event.bannerImageUrl ? [payload.event.bannerImageUrl] : undefined,
-    },
-  }
+  if (!payload) return { title: 'Event not found', robots: { index: false, follow: false } }
+  return buildEventMetadata(payload, tenant, event)
 }
 
 export default async function PublicEventPage({ params }: PageProps) {
@@ -70,13 +63,22 @@ export default async function PublicEventPage({ params }: PageProps) {
     notFound()
   }
 
+  const jsonLd = buildEventJsonLd(payload, tenant, event)
+  // Escape `<` so a malicious `</script>` in event-supplied title/description
+  // cannot break out of the JSON-LD <script> tag (standard JSON-LD XSS guard).
+  const jsonLdSafe = JSON.stringify(jsonLd).replace(/</g, '\\u003c')
+
   return (
-    <EventLanding
-      event={payload.event}
-      brand={payload.brand}
-      tiers={payload.tiers}
-      buyerTermsBodyHtml={buyerTerms?.currentVersion.bodyHtml ?? null}
-      buyerTermsVersion={buyerTerms?.currentVersion.version ?? null}
-    />
+    <>
+      {/* Schema.org Event — rich results (date, venue, ticket offers, organiser). */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe }} />
+      <EventLanding
+        event={payload.event}
+        brand={payload.brand}
+        tiers={payload.tiers}
+        buyerTermsBodyHtml={buyerTerms?.currentVersion.bodyHtml ?? null}
+        buyerTermsVersion={buyerTerms?.currentVersion.version ?? null}
+      />
+    </>
   )
 }
