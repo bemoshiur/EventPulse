@@ -4,6 +4,26 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-05 (Day 48 cont 2) · Public-read S3 assets bucket for cover/logo uploads (operator-approved)
+
+**Context:** Cover + logo were URL-paste only. Operator approved real file-upload, choosing "public-read bucket" over "private + CloudFront" (offered) to stay simple under the $30/mo ceiling.
+
+**Decision:** Created `eventpulse-assets-prod-739275468267` (account-suffixed because `eventpulse-assets-prod` is globally taken). Public GET on `assets/*` ONLY (bucket policy); public ACLs blocked; CORS for app origins; EC2 role `eventpulse-prod-ec2` gets `s3:PutObject` on `assets/*`. Browser uploads via presigned PUT (5-min TTL, per-tenant key `assets/{tenantId}/`). Provisioned + captured in `infra/scripts/setup-assets-bucket.sh`. `ASSETS_BUCKET_NAME` defaults to this bucket in code (single-env).
+
+**Consequences:** **SVG is NOT allowed** (stored-XSS — an SVG on a public bucket served as image/svg+xml executes its `<script>`; flagged by commit security review, removed in v0.4.22). Raster only (PNG/JPG/WebP); the presigned PUT pins Content-Type. Future option: front the bucket with CloudFront + `assets.eventpulse.com.bd` for prettier URLs + header control (deferred). Event covers/logos now upload-or-paste.
+
+---
+
+## 2026-06-05 (Day 48 cont 2) · Auth-surface polish + event-slug redirects + dynamic OG image
+
+**Context:** Operator's remaining backlog after the editing suite.
+
+**Decision:** (1) **Auth pages** match the marketing visual language via `(auth)/layout.tsx` chrome (floating-pill header + "Visit homepage" escape + brand micro-banner + trust strip + back-home footer); page `.mkt-card` forms unchanged. (2) **Event-slug redirects** — `events.previous_slugs` (migration 0019, text[] + GIN); `updateEvent` appends the old slug on rename; `resolveEventSlugRedirect` + `GET /public/events/resolve` + public-page 404 → 301. NO expiry (permanent; better UX) vs handle redirects' 30-day window. (3) **Dynamic OG image** — `opengraph-image.tsx` (next/og branded card). Next's metadata `openGraph.images` overrides the file convention, so cover events keep their banner as og:image and only cover-less events fall back to the generated card.
+
+**Consequences:** All public event URLs are now rename-proof (both the `{handle}` and `{event}` parts redirect). Every event has a rich social card. The legacy `ui/glass-card.tsx` + `ui/gradient-mesh.tsx` remain dead (unimported).
+
+---
+
 ## 2026-06-05 (Day 48 cont) · Whole app unified on ONE red/white theme (supersedes "app keeps §1.5 violet")
 
 **Context:** Operator saw the authenticated `/events/new` page still on the violet/glass/GradientMesh §1.5 theme and asked why it didn't match the red/white marketing site. The earlier clone program had deliberately kept the app on §1.5 violet (handoff Day 47/48). Operator then asked to audit ALL pages and re-theme.

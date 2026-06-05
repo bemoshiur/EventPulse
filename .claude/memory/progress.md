@@ -2,6 +2,15 @@
 
 ## In flight
 
+**Day 48 (2026-06-05, cont 2) — ✅ Backlog cleared: auth polish + event-slug redirects + dynamic OG + file-uploads LIVE (v0.4.20→v0.4.22).** All on prod:
+- **v0.4.20** — auth-surface chrome (`(auth)/layout.tsx`: floating header + trust strip); event-slug redirects (migration 0019 `events.previous_slugs` + resolver + public-page 404 wiring; old event URLs 301); dynamic OG image (`opengraph-image.tsx`, next/og; metadata override keeps banners for cover events). Verified live.
+- **v0.4.21** — file-upload for covers + logos: public-read S3 bucket `eventpulse-assets-prod-739275468267` (assets/* public GET only; EC2 role PutObject; `infra/scripts/setup-assets-bucket.sh`), presigned-PUT API (`POST /tenant/me/assets/upload-url`), `ImageUpload` UI on cover + logo.
+- **v0.4.22** — SECURITY: dropped SVG from the upload allow-list (stored-XSS on public bucket, flagged by commit review). PNG/JPG/WebP only.
+- **Gotcha:** `prod` git branch had drifted to old `e09f582` (memory-episode leftover); deploys were unaffected (they checkout the release TAG, not the prod branch). Reconciled prod→main.
+- **Operator backlog is fully complete** — nothing half-built; prod = main = v0.4.22.
+
+---
+
 **Day 48 (2026-06-05, cont) — ✅ Editing suite + FULL app re-theme + per-event SEO LIVE (v0.4.8→v0.4.18, +v0.4.19 OG-fix).** Big session. All on prod:
 - **v0.4.8** login CORS fix (apex origin) + TiCON removed project-wide + `/glossary` + `/customers`.
 - **v0.4.9–12** 18 legal/trust pages live with real v1.0 content (authored + seeded) + ISR cache-staleness fix.
