@@ -32,12 +32,20 @@ export default function TenantDashboardPage() {
             days at a glance.
           </p>
         </div>
-        <Link
-          href="/events/new"
-          className="bg-mkt-red inline-flex h-11 shrink-0 items-center rounded-md px-5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
-        >
-          + Create event
-        </Link>
+        <div className="flex shrink-0 items-center gap-3">
+          <Link
+            href="/settings"
+            className="border-mkt-line text-mkt-ink inline-flex h-11 items-center rounded-md border px-4 text-sm font-semibold transition hover:-translate-y-0.5 hover:shadow-sm"
+          >
+            Settings
+          </Link>
+          <Link
+            href="/events/new"
+            className="bg-mkt-red inline-flex h-11 items-center rounded-md px-5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+          >
+            + Create event
+          </Link>
+        </div>
       </header>
       <SalesDashboard />
     </div>

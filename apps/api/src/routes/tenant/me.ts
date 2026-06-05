@@ -19,13 +19,21 @@
  * tenant's row even if a future bug widened the query.
  */
 
+import { zValidator } from '@hono/zod-validator'
 import { eq } from 'drizzle-orm'
 import { Hono } from 'hono'
+import { z } from 'zod'
 
 import { requireTenantAuth } from '../../auth/middleware.js'
 import { withTenant } from '../../db/client.js'
 import { tenants } from '../../db/schema/index.js'
 import { logger } from '../../lib/logger.js'
+import {
+  HandleTakenError,
+  InvalidHandleError,
+  ReservedHandleError,
+  renameTenantHandle,
+} from '../../services/handles/index.js'
 
 const me = new Hono()
 
@@ -103,6 +111,77 @@ me.get('/', async (c) => {
         error: {
           code: 'INTERNAL_ERROR',
           message: 'failed to read tenant context',
+          request_id: requestId,
+        },
+      },
+      500,
+    )
+  }
+})
+
+const renameSchema = z.object({ handle: z.string().min(1).max(40) })
+
+/**
+ * PATCH /api/v1/tenant/me/handle — rename the current tenant's slug (the
+ * `{handle}` in public URLs). For personal tenants the user's handle mirrors
+ * it. Writes a 30-day redirect via handle_history (§9.14). Validation +
+ * uniqueness + reserved checks live in the handles service.
+ */
+me.patch('/handle', zValidator('json', renameSchema), async (c) => {
+  const tenantId = c.get('tenantId')
+  const actorUserId = c.get('auth')?.sub
+  const requestId = c.req.header('x-request-id') ?? null
+
+  if (!tenantId || !actorUserId) {
+    return c.json(
+      {
+        error: { code: 'AUTH_REQUIRED', message: 'tenant context required', request_id: requestId },
+      },
+      401,
+    )
+  }
+
+  const { handle } = c.req.valid('json')
+  try {
+    const result = await renameTenantHandle({ tenantId, newSlug: handle, actorUserId })
+    return c.json({ data: { slug: result.slug } })
+  } catch (err) {
+    if (err instanceof InvalidHandleError) {
+      return c.json(
+        { error: { code: 'VALIDATION_ERROR', message: err.message, request_id: requestId } },
+        400,
+      )
+    }
+    if (err instanceof ReservedHandleError) {
+      return c.json(
+        {
+          error: {
+            code: 'CONFLICT',
+            message: 'That handle is reserved — please choose another.',
+            request_id: requestId,
+          },
+        },
+        409,
+      )
+    }
+    if (err instanceof HandleTakenError) {
+      return c.json(
+        {
+          error: {
+            code: 'CONFLICT',
+            message: 'That handle is already taken — please choose another.',
+            request_id: requestId,
+          },
+        },
+        409,
+      )
+    }
+    logger.error({ err, tenantId, request_id: requestId }, 'tenant handle rename failed')
+    return c.json(
+      {
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'failed to rename handle',
           request_id: requestId,
         },
       },

@@ -23,6 +23,26 @@ function apiBaseUrl(): string {
   return raw.replace(/\/$/, '')
 }
 
+/**
+ * Resolve a possibly-renamed tenant slug to its current value (handle_history,
+ * §9.14). Returns the new slug to redirect to, or null. Called by the public
+ * event page when an event 404s, so old `{handle}/{event}` URLs 301 to the new
+ * handle for the 30-day window. `no-store` so a fresh rename redirects at once.
+ */
+export async function fetchHandleRedirect(slug: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `${apiBaseUrl()}/api/v1/public/handles/resolve?slug=${encodeURIComponent(slug)}`,
+      { cache: 'no-store' },
+    )
+    if (!res.ok) return null
+    const body = (await res.json()) as { data?: { newSlug?: string | null } }
+    return body.data?.newSlug ?? null
+  } catch {
+    return null
+  }
+}
+
 // ─── wire shape (mirrors apps/api domain/public-events/queries.ts) ─
 
 export interface PublicEventBrandWire {
