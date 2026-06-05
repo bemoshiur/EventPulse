@@ -13,6 +13,7 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed:reserved-handles": "tsx src/db/seeds/seed-reserved-handles.ts",
     "db:seed:legal-documents": "tsx src/db/seeds/seed-legal-documents.ts",
+    "db:seed:legal-v1": "tsx src/db/seeds/seed-legal-v1.ts",
     "db:seed:buyer-terms-v1": "tsx src/db/seeds/seed-buyer-terms-v1.ts",
     "db:seed:changelog-v1": "tsx src/db/seeds/seed-changelog-v1.ts"
   },
