@@ -16,11 +16,14 @@
 
 import { renderLegalMarkdown } from '../../domain/legal/render.js'
 import { LEGAL_BODIES_V1, LEGAL_V1_VERSION } from './legal-bodies-v1.js'
+import { TRUST_BODIES_V1 } from './trust-bodies-v1.js'
+
+const ALL_BODIES = [...LEGAL_BODIES_V1, ...TRUST_BODIES_V1]
 
 export async function run(): Promise<void> {
   // 1. Validate + render every body up front (fails loud on bad markdown).
   const rendered = await Promise.all(
-    LEGAL_BODIES_V1.map(async (b) => ({
+    ALL_BODIES.map(async (b) => ({
       slug: b.slug,
       bodyMd: b.bodyMd,
       bodyHtml: await renderLegalMarkdown(b.bodyMd),
