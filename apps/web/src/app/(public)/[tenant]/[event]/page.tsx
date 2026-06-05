@@ -20,11 +20,11 @@
  * Next.js notFound().
  */
 
-import { notFound } from 'next/navigation'
+import { notFound, permanentRedirect } from 'next/navigation'
 
 import { EventLanding } from '@/components/public/event-landing'
 import { fetchLegalDocumentByUrlPath } from '@/lib/legal'
-import { fetchPublicEvent } from '@/lib/public-events'
+import { fetchHandleRedirect, fetchPublicEvent } from '@/lib/public-events'
 
 interface PageProps {
   params: Promise<{ tenant: string; event: string }>
@@ -62,7 +62,13 @@ export default async function PublicEventPage({ params }: PageProps) {
     fetchPublicEvent(tenant, event),
     fetchLegalDocumentByUrlPath('/buyer-terms'),
   ])
-  if (!payload) notFound()
+  if (!payload) {
+    // The tenant slug may have been renamed — 301 old URLs to the current
+    // handle for the 30-day redirect window (§9.14) before falling to 404.
+    const newSlug = await fetchHandleRedirect(tenant)
+    if (newSlug && newSlug !== tenant) permanentRedirect(`/${newSlug}/${event}`)
+    notFound()
+  }
 
   return (
     <EventLanding

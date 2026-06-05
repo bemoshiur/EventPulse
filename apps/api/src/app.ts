@@ -8,6 +8,7 @@ import { authRoutes } from './routes/auth.js'
 import { publicChangelogRoutes } from './routes/public/changelog.js'
 import { publicContactRoutes } from './routes/public/contact.js'
 import { publicEventsRoutes } from './routes/public/events.js'
+import { publicHandlesRoutes } from './routes/public/handles.js'
 import { publicLegalRoutes } from './routes/public/legal.js'
 import { epsReturnRoutes } from './routes/public/orders-eps-return.js'
 import { publicOrdersRoutes } from './routes/public/orders.js'
@@ -102,6 +103,9 @@ export function createApp() {
   // RLS context is super-admin (BYPASSRLS) because public reads
   // cross tenant boundaries by design.
   app.route('/api/v1/public/events', publicEventsRoutes)
+  // Handle redirect resolver — old {handle} → current slug (handle_history,
+  // §9.14). The public event page calls this on 404 to 301 renamed URLs.
+  app.route('/api/v1/public/handles', publicHandlesRoutes)
   // Public order creation — Sprint 3 Day 26 Phase 4. The money endpoint.
   // STAGING_PAYMENT_BLOCK=1 refuses the EPS init step under the
   // service layer's guard; the order itself still persists in
