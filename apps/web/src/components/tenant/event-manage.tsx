@@ -132,7 +132,7 @@ export function EventManage({ event, tenantSlug }: EventManageProps) {
           <h2 className="text-lg font-semibold">Share your event</h2>
           <p className="text-mkt-slate text-sm">Your public event page is live. Share this link:</p>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <code className="text-ep-mint min-w-0 flex-1 truncate rounded-md bg-black/30 px-3 py-2 text-sm">
+            <code className="min-w-0 flex-1 truncate rounded-md bg-[var(--color-mkt-soft)] px-3 py-2 text-sm text-emerald-600">
               {publicLabel}
             </code>
             <button

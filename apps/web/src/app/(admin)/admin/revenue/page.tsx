@@ -83,7 +83,7 @@ export default function AdminRevenuePage() {
     return (
       <div
         role="alert"
-        className="border-ep-rose/40 bg-ep-rose/5 text-mkt-red rounded-2xl border p-6 text-sm"
+        className="border-mkt-red/40 bg-mkt-red/5 text-mkt-red rounded-2xl border p-6 text-sm"
         data-testid="admin-revenue-error"
       >
         Failed to load revenue dashboard: <strong>{errMsg}</strong>
@@ -307,7 +307,7 @@ export default function AdminRevenuePage() {
               {anomalies.refundRates.map((row) => (
                 <li
                   key={row.tenantId}
-                  className="border-ep-amber/30 bg-ep-amber/5 rounded-md border p-2 text-sm"
+                  className="rounded-md border border-amber-600/30 bg-amber-600/5 p-2 text-sm"
                   data-testid={`anomaly-refund-${row.tenantId}`}
                 >
                   <div className="text-mkt-ink font-medium">{row.tenantName}</div>
@@ -336,7 +336,7 @@ export default function AdminRevenuePage() {
                   <li
                     key={`${row.tenantId}-${row.changedAt}`}
                     className={`rounded-md border p-2 text-sm ${
-                      flagged ? 'border-ep-rose/30 bg-ep-rose/5' : 'border-mkt-line bg-white'
+                      flagged ? 'border-mkt-red/30 bg-mkt-red/5' : 'border-mkt-line bg-white'
                     }`}
                     data-testid={`anomaly-fee-${row.tenantId}`}
                   >

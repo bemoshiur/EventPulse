@@ -208,7 +208,7 @@ export function TicketTierForm({
         </label>
 
         {isComp && (
-          <p className="text-ep-amber text-xs md:col-span-2">
+          <p className="text-xs text-amber-600 md:col-span-2">
             Complimentary tiers cannot carry a price. Set price to 0 before saving.
           </p>
         )}
