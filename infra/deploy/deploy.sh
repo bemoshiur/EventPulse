@@ -152,6 +152,10 @@ $PNPM --filter @eventpulse/api db:migrate
 $PNPM --filter @eventpulse/api db:seed:legal-documents
 $PNPM --filter @eventpulse/api db:seed:buyer-terms-v1
 $PNPM --filter @eventpulse/api db:seed:changelog-v1
+# legal-v1 promotes the 6 contracts + 12 trust artefacts from v0.1 placeholder to
+# v1.0 real content (idempotent: ON CONFLICT DO NOTHING on version, then points
+# current_version_id at v1.0; a no-op once already on v1.0).
+$PNPM --filter @eventpulse/api db:seed:legal-v1
 
 # 4.5) Nginx vhost reload — Fix 6b from Day 21 silent-failure remediation.
 #
