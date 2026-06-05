@@ -19,6 +19,8 @@ const ROUTES: {
   { path: '/about', priority: 0.5, changeFrequency: 'yearly' },
   { path: '/faq', priority: 0.6, changeFrequency: 'monthly' },
   { path: '/blog', priority: 0.7, changeFrequency: 'weekly' },
+  { path: '/glossary', priority: 0.5, changeFrequency: 'monthly' },
+  { path: '/customers', priority: 0.5, changeFrequency: 'monthly' },
   { path: '/book-a-demo', priority: 0.5, changeFrequency: 'yearly' },
   { path: '/pricing', priority: 0.9, changeFrequency: 'monthly' },
   { path: '/contact', priority: 0.6, changeFrequency: 'yearly' },
