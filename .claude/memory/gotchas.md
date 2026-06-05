@@ -4,6 +4,26 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## The `prod` git branch silently drifted off `main` and `main:prod` pushes were rejected — but deploys still shipped correct code
+
+**Why it happens:** `deploy-prod.yml` checks out the **release tag** (`ref: ${{ inputs.release_tag }}`), NOT the prod branch head. So when the prod branch drifted to an old commit (`e09f582`, a leftover from a memory-commit episode where prod got force-pushed a one-off commit not in main's history), every later `git push --no-verify origin main:prod` was rejected non-fast-forward — silently, because the deploy step that follows uses the tag and succeeds anyway. The prod branch stayed stale for several releases (v0.4.20→v0.4.21) while prod actually ran the right tagged code.
+
+**Fix:** `git push --no-verify --force-with-lease origin main:prod` to reconcile. Deploys were never wrong (tags are the source of truth); only the branch pointer was misleading.
+
+**How to avoid:** After a deploy, if you check anything, check the **release tag** (`git rev-parse v0.4.X^{commit}`) and the **live `git rev-parse HEAD` on the EC2**, not `origin/prod`. If you do push `main:prod`, watch for the "Note about fast-forwards" hint — it means rejected, reconcile with `--force-with-lease`.
+
+---
+
+## SVG uploads to a public-read bucket = stored XSS
+
+**Why it happens:** An SVG can contain `<script>`. If it lands in a public-read S3 bucket and is served with `Content-Type: image/svg+xml`, navigating directly to the asset URL executes the script in the bucket's origin (and same-origin if assets ever move behind a custom domain like `assets.eventpulse.com.bd`). Caught by the commit security review on the asset-upload feature (v0.4.21).
+
+**Fix:** Don't allow SVG in public-asset uploads — raster only (PNG/JPG/WebP), enforced in both the server `ASSET_CONTENT_TYPES` (apps/api/src/infra/s3/assets.ts) and the client `ACCEPT` list. The presigned PUT pins Content-Type to the validated raster type. If SVG is ever truly needed: sanitise server-side (DOMPurify SVG mode) OR serve with `Content-Disposition: attachment` + a restrictive CSP via CloudFront.
+
+**How to avoid:** Any user-uploaded file that becomes publicly fetchable must have an allow-list that excludes script-capable types (SVG, HTML). Rasterise or sanitise; never trust the extension/Content-Type from the client.
+
+---
+
 ## A new DB integration test fails CI with "DATABASE_URL is not set" even though CI has a Postgres service
 
 **Why it happens:** CI runs tests in TWO jobs — a fast **"Unit tests"** job with NO `DATABASE_URL`, and an **integration-tests** job WITH a Postgres service + `DATABASE_URL`. Both run `pnpm test` (all vitest files). A DB-touching test written with a plain `describe(...)` runs in BOTH; in the unit job it hits `withSuperAdmin`/`withTenant` → `DATABASE_URL is not set` → the unit job fails. (Cost a CI round on PR #325, 2026-06-05.)
