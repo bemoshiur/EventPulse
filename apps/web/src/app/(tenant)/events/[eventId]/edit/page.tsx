@@ -33,6 +33,7 @@ interface EventDetail {
   visibility: 'public' | 'unlisted' | 'private'
   capacity: number | null
   venue: EventCreateInput['venue']
+  bannerImageUrl: string | null
 }
 
 type State =
@@ -114,6 +115,7 @@ export function EditEvent() {
     visibility: event.visibility,
     capacity: event.capacity,
     venue: event.venue,
+    bannerImageUrl: event.bannerImageUrl ?? '',
   }
 
   return (

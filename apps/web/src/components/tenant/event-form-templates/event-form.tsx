@@ -112,6 +112,7 @@ export function EventForm({ type, formId, onValidSubmit, initialValues }: EventF
       titleBn: initialValues?.titleBn ?? '',
       description: initialValues?.description ?? '',
       descriptionBn: initialValues?.descriptionBn ?? '',
+      bannerImageUrl: initialValues?.bannerImageUrl ?? '',
       startsAt: (initialValues?.startsAt ?? tomorrowNoonBdt).toISOString(),
       endsAt: (initialValues?.endsAt ?? defaultEndsAt).toISOString(),
       timezone: initialValues?.timezone ?? 'Asia/Dhaka',
@@ -194,6 +195,27 @@ export function EventForm({ type, formId, onValidSubmit, initialValues }: EventF
           {...register('description')}
           className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
         />
+      </div>
+
+      <div>
+        <label htmlFor="event-banner" className="text-mkt-ink block text-sm font-medium">
+          Cover image URL <span className="opacity-70">· কভার ছবি (ঐচ্ছিক)</span>
+        </label>
+        <input
+          id="event-banner"
+          type="url"
+          inputMode="url"
+          placeholder="https://…/your-cover.jpg"
+          aria-invalid={errors.bannerImageUrl ? true : undefined}
+          {...register('bannerImageUrl', { setValueAs: (v) => (v === '' ? undefined : v) })}
+          className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
+        />
+        <p className="text-mkt-slate mt-1 text-xs">
+          Paste a link to a banner image (JPG/PNG). Leave blank for the default gradient.
+        </p>
+        {errors.bannerImageUrl ? (
+          <p className="text-mkt-red mt-1 text-xs">{errors.bannerImageUrl.message}</p>
+        ) : null}
       </div>
 
       <fieldset className="grid grid-cols-1 gap-4 md:grid-cols-2">
