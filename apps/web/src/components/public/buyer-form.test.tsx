@@ -129,24 +129,22 @@ describe('<BuyerForm>', () => {
       await user.type(qty, '1')
       // The notice is gated on `!isFreeEvent && hasAnyTier` — paid tier
       // selected → notice visible.
-      const notice = screen.getByTestId('bkash-only-notice')
+      const notice = screen.getByTestId('payment-methods-notice')
       expect(notice).toBeInTheDocument()
-      expect(notice.textContent).toMatch(/bKash/)
-      expect(notice.textContent).toMatch(/More methods coming soon/)
+      expect(notice.textContent).toMatch(/cards, bKash, Nagad, Rocket/)
       // Bilingual per R12: Bengali line present alongside English.
-      expect(notice.textContent).toMatch(/বর্তমানে শুধুমাত্র/)
+      expect(notice.textContent).toMatch(/বিকাশ, নগদ, রকেট/)
     })
 
-    it('paid-tier submit button reads "Continue with bKash · bKash দিয়ে চালিয়ে যান"', async () => {
+    it('paid-tier submit button reads "Pay now · এখন পেমেন্ট করুন"', async () => {
       const user = userEvent.setup()
       render(<BuyerForm event={baseEvent} tiers={[paidTier]} />)
       const qty = screen.getByTestId('qty-input-tier-paid') as HTMLInputElement
       await user.clear(qty)
       await user.type(qty, '1')
       const btn = screen.getByTestId('buyer-form-submit')
-      // The label is the whole-string match — guards against a future
-      // edit dropping the bKash brand to a generic "Continue to payment".
-      expect(btn.textContent).toBe('Continue with bKash · bKash দিয়ে চালিয়ে যান')
+      // Generic multi-method label (EPS hosted page offers all methods).
+      expect(btn.textContent).toBe('Pay now · এখন পেমেন্ট করুন')
     })
 
     it('free-event keeps the registration-confirmation label (NOT a bKash label)', async () => {
@@ -164,7 +162,7 @@ describe('<BuyerForm>', () => {
       expect(btn.textContent).toBe('Confirm registration · নিশ্চিত করুন')
     })
 
-    it('free-event does NOT render the bKash-only notice', async () => {
+    it('free-event does NOT render the payment-methods notice', async () => {
       const user = userEvent.setup()
       render(<BuyerForm event={baseEvent} tiers={[freeTier]} />)
       const qty = screen.getByTestId('qty-input-tier-free') as HTMLInputElement
@@ -172,7 +170,7 @@ describe('<BuyerForm>', () => {
       await user.type(qty, '1')
       // The notice is gated on `!isFreeEvent && hasAnyTier`; with a
       // free-tier qty > 0, `isFreeEvent` is true → notice is suppressed.
-      expect(screen.queryByTestId('bkash-only-notice')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('payment-methods-notice')).not.toBeInTheDocument()
     })
   })
 
@@ -478,7 +476,7 @@ describe('<BuyerForm>', () => {
       expect(screen.queryByTestId('buyer-terms-body')).toBeNull()
     })
 
-    it('bilingual clickwrap line names the version + button label (paid → "Continue with bKash")', () => {
+    it('bilingual clickwrap line names the version + button label (paid → "Pay now")', () => {
       render(
         <BuyerForm
           event={baseEvent}
@@ -488,7 +486,7 @@ describe('<BuyerForm>', () => {
         />,
       )
       const clickwrap = screen.getByTestId('buyer-terms-clickwrap')
-      expect(clickwrap.textContent).toContain('Continue with bKash')
+      expect(clickwrap.textContent).toContain('Pay now')
       expect(clickwrap.textContent).toContain('v1.0')
       // BN parallel present (canonical "Buyer Terms" header + clickwrap phrasing).
       expect(clickwrap.textContent).toMatch(/সম্মত হচ্ছেন/u)
@@ -510,7 +508,7 @@ describe('<BuyerForm>', () => {
       await user.type(screen.getByTestId('qty-input-tier-free'), '1')
       const clickwrap = screen.getByTestId('buyer-terms-clickwrap')
       expect(clickwrap.textContent).toContain('Confirm registration')
-      expect(clickwrap.textContent).not.toContain('Continue with bKash')
+      expect(clickwrap.textContent).not.toContain('Pay now')
     })
 
     it('clickwrap line renders even when version is null (fallback dash)', () => {
@@ -523,7 +521,7 @@ describe('<BuyerForm>', () => {
         />,
       )
       const clickwrap = screen.getByTestId('buyer-terms-clickwrap')
-      expect(clickwrap.textContent).toContain('Continue with bKash')
+      expect(clickwrap.textContent).toContain('Pay now')
       // The dash placeholder appears in BOTH the BN and EN halves
       // when the version is unavailable — there's no version string
       // to surface.
