@@ -156,6 +156,7 @@ export function EventManage({ event, tenantSlug }: EventManageProps) {
 
       <nav className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {[
+          { href: `/events/${event.id}/edit`, label: 'Edit details' },
           { href: `/events/${event.id}/tickets`, label: 'Ticket tiers' },
           { href: `/events/${event.id}/attendees`, label: 'Attendees' },
           { href: `/events/${event.id}/checkin`, label: 'Check-in' },
@@ -163,7 +164,7 @@ export function EventManage({ event, tenantSlug }: EventManageProps) {
           <Link
             key={l.href}
             href={l.href}
-            className="hover:border-ep-violet border-mkt-line rounded-xl border bg-white px-4 py-4 text-center text-sm font-medium transition hover:-translate-y-0.5"
+            className="hover:border-mkt-red border-mkt-line rounded-xl border bg-white px-4 py-4 text-center text-sm font-medium transition hover:-translate-y-0.5"
           >
             {l.label}
           </Link>
