@@ -631,6 +631,13 @@ export const events = pgTable(
     capacity: integer(),
     bannerImageUrl: text('banner_image_url'),
     ogImageUrl: text('og_image_url'),
+    // Prior slugs of this event — appended on rename so an old
+    // {tenant}/{old-slug} URL 301s to the current slug (§9.14 parity with
+    // handle redirects). Tenant-scoped via the existing events RLS.
+    previousSlugs: text('previous_slugs')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     // primary_domain_id intentionally deferred to Sprint 7 (custom_domains
     // is Phase 2 white-label scope) — MVP routing via tenant subdomain +
     // path-mode. 2026-05-24 Day 23 pre-flight decision.

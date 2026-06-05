@@ -25,7 +25,7 @@ import { notFound, permanentRedirect } from 'next/navigation'
 import { EventLanding } from '@/components/public/event-landing'
 import { buildEventJsonLd, buildEventMetadata } from '@/lib/event-seo'
 import { fetchLegalDocumentByUrlPath } from '@/lib/legal'
-import { fetchHandleRedirect, fetchPublicEvent } from '@/lib/public-events'
+import { fetchEventRedirect, fetchHandleRedirect, fetchPublicEvent } from '@/lib/public-events'
 
 interface PageProps {
   params: Promise<{ tenant: string; event: string }>
@@ -56,8 +56,14 @@ export default async function PublicEventPage({ params }: PageProps) {
     fetchLegalDocumentByUrlPath('/buyer-terms'),
   ])
   if (!payload) {
-    // The tenant slug may have been renamed — 301 old URLs to the current
-    // handle for the 30-day redirect window (§9.14) before falling to 404.
+    // The event slug may have been renamed (tenant slug still valid) — 301 the
+    // old {tenant}/{old-event} URL to the current event slug.
+    const currentEventSlug = await fetchEventRedirect(tenant, event)
+    if (currentEventSlug && currentEventSlug !== event) {
+      permanentRedirect(`/${tenant}/${currentEventSlug}`)
+    }
+    // Or the tenant slug itself was renamed — 301 to the current handle
+    // (30-day window, §9.14) before falling to 404.
     const newSlug = await fetchHandleRedirect(tenant)
     if (newSlug && newSlug !== tenant) permanentRedirect(`/${newSlug}/${event}`)
     notFound()

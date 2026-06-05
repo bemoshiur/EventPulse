@@ -78,6 +78,36 @@ export interface PublicEventPayload {
 const PUBLICLY_VISIBLE_STATUSES = ['published', 'on_sale', 'sold_out', 'live'] as const
 
 /**
+ * Resolve a possibly-renamed event slug to its current slug, within a tenant.
+ * Returns the current slug to 301 to, or null. Backs the public event page's
+ * 404 path so an old {tenant}/{old-event-slug} URL redirects after a rename
+ * (events.previous_slugs, migration 0019). Public cross-tenant read.
+ */
+export async function resolveEventSlugRedirect(
+  tenantSlug: string,
+  oldEventSlug: string,
+): Promise<string | null> {
+  return withSuperAdmin(async (tx) => {
+    const rows = await tx
+      .select({ slug: events.slug })
+      .from(events)
+      .innerJoin(tenants, eq(events.tenantId, tenants.id))
+      .where(
+        and(
+          eq(tenants.slug, tenantSlug),
+          sql`${events.previousSlugs} @> ARRAY[${oldEventSlug}]::text[]`,
+          isNull(events.deletedAt),
+          isNull(tenants.deletedAt),
+          inArray(events.status, PUBLICLY_VISIBLE_STATUSES as unknown as string[]),
+          sql`${events.visibility} IN ('public','unlisted')`,
+        ),
+      )
+      .limit(1)
+    return rows[0]?.slug ?? null
+  })
+}
+
+/**
  * Fetch the public payload for an event by tenant slug + event slug.
  * Returns null when the tuple doesn't resolve to a publicly-visible
  * event (missing, deleted, private, draft/archived/completed status).
