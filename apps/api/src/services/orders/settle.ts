@@ -66,7 +66,6 @@ import {
   validateTransition,
   type OrderStatus,
 } from '../../domain/order-state-machine.js'
-import { isBkashFinancialEntity } from '../../infra/eps/bkash-financial-entity.js'
 import { verifyOrder } from '../../infra/eps/client.js'
 import { logger } from '../../lib/logger.js'
 import { enqueueOrderDelivery } from '../../workers/delivery-queue.js'
@@ -189,8 +188,15 @@ export async function settleOrderFromEps(input: SettleOrderInput): Promise<Settl
   // cancellations route normally to 'failed' / 'cancelled' regardless
   // of FinancialEntity (those are EPS-side rejection paths).
   const financialEntity = pickStringField(verifyResult.raw, 'FinancialEntity') ?? null
-  const isDisputed = epsTarget === 'paid' && !isBkashFinancialEntity(financialEntity)
-  const target: OrderStatus | null = isDisputed ? 'disputed' : epsTarget
+  // Multi-method go-live (decisions.md 2026-06-05 "EPS all-methods"): ALL EPS
+  // payment methods (card, bKash, Nagad, Rocket, Upay, bank, …) are honoured.
+  // financialEntity is still captured for reconciliation + audit, but the
+  // former bKash-only Verify-guard (Option 3 v1.0 single-method launch) is
+  // RETIRED — a Verify=Success now always transitions to 'paid'. Kept as a
+  // typed flag (not deleted) so the diversion can be re-enabled by reverting
+  // this one line if a method ever needs gating again.
+  const isDisputed: boolean = false
+  const target: OrderStatus | null = epsTarget
 
   if (target === null) {
     // EPS says pending or unknown. Don't transition; the webhook

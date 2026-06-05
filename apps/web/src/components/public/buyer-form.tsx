@@ -459,22 +459,20 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
                     Final total including fees shown at checkout.
                   </p>
                   {/*
-                    v1.0 single-method launch honest framing per decisions.md
-                    2026-05-31 "EPS fee-model structural decision — Option 3
-                    CHOSEN" + Day 38 Phase 3. The buyer learns BEFORE the
-                    EPS handoff that bKash is the launch's accepted method;
-                    a buyer who needs a different method can step away rather
-                    than landing in the server-side Verify-guard dispute path.
-                    Bilingual per R12 (Bengali alongside English at the
-                    buyer-facing surface).
+                    Multi-method go-live (decisions.md 2026-06-05 "EPS all-
+                    methods"): EPS's hosted checkout shows every method (cards,
+                    bKash, Nagad, Rocket, Upay, bank). Bilingual per R12.
                   */}
-                  <p className="text-mkt-slate/70 mt-2 text-xs" data-testid="bkash-only-notice">
-                    Currently accepting <strong>bKash</strong> payments only. More methods coming
-                    soon.
+                  <p
+                    className="text-mkt-slate/70 mt-2 text-xs"
+                    data-testid="payment-methods-notice"
+                  >
+                    Pay securely with <strong>cards, bKash, Nagad, Rocket</strong> and more — choose
+                    on the next screen.
                     <br />
                     <span lang="bn">
-                      বর্তমানে শুধুমাত্র <strong>bKash</strong> পেমেন্ট গ্রহণ করা হচ্ছে। অন্যান্য
-                      পদ্ধতি শীঘ্রই আসছে।
+                      কার্ড, <strong>বিকাশ, নগদ, রকেট</strong> সহ যেকোনো মাধ্যমে নিরাপদে পেমেন্ট
+                      করুন — পরের স্ক্রিনে বেছে নিন।
                     </span>
                   </p>
                 </>
@@ -692,16 +690,16 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
           <div className="mt-6 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-mkt-slate/80 text-xs" data-testid="buyer-terms-clickwrap">
               <span lang="bn" className="block">
-                {isFreeEvent ? '"Confirm registration"' : '"Continue with bKash"'} বাটনে ক্লিক করে
-                আপনি Event Pulse-এর Buyer Terms ({buyerTermsVersion ?? '—'}) এবং{' '}
+                {isFreeEvent ? '"Confirm registration"' : '"Pay now"'} বাটনে ক্লিক করে আপনি Event
+                Pulse-এর Buyer Terms ({buyerTermsVersion ?? '—'}) এবং{' '}
                 <Link className="underline" href="/privacy">
                   প্রাইভেসি পলিসিতে
                 </Link>{' '}
                 সম্মত হচ্ছেন।
               </span>
               <span lang="en" className="mt-1 block">
-                By clicking {isFreeEvent ? '"Confirm registration"' : '"Continue with bKash"'} you
-                agree to Event Pulse&apos;s{' '}
+                By clicking {isFreeEvent ? '"Confirm registration"' : '"Pay now"'} you agree to
+                Event Pulse&apos;s{' '}
                 <Link className="underline" href="/buyer-terms">
                   Buyer Terms ({buyerTermsVersion ?? '—'})
                 </Link>{' '}
@@ -725,12 +723,10 @@ export function BuyerForm({ event, tiers, buyerTermsBodyHtml, buyerTermsVersion 
                 ? 'Submitting…'
                 : isFreeEvent
                   ? 'Confirm registration · নিশ্চিত করুন'
-                  : // v1.0 single-method launch: explicit bKash framing per
-                    // decisions.md 2026-05-31 Option 3 + Day 38 Phase 3.
-                    // 'Continue with bKash' replaces the generic 'Continue
-                    // to payment' so the buyer's expectation is set before
-                    // EPS hands them off to bKash's confirmation page.
-                    'Continue with bKash · bKash দিয়ে চালিয়ে যান'}
+                  : // Multi-method go-live (decisions.md 2026-06-05 "EPS all-
+                    // methods"): generic "Pay now" — EPS's hosted page lets the
+                    // buyer choose any method (card, bKash, Nagad, Rocket, …).
+                    'Pay now · এখন পেমেন্ট করুন'}
             </button>
           </div>
         </form>

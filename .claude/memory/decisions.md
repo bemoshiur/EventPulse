@@ -4,6 +4,20 @@ Append-only. Most recent at the top. If a decision is superseded, add a new entr
 
 ---
 
+## 2026-06-05 (Day 48 cont 2) · EPS ALL-METHODS go-live + STAGING_PAYMENT_BLOCK lifted (real payments LIVE)
+
+**Supersedes:** 2026-05-31 "EPS fee-model structural decision — Option 3 (single-method launch, bKash-only for v1.0) CHOSEN" (the bKash-only Verify-guard).
+
+**Context:** Operator confirmed EPS **production credentials are configured** (`EPS_MODE=production`, merchant creds set on prod) and directed: open real payments now, **all EPS methods** (not just bKash). AIT/VAT positions resolved same day (no longer launch-gating). SES is out of sandbox.
+
+**Decision:**
+- **All payment methods honoured.** Retired the bKash-only Verify-guard in `services/orders/settle.ts` — a Verify=Success now always → `paid` regardless of `FinancialEntity` (card, bKash, Nagad, Rocket, Upay, bank). `financialEntity` is still captured for reconciliation; the flag is kept (`const isDisputed = false`) so the diversion can be re-enabled by reverting one line. Buyer-form reframed bKash-only → generic "Pay now" + "cards, bKash, Nagad, Rocket and more". Tests rewritten to assert all-methods→paid.
+- **Gate lifted.** `STAGING_PAYMENT_BLOCK` flipped `1 → 0` in prod `/home/eventpulse/.env.production` + `pm2 reload` (the documented cutover; deploy.sh only sources the env, never re-bootstraps, so the flip persists). The order of operations is **Phase A code deploys FIRST, then the gate flip** — otherwise non-bKash real payments would have been disputed.
+
+**Consequences:** Paid ticket tiers now charge real money via EPS. The bKash dispute machinery (`order-disputed-wrong-method` SES template, `writeOrderDisputed`) is now dead code (left in place, unreachable). Verify-after-redirect (R3) + idempotency (R6) unchanged. Recommend a BDT-100 smoke (one real purchase) to confirm end-to-end before promoting widely.
+
+---
+
 ## 2026-06-05 (Day 48 cont 2) · §29 #9 (AIT withholding) + #10 (VAT/Mushak) RESOLVED — adopted BD tax position
 
 **Context:** Operator directed resolving the open Bangladesh tax classifications in-house, no external counsel review, and adopting concrete positions now (so they no longer block launch).
