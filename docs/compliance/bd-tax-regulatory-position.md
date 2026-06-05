@@ -25,7 +25,7 @@ The platform therefore handles two economically distinct money flows: **(a)** th
 
 **Adopted classification: Event Pulse is NOT a withholding agent on settlements to organisers.**
 
-Reasoning: the T+5 settlement is a **remittance of the attendee's own funds** to the organiser — the organiser's ticket revenue passing through the platform — **not a payment by Event Pulse for any supply made to Event Pulse**. The organiser is not Event Pulse's contractor, supplier, or service provider; the organiser is an independent principal selling to attendees. The deduction-at-source trigger ("payment for a supply *to the specified person*") is therefore not met on the settlement leg. A facilitator remitting third-party marketplace proceeds is not procuring a supply for itself.
+Reasoning: the T+5 settlement is a **remittance of the attendee's own funds** to the organiser — the organiser's ticket revenue passing through the platform — **not a payment by Event Pulse for any supply made to Event Pulse**. The organiser is not Event Pulse's contractor, supplier, or service provider; the organiser is an independent principal selling to attendees. The deduction-at-source trigger ("payment for a supply _to the specified person_") is therefore not met on the settlement leg. A facilitator remitting third-party marketplace proceeds is not procuring a supply for itself.
 
 Where withholding **does** apply, and what we do:
 
@@ -80,4 +80,4 @@ Privacy, Terms, EULA, DPA, Cookies, and the Refund Policy are **live at v1.0** a
 
 ---
 
-*Adopted 5 June 2026. Supersedes the "OPEN — get legal opinion" placeholders in §15.2 / §21.2 and closes §29 Open Decisions #9 and #10.*
+_Adopted 5 June 2026. Supersedes the "OPEN — get legal opinion" placeholders in §15.2 / §21.2 and closes §29 Open Decisions #9 and #10._
