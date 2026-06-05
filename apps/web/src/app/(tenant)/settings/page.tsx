@@ -11,6 +11,8 @@
 
 import { useEffect, useState } from 'react'
 
+import { ImageUpload } from '@/components/tenant/image-upload'
+
 function apiBase(): string {
   const fromEnv = process.env['NEXT_PUBLIC_API_BASE_URL']
   return fromEnv && fromEnv.length > 0 ? fromEnv.replace(/\/$/, '') : ''
@@ -209,18 +211,21 @@ export function TenantSettings() {
 
         <form onSubmit={saveBrand} className="space-y-4">
           <div>
-            <label htmlFor="logo" className="text-mkt-ink block text-sm font-medium">
-              Logo URL
-            </label>
+            <label className="text-mkt-ink block text-sm font-medium">Logo</label>
+            <div className="mt-1">
+              <ImageUpload kind="logo" value={logoUrl} onChange={setLogoUrl} />
+            </div>
             <input
               id="logo"
               type="url"
               value={logoUrl}
               onChange={(e) => setLogoUrl(e.target.value)}
-              placeholder="https://…/logo.png"
-              className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
+              placeholder="…or paste an image URL"
+              className="border-mkt-line focus:border-mkt-red mt-2 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
             />
-            <p className="text-mkt-slate mt-1 text-xs">Paste a hosted image URL (PNG/SVG).</p>
+            <p className="text-mkt-slate mt-1 text-xs">
+              Upload an image (PNG/JPG/WebP/SVG) or paste a URL.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
