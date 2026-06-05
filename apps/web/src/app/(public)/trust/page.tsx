@@ -3,7 +3,9 @@ import type { Metadata } from 'next'
 import { TrustCenterLandingGrid } from '@/components/legal/trust-center-landing-grid'
 import { fetchTrustCenterLanding } from '@/lib/legal'
 
-export const revalidate = 3600
+// Legal/trust content is DB-seeded; render fresh so updates show immediately
+// (the prior 1h ISR served stale placeholders for up to an hour after a content seed).
+export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
   title: 'Trust Center',

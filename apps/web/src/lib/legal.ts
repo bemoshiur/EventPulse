@@ -137,7 +137,7 @@ export async function fetchLegalDocumentByUrlPath(
     const res = await fetch(url, {
       // Next.js caching: revalidate every hour. The admin publish flow
       // will call `revalidatePath()` to bust this cache on demand.
-      next: { revalidate: 3600 },
+      cache: 'no-store',
     })
     if (res.status === 404) return null
     if (!res.ok) {
@@ -177,7 +177,7 @@ export async function fetchLegalDocumentByUrlPath(
 export async function fetchTrustCenterLanding(): Promise<LegalDocumentLandingRow[]> {
   const url = `${apiBaseUrl()}/api/v1/public/legal/landing`
   try {
-    const res = await fetch(url, { next: { revalidate: 3600 } })
+    const res = await fetch(url, { cache: 'no-store' })
     if (!res.ok) {
       if (isBuildPhase()) {
         logFetchFailure('fetchTrustCenterLanding (build)', url, `HTTP ${res.status}`)
