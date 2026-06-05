@@ -126,8 +126,10 @@ export function buildEventMetadata(
   const url = eventUrl(tenantSlug, eventSlug)
   const description = buildDescription(payload)
   const title = `${event.title} — ${brand.tenantName}`
-  const image = event.bannerImageUrl ?? brand.logoUrl ?? `${SITE}/og-default.png`
-  const images = [{ url: image, width: 1200, height: 630, alt: event.title }]
+  // Only advertise an OG image we actually have — a banner, else the brand
+  // logo. No synthetic fallback URL (it would 404 and break the social card).
+  const image = event.bannerImageUrl ?? brand.logoUrl
+  const images = image ? [{ url: image, width: 1200, height: 630, alt: event.title }] : undefined
   const indexable = event.visibility === 'public'
 
   return {
@@ -149,13 +151,13 @@ export function buildEventMetadata(
       alternateLocale: ['bn_BD'],
       title,
       description,
-      images,
+      ...(images ? { images } : {}),
     },
     twitter: {
-      card: 'summary_large_image',
+      card: image ? 'summary_large_image' : 'summary',
       title,
       description,
-      images: images.map((i) => i.url),
+      ...(images ? { images: images.map((i) => i.url) } : {}),
     },
   }
 }
