@@ -4,6 +4,16 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## An env-ONLY change to `.env.production` does NOT take effect with `pm2 reload --update-env` — use `pm2 restart --update-env`
+
+**Why it happens:** `pm2/ecosystem.config.cjs` only pins `NODE_ENV` + `PORT`; every other var (STAGING_PAYMENT_BLOCK, EPS_*, etc.) is INHERITED from the shell that runs pm2. `deploy.sh` does `set -a; source .env.production; set +a; pm2 reload ecosystem --update-env`. On a normal deploy this works because the **code changed**, so pm2 re-execs the process (picking up the sourced env). But for an **env-only** change with unchanged code, `pm2 reload` (graceful) keeps the running process as-is — `--update-env` updated pm2's stored definition but the live process still had the old value. Verified: after `pm2 reload`, `pm2 jlist` still showed `STAGING_PAYMENT_BLOCK=1` despite the file (and shell) being `=0`.
+
+**Fix:** for an env-only flip, `set -a; source /home/eventpulse/.env.production; set +a; pm2 restart <app> --update-env` — `restart` fully re-execs the process with the new env. Confirmed: after restart, `pm2 jlist` showed `STAGING_PAYMENT_BLOCK=0`. (First hit: 2026-06-05 EPS payment go-live, flipping STAGING_PAYMENT_BLOCK.)
+
+**How to avoid:** when you change `.env.production` without a code deploy, always `pm2 restart … --update-env` (not reload) and verify via `pm2 jlist` that the live process has the new value. Don't trust `pm2 reload` for env-only changes.
+
+---
+
 ## The `prod` git branch silently drifted off `main` and `main:prod` pushes were rejected — but deploys still shipped correct code
 
 **Why it happens:** `deploy-prod.yml` checks out the **release tag** (`ref: ${{ inputs.release_tag }}`), NOT the prod branch head. So when the prod branch drifted to an old commit (`e09f582`, a leftover from a memory-commit episode where prod got force-pushed a one-off commit not in main's history), every later `git push --no-verify origin main:prod` was rejected non-fast-forward — silently, because the deploy step that follows uses the tag and succeeds anyway. The prod branch stayed stale for several releases (v0.4.20→v0.4.21) while prod actually ran the right tagged code.
