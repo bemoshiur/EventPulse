@@ -17,6 +17,11 @@ import {
   renameTenantHandle,
 } from './index.js'
 
+// DB integration test — runs only where DATABASE_URL is set (the CI
+// integration-tests job + local Postgres); skipped in the no-DB unit job.
+const HAS_DB = Boolean(process.env['DATABASE_URL'])
+const describeIfDb = HAS_DB ? describe : describe.skip
+
 async function makeUser(email: string): Promise<string> {
   return withSuperAdmin(async (db) => {
     const [u] = await db
@@ -31,7 +36,7 @@ afterAll(async () => {
   await resetPool()
 })
 
-describe('renameTenantHandle', () => {
+describeIfDb('renameTenantHandle', () => {
   let userId: string
   let tenantId: string
   let originalSlug: string
