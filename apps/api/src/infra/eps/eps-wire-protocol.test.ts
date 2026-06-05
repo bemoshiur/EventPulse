@@ -183,6 +183,27 @@ describe('V5_PRODUCTION_PROTOCOL — response parsing', () => {
     }
   })
 
+  it('parseVerifyResponse accepts a real EPS v5 Success with null PaymentReferance (2026-06-05 go-live smoke regression)', () => {
+    // The verbatim shape EPS returned for a real card payment: Status
+    // "Success" but PaymentReferance + several other fields are `null`.
+    // `.optional()` alone rejected the literal null and made a genuinely-paid
+    // order look like a verify failure → no settlement, no ticket. The schema
+    // now uses `.nullable().optional()`.
+    const real = V5_PRODUCTION_PROTOCOL.parseVerifyResponse({
+      MerchantTransactionId: 'TXN-mq1h9r9a-moshiur-2imqllll',
+      EPSTransactionId: '260606040942130WY',
+      Status: 'Success',
+      TotalAmount: '357.88',
+      StoreAmount: '350.01',
+      FinancialEntity: 'CyberCard',
+      ErrorCode: null,
+      ErrorMessage: null,
+      PaymentReferance: null,
+      PaymentId: '',
+    })
+    expect(real.kind).toBe('success')
+  })
+
   it('parseVerifyResponse accepts PaymentReferance — VERBATIM EPS V5 typo (NOT PaymentReference)', () => {
     // EPS V5 integration guide spells the field `PaymentReferance` (with
     // two A's). Schema MUST preserve the typo character-for-character;

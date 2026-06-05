@@ -191,10 +191,17 @@ const V5InitResponseSchema = z
  */
 const V5VerifyResponseSchema = z
   .object({
-    TotalAmount: z.string().optional(),
-    StoreAmount: z.string().optional(),
-    EpsTransactionId: z.string().optional(),
-    PaymentReferance: z.string().optional(),
+    // Real EPS V5 production Verify responses send these as `null` (not absent)
+    // when not applicable — e.g. `PaymentReferance: null` on a card payment.
+    // `.optional()` alone allows only `undefined`, so a literal `null` failed
+    // validation and made a genuinely-Successful payment look like a verify
+    // error (caught by the 2026-06-05 BDT-350 go-live smoke). `.nullable()` is
+    // required alongside `.optional()`. Critical fields (MerchantTransactionId,
+    // Status) are read from the passthrough raw, so leniency here is safe.
+    TotalAmount: z.string().nullable().optional(),
+    StoreAmount: z.string().nullable().optional(),
+    EpsTransactionId: z.string().nullable().optional(),
+    PaymentReferance: z.string().nullable().optional(),
   })
   .passthrough()
 
