@@ -21,7 +21,6 @@
 
 import { useEffect, useRef, type ReactNode } from 'react'
 
-import { GlassCard } from '@/components/ui/glass-card'
 import { cn } from '@/lib/utils'
 
 import { ProgressIndicator, type ProgressStep } from './progress-indicator'
@@ -83,18 +82,18 @@ export function WizardFrame({
   const currentStepLabelBn = steps[currentStepIndex]?.labelBn
 
   return (
-    <GlassCard variant="strong" className="mx-auto w-full max-w-3xl p-8 sm:p-10">
+    <div className="mkt-card mx-auto w-full max-w-3xl p-8 sm:p-10">
       <header className="mb-6 space-y-1">
-        <h1 className="text-2xl font-semibold text-[var(--ep-ink)]">
+        <h1 className="text-2xl font-semibold text-[var(--color-mkt-ink)]">
           {title}
           {titleBn ? (
-            <span className="ml-2 text-base font-normal text-[var(--ep-graphite)] opacity-80">
+            <span className="ml-2 text-base font-normal text-[var(--color-mkt-slate)] opacity-80">
               · {titleBn}
             </span>
           ) : null}
         </h1>
         {subtitle ? (
-          <p className="text-sm text-[var(--ep-graphite)]">
+          <p className="text-sm text-[var(--color-mkt-slate)]">
             {subtitle}
             {subtitleBn ? <span className="ml-1 opacity-80">· {subtitleBn}</span> : null}
           </p>
@@ -112,11 +111,11 @@ export function WizardFrame({
           id="wizard-step-heading"
           ref={headingRef}
           tabIndex={-1}
-          className="text-lg font-semibold text-[var(--ep-ink)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ep-cerulean)] focus-visible:ring-offset-2"
+          className="text-lg font-semibold text-[var(--color-mkt-ink)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-mkt-red)] focus-visible:ring-offset-2"
         >
           {`Step ${currentStepIndex + 1}: ${currentStepLabel}`}
           {currentStepLabelBn ? (
-            <span className="ml-2 text-base font-normal text-[var(--ep-graphite)] opacity-80">
+            <span className="ml-2 text-base font-normal text-[var(--color-mkt-slate)] opacity-80">
               · {currentStepLabelBn}
             </span>
           ) : null}
@@ -130,8 +129,8 @@ export function WizardFrame({
           onClick={onBack}
           disabled={isBackDisabled ?? !onBack}
           className={cn(
-            'inline-flex items-center justify-center rounded-md border border-[var(--ep-line)] bg-transparent px-5 py-2 text-sm font-medium text-[var(--ep-graphite)] transition',
-            'hover:bg-[var(--ep-paper)] focus-visible:ring-2 focus-visible:ring-[var(--ep-cerulean)] focus-visible:ring-offset-2 focus-visible:outline-none',
+            'inline-flex items-center justify-center rounded-md border border-[var(--color-mkt-line)] bg-transparent px-5 py-2 text-sm font-medium text-[var(--color-mkt-slate)] transition',
+            'hover:bg-[#ffffff] focus-visible:ring-2 focus-visible:ring-[var(--color-mkt-red)] focus-visible:ring-offset-2 focus-visible:outline-none',
             'disabled:cursor-not-allowed disabled:opacity-40',
           )}
           aria-label="Back to previous step"
@@ -146,8 +145,8 @@ export function WizardFrame({
           disabled={isPrimaryDisabled || isPrimaryBusy}
           aria-busy={isPrimaryBusy ? 'true' : 'false'}
           className={cn(
-            'inline-flex items-center justify-center rounded-md bg-gradient-to-br from-[var(--ep-violet)] to-[var(--ep-cerulean)] px-6 py-2 text-sm font-semibold text-white shadow-md transition',
-            'hover:opacity-95 focus-visible:ring-2 focus-visible:ring-[var(--ep-cerulean)] focus-visible:ring-offset-2 focus-visible:outline-none',
+            'inline-flex items-center justify-center rounded-md bg-gradient-to-br from-[var(--color-mkt-red)] to-[var(--color-mkt-red)] px-6 py-2 text-sm font-semibold text-white shadow-md transition',
+            'hover:opacity-95 focus-visible:ring-2 focus-visible:ring-[var(--color-mkt-red)] focus-visible:ring-offset-2 focus-visible:outline-none',
             'disabled:cursor-not-allowed disabled:opacity-50',
           )}
         >
@@ -157,6 +156,6 @@ export function WizardFrame({
           ) : null}
         </button>
       </footer>
-    </GlassCard>
+    </div>
   )
 }

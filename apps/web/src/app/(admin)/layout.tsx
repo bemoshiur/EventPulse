@@ -22,19 +22,17 @@
 
 import { AuthGate } from '@/components/auth/auth-gate'
 import { QueryProvider } from '@/components/providers/query-provider'
-import { GradientMesh } from '@/components/ui/gradient-mesh'
 import { AdminViewportGuard } from '@/components/admin-kyc/viewport-guard'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <main className="relative min-h-screen">
-      <GradientMesh variant="calm" />
+    <main className="text-mkt-ink relative min-h-screen bg-[var(--color-mkt-soft)] font-[family-name:var(--font-bangla)]">
       <AuthGate audience="super-admin">
         <QueryProvider>
           <div className="mx-auto min-h-screen max-w-7xl px-6 py-10">
             <header className="mb-8 flex items-center justify-between">
-              <h1 className="text-2xl font-semibold text-[var(--ep-ink)]">Super Admin</h1>
-              <span className="rounded-full bg-[var(--ep-violet)]/10 px-3 py-1 text-xs font-medium tracking-wide text-[var(--ep-violet)] uppercase">
+              <h1 className="text-2xl font-semibold text-[var(--color-mkt-ink)]">Super Admin</h1>
+              <span className="rounded-full bg-[var(--color-mkt-red)]/10 px-3 py-1 text-xs font-medium tracking-wide text-[var(--color-mkt-red)] uppercase">
                 Internal
               </span>
             </header>

@@ -33,12 +33,12 @@ type StatusValue = (typeof STATUS_OPTIONS)[number]['value']
 function StatusBadge({ status }: { status: string }) {
   const tone =
     status === 'approved'
-      ? 'bg-[var(--ep-mint)]/15 text-[var(--ep-mint)]'
+      ? 'bg-[#059669]/15 text-[#059669]'
       : status === 'rejected'
-        ? 'bg-[var(--ep-rose)]/15 text-[var(--ep-rose)]'
+        ? 'bg-[var(--color-mkt-red)]/15 text-[var(--color-mkt-red)]'
         : status === 'under_review'
-          ? 'bg-[var(--ep-cerulean)]/15 text-[var(--ep-cerulean)]'
-          : 'bg-[var(--ep-violet)]/15 text-[var(--ep-violet)]'
+          ? 'bg-[var(--color-mkt-red)]/15 text-[var(--color-mkt-red)]'
+          : 'bg-[var(--color-mkt-red)]/15 text-[var(--color-mkt-red)]'
   return (
     <span
       className={`rounded-full px-2 py-0.5 text-xs font-medium tracking-wide uppercase ${tone}`}
@@ -66,8 +66,8 @@ export default function AdminKycQueuePage() {
     <div className="space-y-6">
       <div className="flex items-end justify-between">
         <div>
-          <h2 className="text-3xl font-semibold text-[var(--ep-ink)]">KYC review queue</h2>
-          <p className="mt-1 text-sm text-[var(--ep-graphite)]">
+          <h2 className="text-3xl font-semibold text-[var(--color-mkt-ink)]">KYC review queue</h2>
+          <p className="mt-1 text-sm text-[var(--color-mkt-slate)]">
             Manual verification only for MVP. Open a submission to review documents and toggle
             checklist items.
           </p>
@@ -75,7 +75,7 @@ export default function AdminKycQueuePage() {
         <div>
           <label
             htmlFor="status-filter"
-            className="mb-1 block text-xs font-medium tracking-wide text-[var(--ep-graphite)] uppercase"
+            className="mb-1 block text-xs font-medium tracking-wide text-[var(--color-mkt-slate)] uppercase"
           >
             Status
           </label>
@@ -83,7 +83,7 @@ export default function AdminKycQueuePage() {
             id="status-filter"
             value={status}
             onChange={(e) => setStatus(e.target.value as StatusValue)}
-            className="rounded-md border border-[var(--ep-line)] bg-white px-3 py-2 text-sm text-[var(--ep-ink)]"
+            className="rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm text-[var(--color-mkt-ink)]"
           >
             {STATUS_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -98,25 +98,25 @@ export default function AdminKycQueuePage() {
         <div
           role="status"
           aria-live="polite"
-          className="rounded-2xl border border-[var(--ep-line)] bg-white/40 p-6 text-sm text-[var(--ep-graphite)]"
+          className="rounded-2xl border border-[var(--color-mkt-line)] bg-white p-6 text-sm text-[var(--color-mkt-slate)]"
         >
           Loading queue…
         </div>
       ) : error ? (
         <div
           role="alert"
-          className="rounded-2xl border border-[var(--ep-rose)]/40 bg-[var(--ep-rose)]/5 p-6 text-sm text-[var(--ep-rose)]"
+          className="rounded-2xl border border-[var(--color-mkt-red)]/40 bg-[var(--color-mkt-red)]/5 p-6 text-sm text-[var(--color-mkt-red)]"
         >
           Failed to load queue: {(error as Error).message}
         </div>
       ) : !data || data.data.length === 0 ? (
-        <div className="rounded-2xl border border-[var(--ep-line)] bg-white/40 p-6 text-sm text-[var(--ep-graphite)]">
+        <div className="rounded-2xl border border-[var(--color-mkt-line)] bg-white p-6 text-sm text-[var(--color-mkt-slate)]">
           No submissions in <strong>{status}</strong> status.
         </div>
       ) : (
         <table className="w-full table-auto border-collapse text-sm">
           <thead>
-            <tr className="border-b border-[var(--ep-line)] text-left text-xs tracking-wide text-[var(--ep-graphite)] uppercase">
+            <tr className="border-b border-[var(--color-mkt-line)] text-left text-xs tracking-wide text-[var(--color-mkt-slate)] uppercase">
               <th className="py-3 pr-4">Tenant</th>
               <th className="py-3 pr-4">Type</th>
               <th className="py-3 pr-4">Tier</th>
@@ -129,26 +129,26 @@ export default function AdminKycQueuePage() {
             {data.data.map((row) => (
               <tr
                 key={row.id}
-                className="border-b border-[var(--ep-line)] transition-colors hover:bg-[var(--ep-mist)]"
+                className="border-b border-[var(--color-mkt-line)] transition-colors hover:bg-[var(--color-mkt-soft)]"
               >
                 <td className="py-3 pr-4">
                   <Link
                     href={`/admin/kyc/${row.id}`}
-                    className="font-medium text-[var(--ep-violet)] hover:underline"
+                    className="font-medium text-[var(--color-mkt-red)] hover:underline"
                   >
                     {row.tenantName}
                   </Link>
-                  <div className="text-xs text-[var(--ep-graphite)]">{row.tenantSlug}</div>
+                  <div className="text-xs text-[var(--color-mkt-slate)]">{row.tenantSlug}</div>
                 </td>
-                <td className="py-3 pr-4 text-[var(--ep-ink)]">{row.submissionType}</td>
-                <td className="py-3 pr-4 text-[var(--ep-ink)]">{row.tierRequested}</td>
+                <td className="py-3 pr-4 text-[var(--color-mkt-ink)]">{row.submissionType}</td>
+                <td className="py-3 pr-4 text-[var(--color-mkt-ink)]">{row.tierRequested}</td>
                 <td className="py-3 pr-4">
                   <StatusBadge status={row.status} />
                 </td>
-                <td className="py-3 pr-4 text-[var(--ep-graphite)]">
+                <td className="py-3 pr-4 text-[var(--color-mkt-slate)]">
                   {relativeTime(row.submittedAt)}
                 </td>
-                <td className="py-3 pr-4 text-[var(--ep-graphite)]">
+                <td className="py-3 pr-4 text-[var(--color-mkt-slate)]">
                   {row.checkedKeyCount} verified
                 </td>
               </tr>

@@ -11,11 +11,13 @@ export default function LegalTrustListPage() {
   return (
     <section className="space-y-8">
       <header>
-        <p className="text-xs font-semibold tracking-widest text-[var(--ep-violet)] uppercase">
+        <p className="text-xs font-semibold tracking-widest text-[var(--color-mkt-red)] uppercase">
           Super admin
         </p>
-        <h1 className="mt-2 text-3xl font-semibold text-[var(--ep-ink)]">Legal &amp; Trust</h1>
-        <p className="mt-2 max-w-2xl text-sm text-[var(--ep-graphite)]">
+        <h1 className="mt-2 text-3xl font-semibold text-[var(--color-mkt-ink)]">
+          Legal &amp; Trust
+        </h1>
+        <p className="mt-2 max-w-2xl text-sm text-[var(--color-mkt-slate)]">
           Manage the 18 Trust Center documents. Editing a document creates a new version; the public
           page is invalidated on publish.
         </p>

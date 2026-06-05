@@ -34,13 +34,16 @@ export function Step2SignatoryIdentity({
 
   return (
     <form id={formId} onSubmit={handleSubmit(onValidSubmit)} className="space-y-5" noValidate>
-      <p className="text-sm text-[var(--ep-graphite)]">
+      <p className="text-sm text-[var(--color-mkt-slate)]">
         Who is the authorised signatory acting on behalf of your organisation?
         <span className="ml-1 opacity-70">· প্রতিষ্ঠানের পক্ষে কে অনুমোদিত স্বাক্ষরকারী?</span>
       </p>
 
       <div>
-        <label htmlFor="sig-fullName" className="block text-sm font-medium text-[var(--ep-ink)]">
+        <label
+          htmlFor="sig-fullName"
+          className="block text-sm font-medium text-[var(--color-mkt-ink)]"
+        >
           Signatory full name (as on NID){' '}
           <span className="opacity-70">· স্বাক্ষরকারীর পুরো নাম</span>
         </label>
@@ -51,17 +54,20 @@ export function Step2SignatoryIdentity({
           aria-invalid={errors.fullName ? 'true' : 'false'}
           aria-describedby={errors.fullName ? 'sig-fullName-error' : undefined}
           {...register('fullName')}
-          className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+          className="mt-1 block w-full rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm focus:border-[var(--color-mkt-red)] focus:ring-2 focus:ring-[var(--color-mkt-red)] focus:outline-none"
         />
         {errors.fullName ? (
-          <p id="sig-fullName-error" className="mt-1 text-xs text-[var(--ep-rose)]">
+          <p id="sig-fullName-error" className="mt-1 text-xs text-[var(--color-mkt-red)]">
             {errors.fullName.message}
           </p>
         ) : null}
       </div>
 
       <div>
-        <label htmlFor="sig-nidNumber" className="block text-sm font-medium text-[var(--ep-ink)]">
+        <label
+          htmlFor="sig-nidNumber"
+          className="block text-sm font-medium text-[var(--color-mkt-ink)]"
+        >
           Signatory NID number <span className="opacity-70">· এনআইডি নম্বর</span>
         </label>
         <input
@@ -72,10 +78,10 @@ export function Step2SignatoryIdentity({
           aria-invalid={errors.nidNumber ? 'true' : 'false'}
           aria-describedby={errors.nidNumber ? 'sig-nidNumber-error' : undefined}
           {...register('nidNumber')}
-          className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+          className="mt-1 block w-full rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm focus:border-[var(--color-mkt-red)] focus:ring-2 focus:ring-[var(--color-mkt-red)] focus:outline-none"
         />
         {errors.nidNumber ? (
-          <p id="sig-nidNumber-error" className="mt-1 text-xs text-[var(--ep-rose)]">
+          <p id="sig-nidNumber-error" className="mt-1 text-xs text-[var(--color-mkt-red)]">
             {errors.nidNumber.message}
           </p>
         ) : null}

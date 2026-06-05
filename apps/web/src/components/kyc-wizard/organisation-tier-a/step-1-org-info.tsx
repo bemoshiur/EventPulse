@@ -32,13 +32,16 @@ export function Step1OrgInfo({ formId, initialValues, onValidSubmit }: Step1OrgI
 
   return (
     <form id={formId} onSubmit={handleSubmit(onValidSubmit)} className="space-y-5" noValidate>
-      <p className="text-sm text-[var(--ep-graphite)]">
+      <p className="text-sm text-[var(--color-mkt-slate)]">
         Let&apos;s start with the legal details of your organisation.
         <span className="ml-1 opacity-70">· প্রতিষ্ঠানের আইনি বিবরণ দিয়ে শুরু করি।</span>
       </p>
 
       <div>
-        <label htmlFor="legalName" className="block text-sm font-medium text-[var(--ep-ink)]">
+        <label
+          htmlFor="legalName"
+          className="block text-sm font-medium text-[var(--color-mkt-ink)]"
+        >
           Legal name <span className="opacity-70">· আইনি নাম</span>
         </label>
         <input
@@ -48,14 +51,14 @@ export function Step1OrgInfo({ formId, initialValues, onValidSubmit }: Step1OrgI
           aria-invalid={errors.legalName ? 'true' : 'false'}
           aria-describedby={errors.legalName ? 'legalName-error' : undefined}
           {...register('legalName')}
-          className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+          className="mt-1 block w-full rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm focus:border-[var(--color-mkt-red)] focus:ring-2 focus:ring-[var(--color-mkt-red)] focus:outline-none"
         />
         {errors.legalName ? (
-          <p id="legalName-error" className="mt-1 text-xs text-[var(--ep-rose)]">
+          <p id="legalName-error" className="mt-1 text-xs text-[var(--color-mkt-red)]">
             {errors.legalName.message}
           </p>
         ) : null}
-        <p className="mt-1 text-xs text-[var(--ep-graphite)] opacity-70">
+        <p className="mt-1 text-xs text-[var(--color-mkt-slate)] opacity-70">
           Exactly as it appears on your trade license.
           <span className="ml-1">· ট্রেড লাইসেন্সে যেভাবে লেখা আছে।</span>
         </p>
@@ -64,7 +67,7 @@ export function Step1OrgInfo({ formId, initialValues, onValidSubmit }: Step1OrgI
       <div>
         <label
           htmlFor="tradeLicenseNumber"
-          className="block text-sm font-medium text-[var(--ep-ink)]"
+          className="block text-sm font-medium text-[var(--color-mkt-ink)]"
         >
           Trade license number <span className="opacity-70">· ট্রেড লাইসেন্স নম্বর</span>
         </label>
@@ -75,17 +78,17 @@ export function Step1OrgInfo({ formId, initialValues, onValidSubmit }: Step1OrgI
           aria-invalid={errors.tradeLicenseNumber ? 'true' : 'false'}
           aria-describedby={errors.tradeLicenseNumber ? 'tradeLicenseNumber-error' : undefined}
           {...register('tradeLicenseNumber')}
-          className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+          className="mt-1 block w-full rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm focus:border-[var(--color-mkt-red)] focus:ring-2 focus:ring-[var(--color-mkt-red)] focus:outline-none"
         />
         {errors.tradeLicenseNumber ? (
-          <p id="tradeLicenseNumber-error" className="mt-1 text-xs text-[var(--ep-rose)]">
+          <p id="tradeLicenseNumber-error" className="mt-1 text-xs text-[var(--color-mkt-red)]">
             {errors.tradeLicenseNumber.message}
           </p>
         ) : null}
       </div>
 
       <div>
-        <label htmlFor="bin" className="block text-sm font-medium text-[var(--ep-ink)]">
+        <label htmlFor="bin" className="block text-sm font-medium text-[var(--color-mkt-ink)]">
           BIN (VAT registration) <span className="opacity-70">· বিআইএন</span>
         </label>
         <input
@@ -97,14 +100,14 @@ export function Step1OrgInfo({ formId, initialValues, onValidSubmit }: Step1OrgI
           aria-invalid={errors.bin ? 'true' : 'false'}
           aria-describedby={errors.bin ? 'bin-error' : 'bin-hint'}
           {...register('bin')}
-          className="mt-1 block w-full max-w-xs rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+          className="mt-1 block w-full max-w-xs rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm focus:border-[var(--color-mkt-red)] focus:ring-2 focus:ring-[var(--color-mkt-red)] focus:outline-none"
         />
         {errors.bin ? (
-          <p id="bin-error" className="mt-1 text-xs text-[var(--ep-rose)]">
+          <p id="bin-error" className="mt-1 text-xs text-[var(--color-mkt-red)]">
             {errors.bin.message}
           </p>
         ) : (
-          <p id="bin-hint" className="mt-1 text-xs text-[var(--ep-graphite)] opacity-70">
+          <p id="bin-hint" className="mt-1 text-xs text-[var(--color-mkt-slate)] opacity-70">
             13-digit e-BIN (NBR format).
             <span className="ml-1">· ১৩-অঙ্কের ই-বিআইএন।</span>
           </p>
@@ -114,7 +117,7 @@ export function Step1OrgInfo({ formId, initialValues, onValidSubmit }: Step1OrgI
       <div>
         <label
           htmlFor="dateOfIncorporation"
-          className="block text-sm font-medium text-[var(--ep-ink)]"
+          className="block text-sm font-medium text-[var(--color-mkt-ink)]"
         >
           Date of incorporation <span className="opacity-70">· নিবন্ধন তারিখ</span>
         </label>
@@ -125,10 +128,10 @@ export function Step1OrgInfo({ formId, initialValues, onValidSubmit }: Step1OrgI
           aria-invalid={errors.dateOfIncorporation ? 'true' : 'false'}
           aria-describedby={errors.dateOfIncorporation ? 'doi-error' : undefined}
           {...register('dateOfIncorporation')}
-          className="mt-1 block w-full max-w-xs rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+          className="mt-1 block w-full max-w-xs rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm focus:border-[var(--color-mkt-red)] focus:ring-2 focus:ring-[var(--color-mkt-red)] focus:outline-none"
         />
         {errors.dateOfIncorporation ? (
-          <p id="doi-error" className="mt-1 text-xs text-[var(--ep-rose)]">
+          <p id="doi-error" className="mt-1 text-xs text-[var(--color-mkt-red)]">
             {errors.dateOfIncorporation.message}
           </p>
         ) : null}

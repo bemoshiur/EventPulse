@@ -102,7 +102,7 @@ export function DocumentUpload({
 
   return (
     <div className="space-y-2">
-      <label htmlFor={inputId} className="block text-sm font-medium text-[var(--ep-ink)]">
+      <label htmlFor={inputId} className="block text-sm font-medium text-[var(--color-mkt-ink)]">
         {label}
         {labelBn ? <span className="ml-1 text-xs opacity-70">· {labelBn}</span> : null}
       </label>
@@ -121,32 +121,32 @@ export function DocumentUpload({
             const f = e.currentTarget.files?.[0]
             if (f) handleFile(f)
           }}
-          className="block w-full text-sm text-[var(--ep-graphite)] file:mr-3 file:rounded-md file:border-0 file:bg-[var(--ep-violet)] file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:opacity-95"
+          className="file:text-mkt-ink block w-full text-sm text-[var(--color-mkt-slate)] file:mr-3 file:rounded-md file:border-0 file:bg-[var(--color-mkt-red)] file:px-4 file:py-2 file:text-sm file:font-medium hover:file:opacity-95"
         />
       ) : null}
 
       {hint ? (
-        <p id={hintId} className="text-xs text-[var(--ep-graphite)] opacity-70">
+        <p id={hintId} className="text-xs text-[var(--color-mkt-slate)] opacity-70">
           {hint}
           {hintBn ? <span className="ml-1">· {hintBn}</span> : null}
         </p>
       ) : null}
 
       {phase.kind === 'selected' ? (
-        <div className="flex items-center justify-between gap-3 rounded-md border border-[var(--ep-line)] bg-white/40 p-3">
-          <p className="truncate text-sm text-[var(--ep-graphite)]">{phase.file.name}</p>
+        <div className="flex items-center justify-between gap-3 rounded-md border border-[var(--color-mkt-line)] bg-white p-3">
+          <p className="truncate text-sm text-[var(--color-mkt-slate)]">{phase.file.name}</p>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setPhase({ kind: 'idle' })}
-              className="rounded-md border border-[var(--ep-line)] px-3 py-1 text-xs text-[var(--ep-graphite)] hover:bg-white"
+              className="rounded-md border border-[var(--color-mkt-line)] px-3 py-1 text-xs text-[var(--color-mkt-slate)] hover:bg-white"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={handleUpload}
-              className="rounded-md bg-[var(--ep-violet)] px-3 py-1 text-xs font-medium text-white hover:opacity-95"
+              className="text-mkt-ink rounded-md bg-[var(--color-mkt-red)] px-3 py-1 text-xs font-medium hover:opacity-95"
             >
               Upload
             </button>
@@ -155,18 +155,18 @@ export function DocumentUpload({
       ) : null}
 
       {phase.kind === 'uploading' ? (
-        <div className="rounded-md border border-[var(--ep-line)] bg-white/40 p-3">
-          <p className="mb-2 truncate text-xs text-[var(--ep-graphite)]">
+        <div className="rounded-md border border-[var(--color-mkt-line)] bg-white p-3">
+          <p className="mb-2 truncate text-xs text-[var(--color-mkt-slate)]">
             Uploading {phase.file.name}…
           </p>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--ep-line)]">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--color-mkt-line)]">
             <div
               role="progressbar"
               aria-valuenow={phase.percent}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-label="Upload progress"
-              className="h-full bg-gradient-to-r from-[var(--ep-violet)] to-[var(--ep-cerulean)] transition-all"
+              className="h-full bg-gradient-to-r from-[var(--color-mkt-red)] to-[var(--color-mkt-red)] transition-all"
               style={{ width: `${phase.percent}%` }}
             />
           </div>
@@ -176,19 +176,19 @@ export function DocumentUpload({
       {phase.kind === 'done' ? (
         <div
           className={cn(
-            'flex items-center justify-between gap-3 rounded-md border border-[var(--ep-mint)]/40 bg-[var(--ep-mint)]/10 p-3',
+            'flex items-center justify-between gap-3 rounded-md border border-[#059669]/40 bg-[#059669]/10 p-3',
           )}
         >
-          <p className="text-sm font-medium text-[var(--ep-mint)]">
+          <p className="text-sm font-medium text-[#059669]">
             ✓ Uploaded
-            <span className="ml-1 text-xs font-normal text-[var(--ep-graphite)] opacity-80">
+            <span className="ml-1 text-xs font-normal text-[var(--color-mkt-slate)] opacity-80">
               · আপলোড সম্পন্ন
             </span>
           </p>
           <button
             type="button"
             onClick={() => setPhase({ kind: 'idle' })}
-            className="text-xs text-[var(--ep-graphite)] underline hover:text-[var(--ep-ink)]"
+            className="text-xs text-[var(--color-mkt-slate)] underline hover:text-[var(--color-mkt-ink)]"
           >
             Replace
           </button>
@@ -196,21 +196,21 @@ export function DocumentUpload({
       ) : null}
 
       {phase.kind === 'error' ? (
-        <div className="rounded-md border border-[var(--ep-rose)]/40 bg-[var(--ep-rose)]/5 p-3">
-          <p className="text-sm font-medium text-[var(--ep-rose)]">Upload failed</p>
-          <p className="mt-1 text-xs text-[var(--ep-graphite)]">{phase.message}</p>
+        <div className="rounded-md border border-[var(--color-mkt-red)]/40 bg-[var(--color-mkt-red)]/5 p-3">
+          <p className="text-sm font-medium text-[var(--color-mkt-red)]">Upload failed</p>
+          <p className="mt-1 text-xs text-[var(--color-mkt-slate)]">{phase.message}</p>
           <div className="mt-2 flex gap-2">
             <button
               type="button"
               onClick={() => setPhase({ kind: 'idle' })}
-              className="rounded-md border border-[var(--ep-line)] px-3 py-1 text-xs text-[var(--ep-graphite)] hover:bg-white"
+              className="rounded-md border border-[var(--color-mkt-line)] px-3 py-1 text-xs text-[var(--color-mkt-slate)] hover:bg-white"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={handleUpload}
-              className="rounded-md bg-[var(--ep-violet)] px-3 py-1 text-xs font-medium text-white hover:opacity-95"
+              className="text-mkt-ink rounded-md bg-[var(--color-mkt-red)] px-3 py-1 text-xs font-medium hover:opacity-95"
             >
               Retry
             </button>

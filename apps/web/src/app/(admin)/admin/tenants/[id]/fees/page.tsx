@@ -38,7 +38,7 @@ function ModePill({ mode }: { mode: 'absorb' | 'pass_through' }) {
   const tone =
     mode === 'absorb'
       ? 'bg-[var(--ep-amber)]/15 text-[var(--ep-amber)]'
-      : 'bg-[var(--ep-cerulean)]/15 text-[var(--ep-cerulean)]'
+      : 'bg-[var(--color-mkt-red)]/15 text-[var(--color-mkt-red)]'
   return (
     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${tone}`}>
       {mode === 'absorb' ? 'Absorb' : 'Pass-through'}
@@ -88,34 +88,36 @@ export default function AdminTenantFeesPage({ params }: { params: Promise<{ id: 
   return (
     <div className="space-y-8">
       <header>
-        <h2 className="text-3xl font-semibold text-[var(--ep-ink)]">Tenant fee configuration</h2>
-        <p className="mt-1 text-sm text-[var(--ep-graphite)]">
+        <h2 className="text-3xl font-semibold text-[var(--color-mkt-ink)]">
+          Tenant fee configuration
+        </h2>
+        <p className="mt-1 text-sm text-[var(--color-mkt-slate)]">
           Platform fee override + default fee-handling mode. Changes are non-retroactive (§14.4);
           orders already paid keep their snapshotted fee.
         </p>
       </header>
 
       {/* Effective fees */}
-      <section className="rounded-2xl border border-[var(--ep-line)] bg-white/60 p-6 shadow-sm">
-        <h3 className="text-xl font-semibold text-[var(--ep-ink)]">Currently effective</h3>
+      <section className="rounded-2xl border border-[var(--color-mkt-line)] bg-white p-6 shadow-sm">
+        <h3 className="text-xl font-semibold text-[var(--color-mkt-ink)]">Currently effective</h3>
         {effective.isLoading ? (
-          <p className="mt-3 text-sm text-[var(--ep-graphite)]">Loading…</p>
+          <p className="mt-3 text-sm text-[var(--color-mkt-slate)]">Loading…</p>
         ) : effective.error ? (
-          <p className="mt-3 text-sm text-[var(--ep-rose)]">
+          <p className="mt-3 text-sm text-[var(--color-mkt-red)]">
             Failed to load effective fees: {(effective.error as Error).message}
           </p>
         ) : (
           <dl className="mt-4 grid grid-cols-1 gap-x-8 gap-y-3 text-sm md:grid-cols-2">
             <div>
-              <dt className="text-xs font-medium tracking-wide text-[var(--ep-graphite)] uppercase">
+              <dt className="text-xs font-medium tracking-wide text-[var(--color-mkt-slate)] uppercase">
                 Platform fee
               </dt>
-              <dd className="mt-1 text-2xl font-semibold text-[var(--ep-ink)]">
+              <dd className="mt-1 text-2xl font-semibold text-[var(--color-mkt-ink)]">
                 {formatBps(effective.data!.platformFeeBps)}
               </dd>
             </div>
             <div>
-              <dt className="text-xs font-medium tracking-wide text-[var(--ep-graphite)] uppercase">
+              <dt className="text-xs font-medium tracking-wide text-[var(--color-mkt-slate)] uppercase">
                 Default fee mode
               </dt>
               <dd className="mt-1">
@@ -123,10 +125,10 @@ export default function AdminTenantFeesPage({ params }: { params: Promise<{ id: 
               </dd>
             </div>
             <div>
-              <dt className="text-xs font-medium tracking-wide text-[var(--ep-graphite)] uppercase">
+              <dt className="text-xs font-medium tracking-wide text-[var(--color-mkt-slate)] uppercase">
                 Source
               </dt>
-              <dd className="mt-1 text-sm text-[var(--ep-graphite)]">
+              <dd className="mt-1 text-sm text-[var(--color-mkt-slate)]">
                 {effective.data!.hasOverride
                   ? `Tenant override · effective ${effective.data!.effectiveFrom?.slice(0, 19)}Z`
                   : 'Platform default (no override row)'}
@@ -134,10 +136,10 @@ export default function AdminTenantFeesPage({ params }: { params: Promise<{ id: 
             </div>
             {effective.data!.customArrangementNote ? (
               <div className="md:col-span-2">
-                <dt className="text-xs font-medium tracking-wide text-[var(--ep-graphite)] uppercase">
+                <dt className="text-xs font-medium tracking-wide text-[var(--color-mkt-slate)] uppercase">
                   Custom arrangement note
                 </dt>
-                <dd className="mt-1 text-sm text-[var(--ep-graphite)] italic">
+                <dd className="mt-1 text-sm text-[var(--color-mkt-slate)] italic">
                   {effective.data!.customArrangementNote}
                 </dd>
               </div>
@@ -147,14 +149,14 @@ export default function AdminTenantFeesPage({ params }: { params: Promise<{ id: 
       </section>
 
       {/* Override form */}
-      <section className="rounded-2xl border border-[var(--ep-line)] bg-white/60 p-6 shadow-sm">
-        <h3 className="text-xl font-semibold text-[var(--ep-ink)]">Set / update override</h3>
-        <p className="mt-1 text-sm text-[var(--ep-graphite)]">
+      <section className="rounded-2xl border border-[var(--color-mkt-line)] bg-white p-6 shadow-sm">
+        <h3 className="text-xl font-semibold text-[var(--color-mkt-ink)]">Set / update override</h3>
+        <p className="mt-1 text-sm text-[var(--color-mkt-slate)]">
           Reason is required — it&apos;s logged to fee_override_log + audit_logs.
         </p>
         <form onSubmit={onOverrideSubmit} className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
-            <label className="block text-sm font-medium text-[var(--ep-ink)]">
+            <label className="block text-sm font-medium text-[var(--color-mkt-ink)]">
               New platform fee (basis points)
             </label>
             <input
@@ -163,28 +165,28 @@ export default function AdminTenantFeesPage({ params }: { params: Promise<{ id: 
               max={10000}
               value={newBps}
               onChange={(e) => setNewBps(Number(e.target.value))}
-              className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+              className="mt-1 block w-full rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm focus:border-[var(--color-mkt-red)] focus:ring-2 focus:ring-[var(--color-mkt-red)] focus:outline-none"
               required
             />
-            <p className="mt-1 text-xs text-[var(--ep-graphite)]">
+            <p className="mt-1 text-xs text-[var(--color-mkt-slate)]">
               {formatBps(newBps)} · 25 = 0.25% (platform default)
             </p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-[var(--ep-ink)]">
+            <label className="block text-sm font-medium text-[var(--color-mkt-ink)]">
               Default fee mode
             </label>
             <select
               value={newMode}
               onChange={(e) => setNewMode(e.target.value as 'absorb' | 'pass_through')}
-              className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white px-3 py-2 text-sm"
+              className="mt-1 block w-full rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm"
             >
               <option value="pass_through">pass_through (buyer pays fee)</option>
               <option value="absorb">absorb (organiser eats fee)</option>
             </select>
           </div>
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-[var(--ep-ink)]">
+            <label className="block text-sm font-medium text-[var(--color-mkt-ink)]">
               Reason (required)
             </label>
             <input
@@ -193,12 +195,12 @@ export default function AdminTenantFeesPage({ params }: { params: Promise<{ id: 
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g. Enterprise contract EP-2026-001"
-              className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+              className="mt-1 block w-full rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm focus:border-[var(--color-mkt-red)] focus:ring-2 focus:ring-[var(--color-mkt-red)] focus:outline-none"
               required
             />
           </div>
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-[var(--ep-ink)]">
+            <label className="block text-sm font-medium text-[var(--color-mkt-ink)]">
               Custom arrangement note (optional, visible to tenant)
             </label>
             <textarea
@@ -207,7 +209,7 @@ export default function AdminTenantFeesPage({ params }: { params: Promise<{ id: 
               value={customNote}
               onChange={(e) => setCustomNote(e.target.value)}
               placeholder="e.g. BDT 100,000/month minimum; contact legal@ for terms"
-              className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+              className="mt-1 block w-full rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm focus:border-[var(--color-mkt-red)] focus:ring-2 focus:ring-[var(--color-mkt-red)] focus:outline-none"
             />
           </div>
 
@@ -227,7 +229,7 @@ export default function AdminTenantFeesPage({ params }: { params: Promise<{ id: 
                 type="button"
                 onClick={onClearSubmit}
                 disabled={clearOverride.isPending}
-                className="inline-flex h-11 items-center rounded-md border border-[var(--ep-line)] bg-white px-5 text-sm font-medium text-[var(--ep-graphite)] transition hover:bg-[var(--ep-mist)] disabled:opacity-60"
+                className="inline-flex h-11 items-center rounded-md border border-[var(--color-mkt-line)] bg-white px-5 text-sm font-medium text-[var(--color-mkt-slate)] transition hover:bg-[var(--color-mkt-soft)] disabled:opacity-60"
               >
                 {clearOverride.isPending ? 'Clearing…' : 'Reset to platform default'}
               </button>
@@ -235,19 +237,19 @@ export default function AdminTenantFeesPage({ params }: { params: Promise<{ id: 
             <button
               type="submit"
               disabled={setOverride.isPending || !reason.trim()}
-              className="inline-flex h-11 items-center rounded-md bg-[var(--ep-violet)] px-5 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:shadow-md disabled:opacity-60"
+              className="text-mkt-ink inline-flex h-11 items-center rounded-md bg-[var(--color-mkt-red)] px-5 text-sm font-medium transition hover:-translate-y-0.5 hover:shadow-md disabled:opacity-60"
             >
               {setOverride.isPending ? 'Saving…' : 'Save override'}
             </button>
           </div>
 
           {setOverride.error ? (
-            <div className="text-sm text-[var(--ep-rose)] md:col-span-2">
+            <div className="text-sm text-[var(--color-mkt-red)] md:col-span-2">
               {(setOverride.error as Error).message}
             </div>
           ) : null}
           {clearOverride.error ? (
-            <div className="text-sm text-[var(--ep-rose)] md:col-span-2">
+            <div className="text-sm text-[var(--color-mkt-red)] md:col-span-2">
               {(clearOverride.error as Error).message}
             </div>
           ) : null}
@@ -255,21 +257,21 @@ export default function AdminTenantFeesPage({ params }: { params: Promise<{ id: 
       </section>
 
       {/* History */}
-      <section className="rounded-2xl border border-[var(--ep-line)] bg-white/60 p-6 shadow-sm">
-        <h3 className="text-xl font-semibold text-[var(--ep-ink)]">Change history</h3>
+      <section className="rounded-2xl border border-[var(--color-mkt-line)] bg-white p-6 shadow-sm">
+        <h3 className="text-xl font-semibold text-[var(--color-mkt-ink)]">Change history</h3>
         {history.isLoading ? (
-          <p className="mt-3 text-sm text-[var(--ep-graphite)]">Loading…</p>
+          <p className="mt-3 text-sm text-[var(--color-mkt-slate)]">Loading…</p>
         ) : history.error ? (
-          <p className="mt-3 text-sm text-[var(--ep-rose)]">
+          <p className="mt-3 text-sm text-[var(--color-mkt-red)]">
             Failed to load history: {(history.error as Error).message}
           </p>
         ) : history.data?.length === 0 ? (
-          <p className="mt-3 text-sm text-[var(--ep-graphite)]">
+          <p className="mt-3 text-sm text-[var(--color-mkt-slate)]">
             No override history. Tenant has been using the platform default since onboarding.
           </p>
         ) : (
           <table className="mt-4 w-full text-left text-sm">
-            <thead className="text-xs font-medium tracking-wide text-[var(--ep-graphite)] uppercase">
+            <thead className="text-xs font-medium tracking-wide text-[var(--color-mkt-slate)] uppercase">
               <tr>
                 <th className="pb-2">When</th>
                 <th className="pb-2">From → To</th>
@@ -277,20 +279,20 @@ export default function AdminTenantFeesPage({ params }: { params: Promise<{ id: 
                 <th className="pb-2">Reason</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--ep-line)]">
+            <tbody className="divide-y divide-[var(--color-mkt-line)]">
               {history.data!.map((row) => (
                 <tr key={row.id}>
-                  <td className="py-2 text-[var(--ep-graphite)]">
+                  <td className="py-2 text-[var(--color-mkt-slate)]">
                     {row.createdAt.slice(0, 19).replace('T', ' ')}Z
                   </td>
                   <td className="py-2 font-mono">
                     {row.previousFeeBps} → {row.newFeeBps}{' '}
-                    <span className="text-xs text-[var(--ep-graphite)]">bps</span>
+                    <span className="text-xs text-[var(--color-mkt-slate)]">bps</span>
                   </td>
                   <td className="py-2">
                     <ModePill mode={row.previousMode} /> → <ModePill mode={row.newMode} />
                   </td>
-                  <td className="py-2 text-[var(--ep-graphite)]">{row.reason}</td>
+                  <td className="py-2 text-[var(--color-mkt-slate)]">{row.reason}</td>
                 </tr>
               ))}
             </tbody>

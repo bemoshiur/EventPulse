@@ -185,7 +185,7 @@ export function OrganisationTierAWizard() {
         primaryLabelBn=""
         isPrimaryDisabled
       >
-        <div className="h-32 animate-pulse rounded-md bg-[var(--ep-line)]/40" />
+        <div className="h-32 animate-pulse rounded-md bg-[var(--color-mkt-line)]/40" />
       </WizardFrame>
     )
   }
@@ -204,7 +204,7 @@ export function OrganisationTierAWizard() {
           window.location.href = '/dashboard'
         }}
       >
-        <p className="text-sm text-[var(--ep-graphite)]">
+        <p className="text-sm text-[var(--color-mkt-slate)]">
           Thanks — your KYC submission is now under review. We&apos;ll email you when the review
           completes (usually within 1 business day).
           <span className="ml-1 opacity-70">· আপনার কেওয়াইসি জমা পর্যালোচনাধীন।</span>

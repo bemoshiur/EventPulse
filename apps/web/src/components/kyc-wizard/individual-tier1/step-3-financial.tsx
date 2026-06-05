@@ -48,13 +48,16 @@ export function Step3Financial({ formId, initialValues, onValidSubmit }: Step3Fi
 
   return (
     <form id={formId} onSubmit={handleSubmit(onValidSubmit)} className="space-y-5" noValidate>
-      <p className="text-sm text-[var(--ep-graphite)]">
+      <p className="text-sm text-[var(--color-mkt-slate)]">
         Where should we send your payouts?
         <span className="ml-1 opacity-70">· পেমেন্ট কোথায় পাঠাব?</span>
       </p>
 
       <div>
-        <label htmlFor="accountType" className="block text-sm font-medium text-[var(--ep-ink)]">
+        <label
+          htmlFor="accountType"
+          className="block text-sm font-medium text-[var(--color-mkt-ink)]"
+        >
           Account type <span className="opacity-70">· অ্যাকাউন্টের ধরন</span>
         </label>
         <select
@@ -62,7 +65,7 @@ export function Step3Financial({ formId, initialValues, onValidSubmit }: Step3Fi
           aria-invalid={errors.accountType ? 'true' : 'false'}
           aria-describedby={errors.accountType ? 'accountType-error' : undefined}
           {...register('accountType')}
-          className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+          className="mt-1 block w-full rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm focus:border-[var(--color-mkt-red)] focus:ring-2 focus:ring-[var(--color-mkt-red)] focus:outline-none"
         >
           {(Object.keys(ACCOUNT_TYPE_LABELS) as Array<keyof typeof ACCOUNT_TYPE_LABELS>).map(
             (t) => (
@@ -73,14 +76,17 @@ export function Step3Financial({ formId, initialValues, onValidSubmit }: Step3Fi
           )}
         </select>
         {errors.accountType ? (
-          <p id="accountType-error" className="mt-1 text-xs text-[var(--ep-rose)]">
+          <p id="accountType-error" className="mt-1 text-xs text-[var(--color-mkt-red)]">
             {errors.accountType.message}
           </p>
         ) : null}
       </div>
 
       <div>
-        <label htmlFor="accountName" className="block text-sm font-medium text-[var(--ep-ink)]">
+        <label
+          htmlFor="accountName"
+          className="block text-sm font-medium text-[var(--color-mkt-ink)]"
+        >
           Account holder name <span className="opacity-70">· অ্যাকাউন্টধারীর নাম</span>
         </label>
         <input
@@ -90,20 +96,23 @@ export function Step3Financial({ formId, initialValues, onValidSubmit }: Step3Fi
           aria-invalid={errors.accountName ? 'true' : 'false'}
           aria-describedby={errors.accountName ? 'accountName-error' : undefined}
           {...register('accountName')}
-          className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+          className="mt-1 block w-full rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm focus:border-[var(--color-mkt-red)] focus:ring-2 focus:ring-[var(--color-mkt-red)] focus:outline-none"
         />
         {errors.accountName ? (
-          <p id="accountName-error" className="mt-1 text-xs text-[var(--ep-rose)]">
+          <p id="accountName-error" className="mt-1 text-xs text-[var(--color-mkt-red)]">
             {errors.accountName.message}
           </p>
         ) : null}
-        <p className="mt-1 text-xs text-[var(--ep-graphite)] opacity-70">
+        <p className="mt-1 text-xs text-[var(--color-mkt-slate)] opacity-70">
           Must match the name on your NID.<span className="ml-1">· এনআইডির নামের সাথে মিলবে।</span>
         </p>
       </div>
 
       <div>
-        <label htmlFor="accountNumber" className="block text-sm font-medium text-[var(--ep-ink)]">
+        <label
+          htmlFor="accountNumber"
+          className="block text-sm font-medium text-[var(--color-mkt-ink)]"
+        >
           Account / wallet number <span className="opacity-70">· অ্যাকাউন্ট নম্বর</span>
         </label>
         <input
@@ -114,10 +123,10 @@ export function Step3Financial({ formId, initialValues, onValidSubmit }: Step3Fi
           aria-invalid={errors.accountNumber ? 'true' : 'false'}
           aria-describedby={errors.accountNumber ? 'accountNumber-error' : undefined}
           {...register('accountNumber')}
-          className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+          className="mt-1 block w-full rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm focus:border-[var(--color-mkt-red)] focus:ring-2 focus:ring-[var(--color-mkt-red)] focus:outline-none"
         />
         {errors.accountNumber ? (
-          <p id="accountNumber-error" className="mt-1 text-xs text-[var(--ep-rose)]">
+          <p id="accountNumber-error" className="mt-1 text-xs text-[var(--color-mkt-red)]">
             {errors.accountNumber.message}
           </p>
         ) : null}
@@ -125,7 +134,10 @@ export function Step3Financial({ formId, initialValues, onValidSubmit }: Step3Fi
 
       {accountType === 'bank' ? (
         <div>
-          <label htmlFor="branchName" className="block text-sm font-medium text-[var(--ep-ink)]">
+          <label
+            htmlFor="branchName"
+            className="block text-sm font-medium text-[var(--color-mkt-ink)]"
+          >
             Branch name <span className="opacity-70">· শাখার নাম</span>
           </label>
           <input
@@ -135,10 +147,10 @@ export function Step3Financial({ formId, initialValues, onValidSubmit }: Step3Fi
             aria-invalid={errors.branchName ? 'true' : 'false'}
             aria-describedby={errors.branchName ? 'branchName-error' : undefined}
             {...register('branchName')}
-            className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+            className="mt-1 block w-full rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm focus:border-[var(--color-mkt-red)] focus:ring-2 focus:ring-[var(--color-mkt-red)] focus:outline-none"
           />
           {errors.branchName ? (
-            <p id="branchName-error" className="mt-1 text-xs text-[var(--ep-rose)]">
+            <p id="branchName-error" className="mt-1 text-xs text-[var(--color-mkt-red)]">
               {errors.branchName.message}
             </p>
           ) : null}
@@ -146,7 +158,10 @@ export function Step3Financial({ formId, initialValues, onValidSubmit }: Step3Fi
       ) : null}
 
       <div>
-        <label htmlFor="etinNumber" className="block text-sm font-medium text-[var(--ep-ink)]">
+        <label
+          htmlFor="etinNumber"
+          className="block text-sm font-medium text-[var(--color-mkt-ink)]"
+        >
           eTIN number <span className="opacity-70">· ইটিআইএন</span>
         </label>
         <input
@@ -158,10 +173,10 @@ export function Step3Financial({ formId, initialValues, onValidSubmit }: Step3Fi
           aria-invalid={errors.etinNumber ? 'true' : 'false'}
           aria-describedby={errors.etinNumber ? 'etinNumber-error' : undefined}
           {...register('etinNumber')}
-          className="mt-1 block w-full max-w-xs rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+          className="mt-1 block w-full max-w-xs rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm focus:border-[var(--color-mkt-red)] focus:ring-2 focus:ring-[var(--color-mkt-red)] focus:outline-none"
         />
         {errors.etinNumber ? (
-          <p id="etinNumber-error" className="mt-1 text-xs text-[var(--ep-rose)]">
+          <p id="etinNumber-error" className="mt-1 text-xs text-[var(--color-mkt-red)]">
             {errors.etinNumber.message}
           </p>
         ) : null}

@@ -71,15 +71,15 @@ function ApproveModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
     >
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-        <h3 id="approve-modal-title" className="text-lg font-semibold text-[var(--ep-ink)]">
+        <h3 id="approve-modal-title" className="text-lg font-semibold text-[var(--color-mkt-ink)]">
           Approve submission
         </h3>
-        <p className="mt-2 text-sm text-[var(--ep-graphite)]">
+        <p className="mt-2 text-sm text-[var(--color-mkt-slate)]">
           You&apos;re approving this KYC submission. Type <strong>APPROVE</strong> to confirm.
         </p>
         <label
           htmlFor="approve-confirm-typed"
-          className="mt-4 block text-xs font-medium tracking-wide text-[var(--ep-graphite)] uppercase"
+          className="mt-4 block text-xs font-medium tracking-wide text-[var(--color-mkt-slate)] uppercase"
         >
           Confirmation
         </label>
@@ -91,10 +91,10 @@ function ApproveModal({
           placeholder="Type APPROVE"
           autoComplete="off"
           autoFocus
-          className="mt-1 w-full rounded-md border border-[var(--ep-line)] px-3 py-2 text-sm text-[var(--ep-ink)]"
+          className="mt-1 w-full rounded-md border border-[var(--color-mkt-line)] px-3 py-2 text-sm text-[var(--color-mkt-ink)]"
         />
         {errorMessage ? (
-          <p role="alert" className="mt-2 text-xs text-[var(--ep-rose)]">
+          <p role="alert" className="mt-2 text-xs text-[var(--color-mkt-red)]">
             {errorMessage}
           </p>
         ) : null}
@@ -102,7 +102,7 @@ function ApproveModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-[var(--ep-line)] px-4 py-2 text-sm text-[var(--ep-ink)] hover:bg-[var(--ep-mist)]"
+            className="rounded-md border border-[var(--color-mkt-line)] px-4 py-2 text-sm text-[var(--color-mkt-ink)] hover:bg-[var(--color-mkt-soft)]"
           >
             Cancel
           </button>
@@ -110,7 +110,7 @@ function ApproveModal({
             type="button"
             disabled={!canSubmit}
             onClick={onSubmit}
-            className="rounded-md bg-[var(--ep-mint)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="text-mkt-ink rounded-md bg-[#059669] px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isPending ? 'Approving…' : 'Approve'}
           </button>
@@ -152,16 +152,16 @@ function RejectModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
     >
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-        <h3 id="reject-modal-title" className="text-lg font-semibold text-[var(--ep-ink)]">
+        <h3 id="reject-modal-title" className="text-lg font-semibold text-[var(--color-mkt-ink)]">
           Reject submission
         </h3>
-        <p className="mt-2 text-sm text-[var(--ep-graphite)]">
+        <p className="mt-2 text-sm text-[var(--color-mkt-slate)]">
           The reason will be sent verbatim to the tenant in the rejection email.
         </p>
 
         <label
           htmlFor="reject-reason"
-          className="mt-4 block text-xs font-medium tracking-wide text-[var(--ep-graphite)] uppercase"
+          className="mt-4 block text-xs font-medium tracking-wide text-[var(--color-mkt-slate)] uppercase"
         >
           Reason (10–1000 chars)
         </label>
@@ -172,13 +172,13 @@ function RejectModal({
           maxLength={1000}
           onChange={(e) => setReason(e.target.value)}
           placeholder="e.g. NID image is too blurry to read the number; please reupload with clear lighting."
-          className="mt-1 w-full rounded-md border border-[var(--ep-line)] px-3 py-2 text-sm text-[var(--ep-ink)]"
+          className="mt-1 w-full rounded-md border border-[var(--color-mkt-line)] px-3 py-2 text-sm text-[var(--color-mkt-ink)]"
         />
-        <p className="text-right text-xs text-[var(--ep-graphite)]">{reason.length} / 1000</p>
+        <p className="text-right text-xs text-[var(--color-mkt-slate)]">{reason.length} / 1000</p>
 
         <label
           htmlFor="reject-category"
-          className="mt-2 block text-xs font-medium tracking-wide text-[var(--ep-graphite)] uppercase"
+          className="mt-2 block text-xs font-medium tracking-wide text-[var(--color-mkt-slate)] uppercase"
         >
           Category (optional, internal analytics only)
         </label>
@@ -186,7 +186,7 @@ function RejectModal({
           id="reject-category"
           value={category}
           onChange={(e) => setCategory(e.target.value as RejectionCategory | '')}
-          className="mt-1 w-full rounded-md border border-[var(--ep-line)] bg-white px-3 py-2 text-sm text-[var(--ep-ink)]"
+          className="mt-1 w-full rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm text-[var(--color-mkt-ink)]"
         >
           <option value="">— none —</option>
           {REJECTION_CATEGORIES.map((c) => (
@@ -197,7 +197,7 @@ function RejectModal({
         </select>
 
         {errorMessage ? (
-          <p role="alert" className="mt-2 text-xs text-[var(--ep-rose)]">
+          <p role="alert" className="mt-2 text-xs text-[var(--color-mkt-red)]">
             {errorMessage}
           </p>
         ) : null}
@@ -206,7 +206,7 @@ function RejectModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-[var(--ep-line)] px-4 py-2 text-sm text-[var(--ep-ink)] hover:bg-[var(--ep-mist)]"
+            className="rounded-md border border-[var(--color-mkt-line)] px-4 py-2 text-sm text-[var(--color-mkt-ink)] hover:bg-[var(--color-mkt-soft)]"
           >
             Cancel
           </button>
@@ -214,7 +214,7 @@ function RejectModal({
             type="button"
             disabled={!canSubmit}
             onClick={() => onSubmit(reason, category === '' ? undefined : category)}
-            className="rounded-md bg-[var(--ep-rose)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="text-mkt-ink rounded-md bg-[var(--color-mkt-red)] px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isPending ? 'Rejecting…' : 'Reject'}
           </button>
@@ -280,20 +280,23 @@ export function DecisionActions({ submissionId, submissionType, status, checklis
   return (
     <section
       aria-labelledby="decision-actions-heading"
-      className="rounded-2xl border border-[var(--ep-line)] bg-white/60 p-5"
+      className="rounded-2xl border border-[var(--color-mkt-line)] bg-white p-5"
     >
-      <h3 id="decision-actions-heading" className="text-base font-semibold text-[var(--ep-ink)]">
+      <h3
+        id="decision-actions-heading"
+        className="text-base font-semibold text-[var(--color-mkt-ink)]"
+      >
         Decision
       </h3>
 
       {status === 'approved' || status === 'rejected' ? (
-        <p className="mt-2 text-sm text-[var(--ep-graphite)]">
+        <p className="mt-2 text-sm text-[var(--color-mkt-slate)]">
           This submission has been <strong>{status}</strong>. Decisions are not reversible from this
           UI.
         </p>
       ) : (
         <>
-          <p className="mt-2 text-sm text-[var(--ep-graphite)]">
+          <p className="mt-2 text-sm text-[var(--color-mkt-slate)]">
             {missingKeys.length > 0 ? (
               <>
                 <strong>{missingKeys.length}</strong> checklist item
@@ -310,7 +313,7 @@ export function DecisionActions({ submissionId, submissionType, status, checklis
               type="button"
               disabled={isApproveDisabled}
               onClick={() => setOpenModal('approve')}
-              className="rounded-md bg-[var(--ep-mint)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="text-mkt-ink rounded-md bg-[#059669] px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
               Approve
             </button>
@@ -319,13 +322,13 @@ export function DecisionActions({ submissionId, submissionType, status, checklis
               type="button"
               disabled={isRejectDisabled}
               onClick={() => setOpenModal('reject')}
-              className="rounded-md border border-[var(--ep-rose)] px-4 py-2 text-sm font-semibold text-[var(--ep-rose)] hover:bg-[var(--ep-rose)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-md border border-[var(--color-mkt-red)] px-4 py-2 text-sm font-semibold text-[var(--color-mkt-red)] hover:bg-[var(--color-mkt-red)]/10 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Reject
             </button>
           </div>
           {errMessage && !openModal ? (
-            <p role="alert" className="mt-2 text-xs text-[var(--ep-rose)]">
+            <p role="alert" className="mt-2 text-xs text-[var(--color-mkt-red)]">
               {errMessage}
             </p>
           ) : null}

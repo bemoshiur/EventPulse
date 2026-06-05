@@ -46,7 +46,7 @@ export function Step1Identity({
 
   return (
     <form id={formId} onSubmit={handleSubmit(onValidSubmit)} className="space-y-5" noValidate>
-      <p className="text-sm text-[var(--ep-graphite)]">
+      <p className="text-sm text-[var(--color-mkt-slate)]">
         We need a few details from your National ID card to verify your identity.
         <span className="ml-1 opacity-70">
           · আপনার পরিচয় যাচাই করতে আমাদের আপনার এনআইডির কিছু তথ্য দরকার।
@@ -54,7 +54,7 @@ export function Step1Identity({
       </p>
 
       <div>
-        <label htmlFor="fullName" className="block text-sm font-medium text-[var(--ep-ink)]">
+        <label htmlFor="fullName" className="block text-sm font-medium text-[var(--color-mkt-ink)]">
           Full name (as on NID) <span className="opacity-70">· পুরো নাম</span>
         </label>
         <input
@@ -64,17 +64,20 @@ export function Step1Identity({
           aria-invalid={errors.fullName ? 'true' : 'false'}
           aria-describedby={errors.fullName ? 'fullName-error' : undefined}
           {...register('fullName')}
-          className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+          className="mt-1 block w-full rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm focus:border-[var(--color-mkt-red)] focus:ring-2 focus:ring-[var(--color-mkt-red)] focus:outline-none"
         />
         {errors.fullName ? (
-          <p id="fullName-error" className="mt-1 text-xs text-[var(--ep-rose)]">
+          <p id="fullName-error" className="mt-1 text-xs text-[var(--color-mkt-red)]">
             {errors.fullName.message}
           </p>
         ) : null}
       </div>
 
       <div>
-        <label htmlFor="dateOfBirth" className="block text-sm font-medium text-[var(--ep-ink)]">
+        <label
+          htmlFor="dateOfBirth"
+          className="block text-sm font-medium text-[var(--color-mkt-ink)]"
+        >
           Date of birth <span className="opacity-70">· জন্ম তারিখ</span>
         </label>
         <input
@@ -84,17 +87,20 @@ export function Step1Identity({
           aria-invalid={errors.dateOfBirth ? 'true' : 'false'}
           aria-describedby={errors.dateOfBirth ? 'dob-error' : undefined}
           {...register('dateOfBirth')}
-          className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+          className="mt-1 block w-full rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm focus:border-[var(--color-mkt-red)] focus:ring-2 focus:ring-[var(--color-mkt-red)] focus:outline-none"
         />
         {errors.dateOfBirth ? (
-          <p id="dob-error" className="mt-1 text-xs text-[var(--ep-rose)]">
+          <p id="dob-error" className="mt-1 text-xs text-[var(--color-mkt-red)]">
             {errors.dateOfBirth.message}
           </p>
         ) : null}
       </div>
 
       <div>
-        <label htmlFor="nidNumber" className="block text-sm font-medium text-[var(--ep-ink)]">
+        <label
+          htmlFor="nidNumber"
+          className="block text-sm font-medium text-[var(--color-mkt-ink)]"
+        >
           NID number <span className="opacity-70">· এনআইডি নম্বর</span>
         </label>
         <input
@@ -105,17 +111,17 @@ export function Step1Identity({
           aria-invalid={errors.nidNumber ? 'true' : 'false'}
           aria-describedby={errors.nidNumber ? 'nid-error' : undefined}
           {...register('nidNumber')}
-          className="mt-1 block w-full rounded-md border border-[var(--ep-line)] bg-white/60 px-3 py-2 text-sm focus:border-[var(--ep-violet)] focus:ring-2 focus:ring-[var(--ep-cerulean)] focus:outline-none"
+          className="mt-1 block w-full rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm focus:border-[var(--color-mkt-red)] focus:ring-2 focus:ring-[var(--color-mkt-red)] focus:outline-none"
         />
         {errors.nidNumber ? (
-          <p id="nid-error" className="mt-1 text-xs text-[var(--ep-rose)]">
+          <p id="nid-error" className="mt-1 text-xs text-[var(--color-mkt-red)]">
             {errors.nidNumber.message}
           </p>
         ) : null}
       </div>
 
-      <fieldset className="space-y-4 border-t border-[var(--ep-line)] pt-4">
-        <legend className="text-sm font-medium text-[var(--ep-ink)]">
+      <fieldset className="space-y-4 border-t border-[var(--color-mkt-line)] pt-4">
+        <legend className="text-sm font-medium text-[var(--color-mkt-ink)]">
           Documents <span className="opacity-70">· দলিল</span>
         </legend>
         <DocumentUpload
