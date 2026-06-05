@@ -488,12 +488,13 @@ export async function updateEvent(input: UpdateEventInput): Promise<void> {
   if (Object.keys(input.patch).length === 0) return
   await withTenant(input.tenantId, async (tx) => {
     const current = await tx
-      .select({ status: events.status })
+      .select({ status: events.status, slug: events.slug })
       .from(events)
       .where(and(eq(events.id, input.eventId), isNull(events.deletedAt)))
       .limit(1)
     if (current.length === 0) throw new EventNotFoundError(input.eventId)
     const currentStatus = current[0]!.status as EventStatus
+    const currentSlug = current[0]!.slug
     if (!EDITABLE_STATUSES.has(currentStatus)) {
       throw new EventInvalidStatusForEditError(currentStatus)
     }
@@ -518,7 +519,15 @@ export async function updateEvent(input: UpdateEventInput): Promise<void> {
 
     // Build update object reflecting only present-in-patch fields.
     const setObj: Record<string, unknown> = {}
-    if ('slug' in input.patch) setObj['slug'] = input.patch.slug
+    if ('slug' in input.patch) {
+      setObj['slug'] = input.patch.slug
+      // On an actual rename, remember the old slug so its URL 301s to the new
+      // one. array_remove(new) lets "rename back" clear the stale entry.
+      if (input.patch.slug && input.patch.slug !== currentSlug) {
+        setObj['previousSlugs'] =
+          sql`array_remove(array_append(${events.previousSlugs}, ${currentSlug}), ${input.patch.slug})`
+      }
+    }
     if ('title' in input.patch) setObj['title'] = input.patch.title
     if ('titleBn' in input.patch) setObj['titleBn'] = input.patch.titleBn
     if ('description' in input.patch) setObj['description'] = input.patch.description

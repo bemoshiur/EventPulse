@@ -58,6 +58,7 @@ import {
   transitionEvent,
   updateEvent,
 } from './index.js'
+import { resolveEventSlugRedirect } from '../../domain/public-events/queries.js'
 
 const HAS_DB = Boolean(process.env['DATABASE_URL'])
 const describeIfDb = HAS_DB ? describe : describe.skip
@@ -438,6 +439,26 @@ describeIfDb('events service — CRUD + state machine + RLS', () => {
       })
       const after = await getEvent({ tenantId: fx.tenantAId, eventId: created.id })
       expect(after.slug).toBe('my-renamed-event')
+
+      // The old slug is recorded so its public URL can 301-redirect.
+      const row = await withTenant(fx.tenantAId, (tx) =>
+        tx
+          .select({ previousSlugs: events.previousSlugs })
+          .from(events)
+          .where(eq(events.id, created.id)),
+      )
+      expect(row[0]!.previousSlugs).toContain(created.slug)
+
+      // The public resolver maps the old slug → the current one (needs the
+      // event to be publicly visible).
+      await transitionEvent({
+        tenantId: fx.tenantAId,
+        eventId: created.id,
+        actorUserId: fx.ownerId,
+        toState: 'published',
+      })
+      const resolved = await resolveEventSlugRedirect(fx.tenantASlug, created.slug)
+      expect(resolved).toBe('my-renamed-event')
     })
 
     it('rejects a slug already used by another event of the same tenant', async () => {

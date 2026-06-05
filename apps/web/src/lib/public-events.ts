@@ -43,6 +43,30 @@ export async function fetchHandleRedirect(slug: string): Promise<string | null> 
   }
 }
 
+/**
+ * Resolve a possibly-renamed EVENT slug to its current slug within a tenant
+ * (events.previous_slugs). Returns the current slug, or null. Called by the
+ * public event page on a 404 to 301 an old {tenant}/{old-event} URL.
+ */
+export async function fetchEventRedirect(
+  tenantSlug: string,
+  oldEventSlug: string,
+): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `${apiBaseUrl()}/api/v1/public/events/resolve?tenant=${encodeURIComponent(
+        tenantSlug,
+      )}&event=${encodeURIComponent(oldEventSlug)}`,
+      { cache: 'no-store' },
+    )
+    if (!res.ok) return null
+    const body = (await res.json()) as { data?: { currentSlug?: string | null } }
+    return body.data?.currentSlug ?? null
+  } catch {
+    return null
+  }
+}
+
 // ─── wire shape (mirrors apps/api domain/public-events/queries.ts) ─
 
 export interface PublicEventBrandWire {

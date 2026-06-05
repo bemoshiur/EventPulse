@@ -18,7 +18,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
 
-import { fetchPublicEvent } from '../../domain/public-events/queries.js'
+import { fetchPublicEvent, resolveEventSlugRedirect } from '../../domain/public-events/queries.js'
 
 export const publicEventsRoutes = new Hono()
 
@@ -32,6 +32,20 @@ const paramSchema = z.object({
   tenantSlug: slugSchema,
   eventSlug: slugSchema,
 })
+
+// Renamed-event-slug resolver — the public page calls this on a 404 to 301 an
+// old {tenant}/{old-event} URL to the current slug (events.previous_slugs).
+// Declared BEFORE the 2-segment route; a single `/resolve` segment can't match
+// `/:tenantSlug/:eventSlug` anyway, but ordering keeps intent obvious.
+publicEventsRoutes.get(
+  '/resolve',
+  zValidator('query', z.object({ tenant: slugSchema, event: slugSchema })),
+  async (c) => {
+    const { tenant, event } = c.req.valid('query')
+    const currentSlug = await resolveEventSlugRedirect(tenant, event)
+    return c.json({ data: { currentSlug } })
+  },
+)
 
 publicEventsRoutes.get('/:tenantSlug/:eventSlug', zValidator('param', paramSchema), async (c) => {
   const { tenantSlug, eventSlug } = c.req.valid('param')
