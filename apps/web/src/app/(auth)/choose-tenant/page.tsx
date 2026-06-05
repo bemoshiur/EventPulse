@@ -166,7 +166,7 @@ export function ChooseTenant() {
                   type="button"
                   onClick={() => void choose(ctx.id)}
                   disabled={switchingId !== null}
-                  className="border-mkt-line hover:border-mkt-red flex w-full items-center justify-between rounded-lg border bg-white/60 px-4 py-3 text-left backdrop-blur transition hover:-translate-y-0.5 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+                  className="border-mkt-line hover:border-mkt-red flex w-full items-center justify-between rounded-lg border bg-white px-4 py-3 text-left backdrop-blur transition hover:-translate-y-0.5 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <span className="min-w-0">
                     <span className="text-mkt-ink block truncate text-sm font-semibold">
