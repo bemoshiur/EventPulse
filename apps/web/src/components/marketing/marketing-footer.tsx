@@ -20,6 +20,7 @@ const COLUMNS = [
       { href: '/how-it-works', label: 'How it works' },
       { href: '/pricing', label: 'Pricing' },
       { href: '/demo', label: 'Live demo' },
+      { href: '/glossary', label: 'Glossary' },
       { href: '/legal/changelog', label: 'Changelog' },
     ],
   },
@@ -32,6 +33,7 @@ const COLUMNS = [
       { href: '/book-a-demo', label: 'Book a demo' },
       { href: '/faq', label: 'FAQ' },
       { href: '/blog', label: 'Blog' },
+      { href: '/customers', label: 'Customers' },
     ],
   },
   {
