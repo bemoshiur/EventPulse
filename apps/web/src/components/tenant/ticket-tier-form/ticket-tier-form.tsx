@@ -22,8 +22,6 @@
 
 import { useForm } from 'react-hook-form'
 
-import { GlassCard } from '@/components/ui/glass-card'
-
 export interface TicketTierFormValues {
   name: string
   description?: string | null
@@ -77,11 +75,11 @@ export function TicketTierForm({
   const isComp = watch('isComplimentary')
 
   return (
-    <GlassCard className="p-6" data-testid="ticket-tier-form">
-      <h2 className="font-display text-ep-ink text-2xl font-semibold">
+    <div className="mkt-card p-6" data-testid="ticket-tier-form">
+      <h2 className="font-display text-mkt-ink text-2xl font-semibold">
         {mode === 'create' ? 'New ticket tier' : 'Edit ticket tier'}
       </h2>
-      <p className="text-ep-graphite mt-1 text-sm">
+      <p className="text-mkt-slate mt-1 text-sm">
         Price stored in paisa (BDT × 100) per platform invariant.
       </p>
 
@@ -91,12 +89,12 @@ export function TicketTierForm({
         noValidate
       >
         <label className="md:col-span-2">
-          <span className="text-ep-ink text-sm font-medium">Name</span>
+          <span className="text-mkt-ink text-sm font-medium">Name</span>
           <input
             type="text"
             {...register('name', { required: true, maxLength: 120 })}
             aria-invalid={formState.errors.name ? 'true' : 'false'}
-            className="border-ep-line focus:border-ep-cerulean mt-1 block w-full rounded-md border px-3 py-2 text-sm"
+            className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border px-3 py-2 text-sm"
             placeholder="General Admission"
             required
             disabled={busy}
@@ -104,97 +102,97 @@ export function TicketTierForm({
         </label>
 
         <label className="md:col-span-2">
-          <span className="text-ep-ink text-sm font-medium">Description (optional)</span>
+          <span className="text-mkt-ink text-sm font-medium">Description (optional)</span>
           <textarea
             {...register('description', { maxLength: 1000 })}
-            className="border-ep-line focus:border-ep-cerulean mt-1 block w-full rounded-md border px-3 py-2 text-sm"
+            className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border px-3 py-2 text-sm"
             rows={2}
             disabled={busy}
           />
         </label>
 
         <label>
-          <span className="text-ep-ink text-sm font-medium">Price (BDT)</span>
+          <span className="text-mkt-ink text-sm font-medium">Price (BDT)</span>
           <input
             type="number"
             step="0.01"
             min="0"
             {...register('priceBdt', { required: true })}
             aria-invalid={formState.errors.priceBdt ? 'true' : 'false'}
-            className="border-ep-line focus:border-ep-cerulean mt-1 block w-full rounded-md border px-3 py-2 text-sm"
+            className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border px-3 py-2 text-sm"
             placeholder="1000.00"
             disabled={busy}
           />
         </label>
 
         <label>
-          <span className="text-ep-ink text-sm font-medium">Capacity</span>
+          <span className="text-mkt-ink text-sm font-medium">Capacity</span>
           <input
             type="number"
             min="1"
             step="1"
             {...register('capacity', { valueAsNumber: true, required: true, min: 1 })}
             aria-invalid={formState.errors.capacity ? 'true' : 'false'}
-            className="border-ep-line focus:border-ep-cerulean mt-1 block w-full rounded-md border px-3 py-2 text-sm"
+            className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border px-3 py-2 text-sm"
             disabled={busy}
           />
         </label>
 
         <label>
-          <span className="text-ep-ink text-sm font-medium">Sales start (optional)</span>
+          <span className="text-mkt-ink text-sm font-medium">Sales start (optional)</span>
           <input
             type="datetime-local"
             {...register('salesStartAt')}
-            className="border-ep-line focus:border-ep-cerulean mt-1 block w-full rounded-md border px-3 py-2 text-sm"
+            className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border px-3 py-2 text-sm"
             disabled={busy}
           />
         </label>
 
         <label>
-          <span className="text-ep-ink text-sm font-medium">Sales end (optional)</span>
+          <span className="text-mkt-ink text-sm font-medium">Sales end (optional)</span>
           <input
             type="datetime-local"
             {...register('salesEndAt')}
-            className="border-ep-line focus:border-ep-cerulean mt-1 block w-full rounded-md border px-3 py-2 text-sm"
+            className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border px-3 py-2 text-sm"
             disabled={busy}
           />
         </label>
 
         <label>
-          <span className="text-ep-ink text-sm font-medium">Min per order</span>
+          <span className="text-mkt-ink text-sm font-medium">Min per order</span>
           <input
             type="number"
             min="1"
             max="100"
             step="1"
             {...register('minPerOrder', { valueAsNumber: true, min: 1, max: 100 })}
-            className="border-ep-line focus:border-ep-cerulean mt-1 block w-full rounded-md border px-3 py-2 text-sm"
+            className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border px-3 py-2 text-sm"
             disabled={busy}
           />
         </label>
 
         <label>
-          <span className="text-ep-ink text-sm font-medium">Max per order</span>
+          <span className="text-mkt-ink text-sm font-medium">Max per order</span>
           <input
             type="number"
             min="1"
             max="100"
             step="1"
             {...register('maxPerOrder', { valueAsNumber: true, min: 1, max: 100 })}
-            className="border-ep-line focus:border-ep-cerulean mt-1 block w-full rounded-md border px-3 py-2 text-sm"
+            className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border px-3 py-2 text-sm"
             disabled={busy}
           />
         </label>
 
         <label>
-          <span className="text-ep-ink text-sm font-medium">Sort order</span>
+          <span className="text-mkt-ink text-sm font-medium">Sort order</span>
           <input
             type="number"
             min="0"
             max="10000"
             step="1"
             {...register('sortOrder', { valueAsNumber: true, min: 0, max: 10000 })}
-            className="border-ep-line focus:border-ep-cerulean mt-1 block w-full rounded-md border px-3 py-2 text-sm"
+            className="border-mkt-line focus:border-mkt-red mt-1 block w-full rounded-md border px-3 py-2 text-sm"
             disabled={busy}
           />
         </label>
@@ -206,7 +204,7 @@ export function TicketTierForm({
             disabled={busy}
             className="rounded"
           />
-          <span className="text-ep-ink text-sm">Complimentary tier (price must be 0)</span>
+          <span className="text-mkt-ink text-sm">Complimentary tier (price must be 0)</span>
         </label>
 
         {isComp && (
@@ -217,7 +215,7 @@ export function TicketTierForm({
 
         {errorMessage && (
           <p
-            className="text-ep-rose text-sm md:col-span-2"
+            className="text-mkt-red text-sm md:col-span-2"
             role="alert"
             data-testid="tier-form-error"
           >
@@ -229,7 +227,7 @@ export function TicketTierForm({
           <button
             type="submit"
             disabled={busy}
-            className="grad-primary inline-flex h-10 items-center justify-center rounded-md px-5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-50"
+            className="bg-mkt-red inline-flex h-10 items-center justify-center rounded-md px-5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-50"
           >
             {busy
               ? mode === 'create'
@@ -244,14 +242,14 @@ export function TicketTierForm({
               type="button"
               onClick={onCancel}
               disabled={busy}
-              className="text-ep-graphite hover:text-ep-ink text-sm font-medium"
+              className="text-mkt-slate hover:text-mkt-ink text-sm font-medium"
             >
               Cancel
             </button>
           )}
         </div>
       </form>
-    </GlassCard>
+    </div>
   )
 }
 

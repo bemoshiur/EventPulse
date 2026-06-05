@@ -56,24 +56,24 @@ export function CreateEvent() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 text-white">
+    <div className="mx-auto max-w-2xl space-y-6 text-mkt-ink">
       <header>
         <h1 className="text-3xl font-bold">Create your event</h1>
-        <p className="mt-2 text-white/70">
+        <p className="mt-2 text-mkt-slate">
           Fill in the basics — you can add ticket tiers and publish next. Free events go live
           without verification.
         </p>
       </header>
 
       <div>
-        <label htmlFor="event-type" className="mb-1 block text-sm font-medium text-white/80">
+        <label htmlFor="event-type" className="mb-1 block text-sm font-medium text-mkt-slate">
           What kind of event?
         </label>
         <select
           id="event-type"
           value={type}
           onChange={(e) => setType(e.target.value as EventType)}
-          className="border-ep-line text-ep-ink h-11 w-full rounded-md border bg-white px-3 text-sm"
+          className="border-mkt-line text-mkt-ink h-11 w-full rounded-md border bg-white px-3 text-sm"
         >
           {TYPES.map((t) => (
             <option key={t.value} value={t.value}>
@@ -87,7 +87,7 @@ export function CreateEvent() {
       <EventForm key={type} type={type} onValidSubmit={createEvent} />
 
       {error && (
-        <p role="alert" className="text-ep-rose text-sm">
+        <p role="alert" className="text-mkt-red text-sm">
           {error}
         </p>
       )}

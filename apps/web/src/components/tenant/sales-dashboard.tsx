@@ -48,15 +48,10 @@ function KpiCard({
   testId?: string
 }) {
   return (
-    <div
-      className="rounded-2xl border border-[var(--ep-line)] bg-white/40 p-5"
-      data-testid={testId}
-    >
-      <div className="text-xs font-medium tracking-wide text-[var(--ep-graphite)] uppercase">
-        {label}
-      </div>
-      <div className="mt-2 text-3xl font-semibold text-[var(--ep-ink)]">{value}</div>
-      {hint ? <div className="mt-1 text-xs text-[var(--ep-graphite)]">{hint}</div> : null}
+    <div className="border-mkt-line rounded-2xl border bg-white p-5" data-testid={testId}>
+      <div className="text-mkt-slate text-xs font-medium tracking-wide uppercase">{label}</div>
+      <div className="text-mkt-ink mt-2 text-3xl font-semibold">{value}</div>
+      {hint ? <div className="text-mkt-slate mt-1 text-xs">{hint}</div> : null}
     </div>
   )
 }
@@ -102,7 +97,7 @@ export function SalesDashboard() {
       <div
         role="status"
         aria-live="polite"
-        className="rounded-2xl border border-[var(--ep-line)] bg-white/40 p-6 text-sm text-[var(--ep-graphite)]"
+        className="border-mkt-line text-mkt-slate rounded-2xl border bg-white p-6 text-sm"
       >
         Loading sales metrics…
       </div>
@@ -113,7 +108,7 @@ export function SalesDashboard() {
     return (
       <div
         role="alert"
-        className="rounded-2xl border border-[var(--ep-rose)]/40 bg-[var(--ep-rose)]/5 p-6 text-sm text-[var(--ep-rose)]"
+        className="text-mkt-red rounded-2xl border border-[var(--ep-rose)]/40 bg-[var(--ep-rose)]/5 p-6 text-sm"
       >
         Failed to load sales metrics: {(error as Error).message}
       </div>
@@ -128,16 +123,14 @@ export function SalesDashboard() {
     <section aria-label="Sales metrics" className="space-y-8">
       {!hasAnyRevenue ? (
         <div
-          className="rounded-2xl border border-[var(--ep-line)]/60 bg-[var(--ep-paper)]/70 p-8 backdrop-blur"
+          className="border-mkt-line/60 rounded-2xl border bg-white p-8 backdrop-blur"
           data-testid="empty-state"
         >
-          <p className="text-xs font-semibold tracking-widest text-[var(--ep-violet)] uppercase">
-            Welcome 👋
-          </p>
-          <h3 className="font-display mt-2 text-2xl font-semibold text-[var(--ep-ink)]">
+          <p className="text-mkt-red text-xs font-semibold tracking-widest uppercase">Welcome 👋</p>
+          <h3 className="font-display text-mkt-ink mt-2 text-2xl font-semibold">
             Let’s get your first event live.
           </h3>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--ep-graphite)]">
+          <p className="text-mkt-slate mt-2 max-w-2xl text-sm leading-relaxed">
             Your sales, attendees, and payouts will light up here once people start registering. It
             takes about 90 seconds to publish — free events go live instantly.
           </p>
@@ -155,20 +148,17 @@ export function SalesDashboard() {
                 'Net proceeds settle to your account five business days later.',
               ],
             ].map(([n, t, d]) => (
-              <li
-                key={n}
-                className="rounded-xl border border-[var(--ep-line)]/60 bg-[var(--ep-paper)]/60 p-4"
-              >
-                <span className="ep-gradient-text font-display text-xl font-bold">{n}</span>
-                <p className="mt-1 text-sm font-semibold text-[var(--ep-ink)]">{t}</p>
-                <p className="mt-1 text-xs leading-relaxed text-[var(--ep-graphite)]">{d}</p>
+              <li key={n} className="border-mkt-line/60 rounded-xl border bg-white p-4">
+                <span className="text-mkt-red font-display text-xl font-bold">{n}</span>
+                <p className="text-mkt-ink mt-1 text-sm font-semibold">{t}</p>
+                <p className="text-mkt-slate mt-1 text-xs leading-relaxed">{d}</p>
               </li>
             ))}
           </ol>
           <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
             <Link
               href="/events/new"
-              className="inline-flex h-11 items-center justify-center rounded-md bg-gradient-to-r from-[var(--ep-violet)] to-[var(--ep-indigo)] px-6 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              className="bg-mkt-red inline-flex h-11 items-center justify-center rounded-md px-6 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
               Create your first event
             </Link>
@@ -176,7 +166,7 @@ export function SalesDashboard() {
               href="https://eventpulse.com.bd/demo"
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex h-11 items-center justify-center rounded-md border border-[var(--ep-line)] px-6 text-sm font-semibold text-[var(--ep-ink)] transition hover:-translate-y-0.5 hover:shadow-sm"
+              className="border-mkt-line text-mkt-ink inline-flex h-11 items-center justify-center rounded-md border px-6 text-sm font-semibold transition hover:-translate-y-0.5 hover:shadow-sm"
             >
               Watch the 90-second demo
             </a>
@@ -227,17 +217,17 @@ export function SalesDashboard() {
         <BucketPill
           label="Revenue"
           count={headline.buckets.revenue}
-          tone="bg-[var(--ep-mint)]/15 text-[var(--ep-mint)]"
+          tone="bg-[var(--ep-mint)]/15 text-emerald-600"
         />
         <BucketPill
           label="Pending"
           count={headline.buckets.pending}
-          tone="bg-[var(--ep-cerulean)]/15 text-[var(--ep-cerulean)]"
+          tone="bg-[var(--ep-cerulean)]/15 text-mkt-red"
         />
         <BucketPill
           label="Dropped"
           count={headline.buckets.dropped}
-          tone="bg-[var(--ep-rose)]/15 text-[var(--ep-rose)]"
+          tone="bg-[var(--ep-rose)]/15 text-mkt-red"
         />
         <BucketPill
           label="Refunded"
@@ -247,15 +237,15 @@ export function SalesDashboard() {
       </div>
 
       {/* Time-series chart */}
-      <div className="rounded-2xl border border-[var(--ep-line)] bg-white/40 p-6">
+      <div className="border-mkt-line rounded-2xl border bg-white p-6">
         <div className="mb-4">
-          <h2 className="text-xl font-semibold text-[var(--ep-ink)]">Sales over time</h2>
-          <p className="text-xs text-[var(--ep-graphite)]">
+          <h2 className="text-mkt-ink text-xl font-semibold">Sales over time</h2>
+          <p className="text-mkt-slate text-xs">
             Last 30 days · daily revenue (BDT) · times in Asia/Dhaka
           </p>
         </div>
         {chartData.length === 0 ? (
-          <div className="py-12 text-center text-sm text-[var(--ep-graphite)]">
+          <div className="text-mkt-slate py-12 text-center text-sm">
             No paid sales in the last 30 days.
           </div>
         ) : (
@@ -287,15 +277,15 @@ export function SalesDashboard() {
       </div>
 
       {/* Per-event breakdown */}
-      <div className="rounded-2xl border border-[var(--ep-line)] bg-white/40 p-6">
-        <h2 className="mb-4 text-xl font-semibold text-[var(--ep-ink)]">By event</h2>
+      <div className="border-mkt-line rounded-2xl border bg-white p-6">
+        <h2 className="text-mkt-ink mb-4 text-xl font-semibold">By event</h2>
         {eventBreakdown.length === 0 ? (
-          <div className="text-sm text-[var(--ep-graphite)]">No events with orders yet.</div>
+          <div className="text-mkt-slate text-sm">No events with orders yet.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full table-auto border-collapse text-sm">
               <thead>
-                <tr className="border-b border-[var(--ep-line)] text-left text-xs tracking-wide text-[var(--ep-graphite)] uppercase">
+                <tr className="border-mkt-line text-mkt-slate border-b text-left text-xs tracking-wide uppercase">
                   <th className="px-4 py-3">Event</th>
                   <th className="px-4 py-3">Tickets</th>
                   <th className="px-4 py-3">Orders</th>
@@ -307,21 +297,13 @@ export function SalesDashboard() {
                 {eventBreakdown.map((r) => (
                   <tr
                     key={r.eventId}
-                    className="border-b border-[var(--ep-line)] transition-colors hover:bg-[var(--ep-mist)]"
+                    className="border-mkt-line border-b transition-colors hover:bg-[var(--color-mkt-soft)]"
                   >
-                    <td className="px-4 py-3 font-medium text-[var(--ep-ink)]">{r.eventTitle}</td>
-                    <td className="px-4 py-3 text-[var(--ep-graphite)]">
-                      {formatNumber(r.ticketsSold)}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--ep-graphite)]">
-                      {formatNumber(r.paidOrderCount)}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--ep-ink)]">
-                      {formatBdt(r.grossRevenuePaisa)}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--ep-ink)]">
-                      {formatBdt(r.netToOrganiserPaisa)}
-                    </td>
+                    <td className="text-mkt-ink px-4 py-3 font-medium">{r.eventTitle}</td>
+                    <td className="text-mkt-slate px-4 py-3">{formatNumber(r.ticketsSold)}</td>
+                    <td className="text-mkt-slate px-4 py-3">{formatNumber(r.paidOrderCount)}</td>
+                    <td className="text-mkt-ink px-4 py-3">{formatBdt(r.grossRevenuePaisa)}</td>
+                    <td className="text-mkt-ink px-4 py-3">{formatBdt(r.netToOrganiserPaisa)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -331,15 +313,15 @@ export function SalesDashboard() {
       </div>
 
       {/* Per-tier breakdown */}
-      <div className="rounded-2xl border border-[var(--ep-line)] bg-white/40 p-6">
-        <h2 className="mb-4 text-xl font-semibold text-[var(--ep-ink)]">By ticket tier</h2>
+      <div className="border-mkt-line rounded-2xl border bg-white p-6">
+        <h2 className="text-mkt-ink mb-4 text-xl font-semibold">By ticket tier</h2>
         {tierBreakdown.length === 0 ? (
-          <div className="text-sm text-[var(--ep-graphite)]">No tiers yet.</div>
+          <div className="text-mkt-slate text-sm">No tiers yet.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full table-auto border-collapse text-sm">
               <thead>
-                <tr className="border-b border-[var(--ep-line)] text-left text-xs tracking-wide text-[var(--ep-graphite)] uppercase">
+                <tr className="border-mkt-line text-mkt-slate border-b text-left text-xs tracking-wide uppercase">
                   <th className="px-4 py-3">Tier</th>
                   <th className="px-4 py-3">Event</th>
                   <th className="px-4 py-3">Price</th>
@@ -351,19 +333,13 @@ export function SalesDashboard() {
                 {tierBreakdown.map((r) => (
                   <tr
                     key={r.tierId}
-                    className="border-b border-[var(--ep-line)] transition-colors hover:bg-[var(--ep-mist)]"
+                    className="border-mkt-line border-b transition-colors hover:bg-[var(--color-mkt-soft)]"
                   >
-                    <td className="px-4 py-3 font-medium text-[var(--ep-ink)]">{r.tierName}</td>
-                    <td className="px-4 py-3 text-[var(--ep-graphite)]">{r.eventTitle}</td>
-                    <td className="px-4 py-3 text-[var(--ep-graphite)]">
-                      {formatBdt(r.pricePaisa)}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--ep-graphite)]">
-                      {formatNumber(r.ticketsSold)}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--ep-ink)]">
-                      {formatBdt(r.grossRevenuePaisa)}
-                    </td>
+                    <td className="text-mkt-ink px-4 py-3 font-medium">{r.tierName}</td>
+                    <td className="text-mkt-slate px-4 py-3">{r.eventTitle}</td>
+                    <td className="text-mkt-slate px-4 py-3">{formatBdt(r.pricePaisa)}</td>
+                    <td className="text-mkt-slate px-4 py-3">{formatNumber(r.ticketsSold)}</td>
+                    <td className="text-mkt-ink px-4 py-3">{formatBdt(r.grossRevenuePaisa)}</td>
                   </tr>
                 ))}
               </tbody>

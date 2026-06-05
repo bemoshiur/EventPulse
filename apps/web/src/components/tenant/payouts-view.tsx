@@ -31,14 +31,14 @@ function SummaryRow({
 }) {
   return (
     <div
-      className="flex items-baseline justify-between border-b border-[var(--ep-line)] py-3 last:border-b-0"
+      className="border-mkt-line flex items-baseline justify-between border-b py-3 last:border-b-0"
       data-testid={testId}
     >
       <div>
-        <div className="text-sm font-medium text-[var(--ep-ink)]">{label}</div>
-        {hint ? <div className="mt-0.5 text-xs text-[var(--ep-graphite)]">{hint}</div> : null}
+        <div className="text-mkt-ink text-sm font-medium">{label}</div>
+        {hint ? <div className="text-mkt-slate mt-0.5 text-xs">{hint}</div> : null}
       </div>
-      <div className="text-base font-semibold text-[var(--ep-ink)]">{value}</div>
+      <div className="text-mkt-ink text-base font-semibold">{value}</div>
     </div>
   )
 }
@@ -51,7 +51,7 @@ export function PayoutsView() {
       <div
         role="status"
         aria-live="polite"
-        className="rounded-2xl border border-[var(--ep-line)] bg-white/40 p-6 text-sm text-[var(--ep-graphite)]"
+        className="border-mkt-line text-mkt-slate rounded-2xl border bg-white p-6 text-sm"
       >
         Loading payouts view…
       </div>
@@ -62,7 +62,7 @@ export function PayoutsView() {
     return (
       <div
         role="alert"
-        className="rounded-2xl border border-[var(--ep-rose)]/40 bg-[var(--ep-rose)]/5 p-6 text-sm text-[var(--ep-rose)]"
+        className="text-mkt-red rounded-2xl border border-[var(--ep-rose)]/40 bg-[var(--ep-rose)]/5 p-6 text-sm"
       >
         Failed to load payouts: {(error as Error).message}
       </div>
@@ -81,13 +81,13 @@ export function PayoutsView() {
         className="rounded-3xl border border-[var(--ep-mint)]/40 bg-gradient-to-br from-[var(--ep-mint)]/15 to-[var(--ep-cerulean)]/10 p-8"
         data-testid="payable-card"
       >
-        <div className="text-xs font-medium tracking-wide text-[var(--ep-graphite)] uppercase">
+        <div className="text-mkt-slate text-xs font-medium tracking-wide uppercase">
           Pending payout
         </div>
-        <div className="mt-2 text-5xl font-semibold text-[var(--ep-ink)]">
+        <div className="text-mkt-ink mt-2 text-5xl font-semibold">
           {formatBdt(p.pendingPayoutPaisa)}
         </div>
-        <div className="mt-3 text-sm text-[var(--ep-graphite)]">
+        <div className="text-mkt-slate mt-3 text-sm">
           Net you&apos;re owed across {formatNumber(p.paidOrderCount)} paid order
           {p.paidOrderCount === 1 ? '' : 's'}. Automated disbursement (T+5) ships in a future
           sprint; for now this is what your settlement total will be when payouts go live.
@@ -96,7 +96,7 @@ export function PayoutsView() {
 
       {!hasAnyPayable ? (
         <div
-          className="rounded-2xl border border-[var(--ep-cerulean)]/40 bg-[var(--ep-cerulean)]/5 p-6 text-sm text-[var(--ep-cerulean)]"
+          className="text-mkt-red rounded-2xl border border-[var(--ep-cerulean)]/40 bg-[var(--ep-cerulean)]/5 p-6 text-sm"
           data-testid="empty-state"
         >
           No paid orders yet. Once buyers pay, your net (face value minus the platform fee and the
@@ -105,8 +105,8 @@ export function PayoutsView() {
       ) : null}
 
       {/* Snapshot breakdown */}
-      <div className="rounded-2xl border border-[var(--ep-line)] bg-white/40 p-6">
-        <h2 className="mb-4 text-xl font-semibold text-[var(--ep-ink)]">Where the money goes</h2>
+      <div className="border-mkt-line rounded-2xl border bg-white p-6">
+        <h2 className="text-mkt-ink mb-4 text-xl font-semibold">Where the money goes</h2>
         <div className="space-y-0" data-testid="snapshot-breakdown">
           <SummaryRow
             label="Gross revenue"
@@ -150,7 +150,7 @@ export function PayoutsView() {
           data-testid="refund-leak-card"
         >
           <h2 className="text-base font-semibold text-[var(--ep-amber)]">Refund + reversal leak</h2>
-          <p className="mt-1 text-sm text-[var(--ep-graphite)]">
+          <p className="text-mkt-slate mt-1 text-sm">
             {formatNumber(p.refundLeakOrderCount)} order
             {p.refundLeakOrderCount === 1 ? '' : 's'} totalling{' '}
             <strong>{formatBdt(p.refundLeakPaisa)}</strong> are in refund or chargeback states.
@@ -160,8 +160,8 @@ export function PayoutsView() {
       ) : null}
 
       {/* Current fee terms */}
-      <div className="rounded-2xl border border-[var(--ep-line)] bg-white/40 p-6">
-        <h2 className="mb-4 text-xl font-semibold text-[var(--ep-ink)]">Your current fee terms</h2>
+      <div className="border-mkt-line rounded-2xl border bg-white p-6">
+        <h2 className="text-mkt-ink mb-4 text-xl font-semibold">Your current fee terms</h2>
         <div className="space-y-0" data-testid="current-fees">
           <SummaryRow
             label="Platform fee rate"
@@ -187,7 +187,7 @@ export function PayoutsView() {
             />
           ) : null}
         </div>
-        <p className="mt-4 text-xs text-[var(--ep-graphite)]">
+        <p className="text-mkt-slate mt-4 text-xs">
           The fees above are your CURRENT rates. Past orders show their snapshotted fees (above) —
           they reflect what was charged at the time, not what would be charged today.
         </p>

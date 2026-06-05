@@ -21,7 +21,6 @@ import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
-import { GlassCard } from '@/components/ui/glass-card'
 import { GradientMesh } from '@/components/ui/gradient-mesh'
 import {
   TicketTierForm,
@@ -106,13 +105,13 @@ export default function TenantTicketTiersPage() {
       <div className="mx-auto max-w-5xl px-6 py-12">
         <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="font-display text-ep-ink text-3xl font-semibold">Ticket tiers</h1>
-            <p className="text-ep-graphite mt-1 text-sm">
+            <h1 className="font-display text-mkt-ink text-3xl font-semibold">Ticket tiers</h1>
+            <p className="text-mkt-slate mt-1 text-sm">
               Per-event tier configuration. Prices in BDT; capacity locking lands Day 29.
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <label className="text-ep-graphite flex items-center gap-2 text-sm">
+            <label className="text-mkt-slate flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={includeArchived}
@@ -125,7 +124,7 @@ export default function TenantTicketTiersPage() {
               <button
                 type="button"
                 onClick={() => setShowCreate(true)}
-                className="grad-primary inline-flex h-10 items-center rounded-md px-5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+                className="bg-mkt-red inline-flex h-10 items-center rounded-md px-5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
                 data-testid="tier-add-button"
               >
                 Add tier
@@ -160,25 +159,25 @@ export default function TenantTicketTiersPage() {
         )}
 
         {archiveError && (
-          <GlassCard className="mb-3 p-3" data-testid="tier-archive-error">
-            <p className="text-ep-rose text-sm" role="alert">
+          <div className="mkt-card mb-3 p-3" data-testid="tier-archive-error">
+            <p className="text-mkt-red text-sm" role="alert">
               Archive failed for tier {archiveError.tierId}: {archiveError.message}
             </p>
-          </GlassCard>
+          </div>
         )}
 
         {tiersQuery.isPending && (
-          <GlassCard className="p-8">
-            <p className="text-ep-graphite text-sm">Loading tiers…</p>
-          </GlassCard>
+          <div className="mkt-card p-8">
+            <p className="text-mkt-slate text-sm">Loading tiers…</p>
+          </div>
         )}
 
         {tiersQuery.isError && (
-          <GlassCard className="p-6" data-testid="tier-list-error">
-            <p className="text-ep-rose text-sm" role="alert">
+          <div className="mkt-card p-6" data-testid="tier-list-error">
+            <p className="text-mkt-red text-sm" role="alert">
               Failed to load tiers: {(tiersQuery.error as Error).message}
             </p>
-          </GlassCard>
+          </div>
         )}
 
         {tiersQuery.data && (

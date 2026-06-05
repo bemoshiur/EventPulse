@@ -18,10 +18,10 @@ import { PayoutsView } from '@/components/tenant/payouts-view'
 
 export default function TenantPayoutsPage() {
   return (
-    <div className="space-y-8 text-white">
+    <div className="space-y-8 text-mkt-ink">
       <header>
         <h1 className="text-3xl font-bold">Payouts</h1>
-        <p className="mt-2 text-base text-white/70">
+        <p className="mt-2 text-base text-mkt-slate">
           What you&apos;re owed across your paid orders, with your current fee terms. Automated T+5
           disbursement ships in a future sprint; this view is what your settlement total will be
           when payouts go live.

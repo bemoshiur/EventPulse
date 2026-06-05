@@ -21,10 +21,10 @@ export default async function CheckInPage({ params, searchParams }: PageProps) {
   const { eventId } = await params
   const { gate } = await searchParams
   return (
-    <div className="space-y-8 text-white">
+    <div className="space-y-8 text-mkt-ink">
       <header>
         <h1 className="text-3xl font-bold">Check-in</h1>
-        <p className="mt-2 text-base text-white/70">
+        <p className="mt-2 text-base text-mkt-slate">
           Scan attendee QR codes. {gate ? <span>Gate: {gate}</span> : null}
         </p>
       </header>

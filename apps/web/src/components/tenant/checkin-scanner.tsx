@@ -91,7 +91,7 @@ export function ResultDisplay({ outcome }: ResultDisplayProps) {
         <div
           role="status"
           aria-live="assertive"
-          className="rounded-3xl bg-emerald-500 p-8 text-white shadow-2xl"
+          className="text-mkt-ink rounded-3xl bg-emerald-500 p-8 shadow-2xl"
           data-testid="result-checked-in"
         >
           <div className="text-5xl font-bold uppercase">Admitted</div>
@@ -107,7 +107,7 @@ export function ResultDisplay({ outcome }: ResultDisplayProps) {
         <div
           role="alert"
           aria-live="assertive"
-          className="rounded-3xl bg-amber-500 p-8 text-white shadow-2xl"
+          className="text-mkt-ink rounded-3xl bg-amber-500 p-8 shadow-2xl"
           data-testid="result-already"
         >
           <div className="text-5xl font-bold uppercase">Already used</div>
@@ -125,7 +125,7 @@ export function ResultDisplay({ outcome }: ResultDisplayProps) {
         <div
           role="alert"
           aria-live="assertive"
-          className="rounded-3xl bg-red-600 p-8 text-white shadow-2xl"
+          className="text-mkt-ink rounded-3xl bg-red-600 p-8 shadow-2xl"
           data-testid="result-wrong-event"
         >
           <div className="text-5xl font-bold uppercase">Wrong event</div>
@@ -139,7 +139,7 @@ export function ResultDisplay({ outcome }: ResultDisplayProps) {
         <div
           role="alert"
           aria-live="assertive"
-          className="rounded-3xl bg-red-600 p-8 text-white shadow-2xl"
+          className="text-mkt-ink rounded-3xl bg-red-600 p-8 shadow-2xl"
           data-testid="result-invalid"
         >
           <div className="text-5xl font-bold uppercase">Invalid</div>
@@ -155,7 +155,7 @@ export function ResultDisplay({ outcome }: ResultDisplayProps) {
         <div
           role="status"
           aria-live="polite"
-          className="rounded-3xl bg-zinc-700 p-8 text-white shadow-2xl"
+          className="text-mkt-ink rounded-3xl bg-zinc-700 p-8 shadow-2xl"
           data-testid="result-network-error"
         >
           <div className="text-4xl font-bold uppercase">Offline</div>
@@ -179,7 +179,7 @@ export function ManualEntry({ onSubmit, disabled }: ManualEntryProps) {
   const [value, setValue] = useState('')
   return (
     <form
-      className="rounded-2xl bg-white/5 p-6"
+      className="rounded-2xl bg-white p-6"
       onSubmit={(e) => {
         e.preventDefault()
         const code = extractTokenFromScan(value)
@@ -202,14 +202,14 @@ export function ManualEntry({ onSubmit, disabled }: ManualEntryProps) {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder="Paste or type the ticket code"
-          className="flex-1 rounded-lg border border-white/10 bg-zinc-900/60 px-3 py-2 text-white"
+          className="border-mkt-line text-mkt-ink flex-1 rounded-lg border bg-zinc-900/60 px-3 py-2"
           disabled={disabled}
           data-testid="manual-qr-input"
         />
         <button
           type="submit"
           disabled={disabled || value.trim().length < 8}
-          className="rounded-lg bg-violet-600 px-4 py-2 font-semibold text-white disabled:opacity-40"
+          className="text-mkt-ink rounded-lg bg-violet-600 px-4 py-2 font-semibold disabled:opacity-40"
           data-testid="manual-qr-submit"
         >
           Scan
@@ -229,7 +229,7 @@ function StatsStrip({ eventId }: { eventId: string }) {
   const pct = total > 0 ? Math.round((inCount / total) * 100) : 0
   return (
     <div
-      className="grid grid-cols-3 gap-4 rounded-2xl bg-white/5 p-4 text-center"
+      className="grid grid-cols-3 gap-4 rounded-2xl bg-white p-4 text-center"
       data-testid="stats-strip"
     >
       <div>
@@ -427,7 +427,7 @@ export function CheckInScanner({ eventId, gate }: CheckInScannerProps) {
         <div
           role="status"
           aria-live="polite"
-          className="rounded-2xl bg-amber-500/90 p-4 text-white"
+          className="text-mkt-ink rounded-2xl bg-amber-500/90 p-4"
           data-testid="offline-pending-banner"
         >
           <strong className="text-lg">
@@ -443,7 +443,7 @@ export function CheckInScanner({ eventId, gate }: CheckInScannerProps) {
         <div
           role="alert"
           aria-live="polite"
-          className="rounded-2xl bg-red-600/90 p-4 text-white"
+          className="text-mkt-ink rounded-2xl bg-red-600/90 p-4"
           data-testid="offline-duplicate-banner"
         >
           <strong className="text-lg">
@@ -460,7 +460,7 @@ export function CheckInScanner({ eventId, gate }: CheckInScannerProps) {
         <div
           role="status"
           aria-live="polite"
-          className="rounded-2xl bg-zinc-700 p-3 text-center text-sm text-white"
+          className="text-mkt-ink rounded-2xl bg-zinc-700 p-3 text-center text-sm"
           data-testid="offline-tentative-banner"
         >
           Last admit was OFFLINE (tentative). Will sync when connectivity returns.
@@ -487,7 +487,7 @@ export function CheckInScanner({ eventId, gate }: CheckInScannerProps) {
               )}
             </>
           ) : (
-            <div className="rounded-2xl bg-white/5 p-6 text-center" data-testid="camera-fallback">
+            <div className="rounded-2xl bg-white p-6 text-center" data-testid="camera-fallback">
               <p className="text-base">
                 {cameraStatus === 'denied'
                   ? 'Camera access denied. Use manual entry below.'
@@ -502,7 +502,7 @@ export function CheckInScanner({ eventId, gate }: CheckInScannerProps) {
         <div className="space-y-3" data-testid="result-panel">
           {scan.isPending ? (
             <div
-              className="rounded-3xl bg-zinc-700 p-8 text-white"
+              className="text-mkt-ink rounded-3xl bg-zinc-700 p-8"
               role="status"
               data-testid="result-submitting"
             >
@@ -512,7 +512,7 @@ export function CheckInScanner({ eventId, gate }: CheckInScannerProps) {
             <ResultDisplay outcome={lastOutcome} />
           ) : (
             <div
-              className="rounded-3xl bg-white/5 p-8 text-white opacity-60"
+              className="text-mkt-ink rounded-3xl bg-white p-8 opacity-60"
               role="status"
               data-testid="result-idle"
             >
