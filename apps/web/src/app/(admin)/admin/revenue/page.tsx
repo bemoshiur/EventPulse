@@ -28,10 +28,10 @@ import { formatBdt, formatBps, formatNumber, useAdminRevenue } from '@/hooks/use
 
 function KpiCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="border-ep-line rounded-2xl border bg-white/60 p-5 shadow-sm backdrop-blur">
-      <p className="text-ep-graphite text-xs font-medium tracking-wide uppercase">{label}</p>
-      <p className="text-ep-ink mt-2 text-3xl font-semibold tabular-nums">{value}</p>
-      {hint && <p className="text-ep-graphite/70 mt-1 text-xs">{hint}</p>}
+    <div className="border-mkt-line rounded-2xl border bg-white p-5 shadow-sm backdrop-blur">
+      <p className="text-mkt-slate text-xs font-medium tracking-wide uppercase">{label}</p>
+      <p className="text-mkt-ink mt-2 text-3xl font-semibold tabular-nums">{value}</p>
+      {hint && <p className="text-mkt-slate/70 mt-1 text-xs">{hint}</p>}
     </div>
   )
 }
@@ -50,11 +50,11 @@ function SectionCard({
   return (
     <section
       data-testid={testId}
-      className="border-ep-line rounded-2xl border bg-white/60 p-6 shadow-sm backdrop-blur"
+      className="border-mkt-line rounded-2xl border bg-white p-6 shadow-sm backdrop-blur"
     >
       <div className="mb-4">
-        <h2 className="text-ep-ink text-lg font-semibold">{title}</h2>
-        {subtitle && <p className="text-ep-graphite/80 mt-1 text-sm">{subtitle}</p>}
+        <h2 className="text-mkt-ink text-lg font-semibold">{title}</h2>
+        {subtitle && <p className="text-mkt-slate/80 mt-1 text-sm">{subtitle}</p>}
       </div>
       {children}
     </section>
@@ -69,7 +69,7 @@ export default function AdminRevenuePage() {
       <div
         role="status"
         aria-live="polite"
-        className="border-ep-line text-ep-graphite rounded-2xl border bg-white/40 p-6 text-sm"
+        className="border-mkt-line text-mkt-slate rounded-2xl border bg-white p-6 text-sm"
         data-testid="admin-revenue-loading"
       >
         Loading revenue dashboard…
@@ -83,7 +83,7 @@ export default function AdminRevenuePage() {
     return (
       <div
         role="alert"
-        className="border-ep-rose/40 bg-ep-rose/5 text-ep-rose rounded-2xl border p-6 text-sm"
+        className="border-ep-rose/40 bg-ep-rose/5 text-mkt-red rounded-2xl border p-6 text-sm"
         data-testid="admin-revenue-error"
       >
         Failed to load revenue dashboard: <strong>{errMsg}</strong>
@@ -105,8 +105,8 @@ export default function AdminRevenuePage() {
   return (
     <div className="space-y-6" data-testid="admin-revenue">
       <div>
-        <h2 className="text-ep-ink text-3xl font-semibold">Platform revenue</h2>
-        <p className="text-ep-graphite mt-1 text-sm">
+        <h2 className="text-mkt-ink text-3xl font-semibold">Platform revenue</h2>
+        <p className="text-mkt-slate mt-1 text-sm">
           Cross-tenant operational view. Money figures read from snapshotted order data; current fee
           terms shown alongside.
         </p>
@@ -143,7 +143,7 @@ export default function AdminRevenuePage() {
         testId="time-series-section"
       >
         {timeSeries.length === 0 ? (
-          <p className="text-ep-graphite text-sm">No paid orders in the window.</p>
+          <p className="text-mkt-slate text-sm">No paid orders in the window.</p>
         ) : (
           <div className="h-72 w-full" data-testid="time-series-chart">
             <ResponsiveContainer width="100%" height="100%">
@@ -155,13 +155,18 @@ export default function AdminRevenuePage() {
                 }))}
                 margin={{ top: 8, right: 24, left: 0, bottom: 8 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--ep-line)" />
-                <XAxis dataKey="date" stroke="var(--ep-graphite)" fontSize={11} tickMargin={6} />
-                <YAxis stroke="var(--ep-graphite)" fontSize={11} tickMargin={6} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-mkt-line)" />
+                <XAxis
+                  dataKey="date"
+                  stroke="var(--color-mkt-slate)"
+                  fontSize={11}
+                  tickMargin={6}
+                />
+                <YAxis stroke="var(--color-mkt-slate)" fontSize={11} tickMargin={6} />
                 <Tooltip
                   contentStyle={{
                     background: 'white',
-                    border: '1px solid var(--ep-line)',
+                    border: '1px solid var(--color-mkt-line)',
                     borderRadius: 8,
                     fontSize: 12,
                   }}
@@ -169,14 +174,14 @@ export default function AdminRevenuePage() {
                 <Line
                   type="monotone"
                   dataKey="gmv"
-                  stroke="var(--ep-violet)"
+                  stroke="var(--color-mkt-red)"
                   strokeWidth={2}
                   dot={false}
                 />
                 <Line
                   type="monotone"
                   dataKey="platformRevenue"
-                  stroke="var(--ep-mint)"
+                  stroke="#059669"
                   strokeWidth={2}
                   dot={false}
                 />
@@ -194,7 +199,7 @@ export default function AdminRevenuePage() {
           testId="leaderboard-gmv"
         >
           {topByGmv.length === 0 ? (
-            <p className="text-ep-graphite text-sm">No tenants with paid orders yet.</p>
+            <p className="text-mkt-slate text-sm">No tenants with paid orders yet.</p>
           ) : (
             <ol className="space-y-2">
               {topByGmv.slice(0, 10).map((row, idx) => (
@@ -203,12 +208,12 @@ export default function AdminRevenuePage() {
                   className="flex items-center justify-between text-sm"
                   data-testid={`gmv-row-${row.tenantId}`}
                 >
-                  <span className="text-ep-ink">
-                    <span className="text-ep-graphite/70 mr-2 tabular-nums">#{idx + 1}</span>
+                  <span className="text-mkt-ink">
+                    <span className="text-mkt-slate/70 mr-2 tabular-nums">#{idx + 1}</span>
                     <strong className="font-medium">{row.tenantName}</strong>
-                    <span className="text-ep-graphite/70 ml-2 text-xs">{row.tenantSlug}</span>
+                    <span className="text-mkt-slate/70 ml-2 text-xs">{row.tenantSlug}</span>
                   </span>
-                  <span className="text-ep-ink font-semibold tabular-nums">
+                  <span className="text-mkt-ink font-semibold tabular-nums">
                     {formatBdt(row.gmvPaisa)}
                   </span>
                 </li>
@@ -223,7 +228,7 @@ export default function AdminRevenuePage() {
           testId="leaderboard-revenue"
         >
           {topByPlatformRevenue.length === 0 ? (
-            <p className="text-ep-graphite text-sm">No platform revenue yet.</p>
+            <p className="text-mkt-slate text-sm">No platform revenue yet.</p>
           ) : (
             <ol className="space-y-2">
               {topByPlatformRevenue.slice(0, 10).map((row, idx) => (
@@ -232,12 +237,12 @@ export default function AdminRevenuePage() {
                   className="flex items-center justify-between text-sm"
                   data-testid={`revenue-row-${row.tenantId}`}
                 >
-                  <span className="text-ep-ink">
-                    <span className="text-ep-graphite/70 mr-2 tabular-nums">#{idx + 1}</span>
+                  <span className="text-mkt-ink">
+                    <span className="text-mkt-slate/70 mr-2 tabular-nums">#{idx + 1}</span>
                     <strong className="font-medium">{row.tenantName}</strong>
-                    <span className="text-ep-graphite/70 ml-2 text-xs">{row.tenantSlug}</span>
+                    <span className="text-mkt-slate/70 ml-2 text-xs">{row.tenantSlug}</span>
                   </span>
-                  <span className="text-ep-ink font-semibold tabular-nums">
+                  <span className="text-mkt-ink font-semibold tabular-nums">
                     {formatBdt(row.platformRevenuePaisa)}
                   </span>
                 </li>
@@ -254,11 +259,11 @@ export default function AdminRevenuePage() {
         testId="settlement-queue"
       >
         {settlementQueue.length === 0 ? (
-          <p className="text-ep-graphite text-sm">No pending payouts.</p>
+          <p className="text-mkt-slate text-sm">No pending payouts.</p>
         ) : (
           <table className="w-full table-auto border-collapse text-sm">
             <thead>
-              <tr className="text-ep-graphite border-ep-line border-b text-left text-xs tracking-wide uppercase">
+              <tr className="text-mkt-slate border-mkt-line border-b text-left text-xs tracking-wide uppercase">
                 <th className="py-2 pr-4">Tenant</th>
                 <th className="py-2 pr-4">Paid orders</th>
                 <th className="py-2 pr-4 text-right">Pending payout</th>
@@ -268,17 +273,17 @@ export default function AdminRevenuePage() {
               {settlementQueue.map((row) => (
                 <tr
                   key={row.tenantId}
-                  className="border-ep-line border-b"
+                  className="border-mkt-line border-b"
                   data-testid={`settlement-row-${row.tenantId}`}
                 >
-                  <td className="text-ep-ink py-2 pr-4">
+                  <td className="text-mkt-ink py-2 pr-4">
                     <strong className="font-medium">{row.tenantName}</strong>
-                    <span className="text-ep-graphite/70 ml-2 text-xs">{row.tenantSlug}</span>
+                    <span className="text-mkt-slate/70 ml-2 text-xs">{row.tenantSlug}</span>
                   </td>
-                  <td className="text-ep-ink py-2 pr-4 tabular-nums">
+                  <td className="text-mkt-ink py-2 pr-4 tabular-nums">
                     {formatNumber(row.paidOrderCount)}
                   </td>
-                  <td className="text-ep-ink py-2 pr-4 text-right font-semibold tabular-nums">
+                  <td className="text-mkt-ink py-2 pr-4 text-right font-semibold tabular-nums">
                     {formatBdt(row.pendingPaisa)}
                   </td>
                 </tr>
@@ -296,7 +301,7 @@ export default function AdminRevenuePage() {
           testId="anomaly-refund-rate"
         >
           {anomalies.refundRates.length === 0 ? (
-            <p className="text-ep-graphite text-sm">No refund anomalies.</p>
+            <p className="text-mkt-slate text-sm">No refund anomalies.</p>
           ) : (
             <ul className="space-y-2">
               {anomalies.refundRates.map((row) => (
@@ -305,8 +310,8 @@ export default function AdminRevenuePage() {
                   className="border-ep-amber/30 bg-ep-amber/5 rounded-md border p-2 text-sm"
                   data-testid={`anomaly-refund-${row.tenantId}`}
                 >
-                  <div className="text-ep-ink font-medium">{row.tenantName}</div>
-                  <div className="text-ep-graphite text-xs">
+                  <div className="text-mkt-ink font-medium">{row.tenantName}</div>
+                  <div className="text-mkt-slate text-xs">
                     {formatBps(row.refundRateBps)} ({formatNumber(row.refundedOrderCount)} of{' '}
                     {formatNumber(row.paidOrderCount + row.refundedOrderCount)})
                   </div>
@@ -322,7 +327,7 @@ export default function AdminRevenuePage() {
           testId="anomaly-fee-changes"
         >
           {anomalies.feeChanges.length === 0 ? (
-            <p className="text-ep-graphite text-sm">No fee changes in the last 7 days.</p>
+            <p className="text-mkt-slate text-sm">No fee changes in the last 7 days.</p>
           ) : (
             <ul className="space-y-2">
               {anomalies.feeChanges.map((row) => {
@@ -331,16 +336,16 @@ export default function AdminRevenuePage() {
                   <li
                     key={`${row.tenantId}-${row.changedAt}`}
                     className={`rounded-md border p-2 text-sm ${
-                      flagged ? 'border-ep-rose/30 bg-ep-rose/5' : 'border-ep-line bg-white/40'
+                      flagged ? 'border-ep-rose/30 bg-ep-rose/5' : 'border-mkt-line bg-white'
                     }`}
                     data-testid={`anomaly-fee-${row.tenantId}`}
                   >
-                    <div className="text-ep-ink font-medium">{row.tenantName}</div>
-                    <div className="text-ep-graphite text-xs tabular-nums">
+                    <div className="text-mkt-ink font-medium">{row.tenantName}</div>
+                    <div className="text-mkt-slate text-xs tabular-nums">
                       {formatBps(row.previousFeeBps)} → {formatBps(row.newFeeBps)} (Δ{' '}
                       {formatBps(row.absDeltaBps)})
                     </div>
-                    <div className="text-ep-graphite/70 mt-1 text-xs italic">{row.reason}</div>
+                    <div className="text-mkt-slate/70 mt-1 text-xs italic">{row.reason}</div>
                   </li>
                 )
               })}
@@ -353,7 +358,7 @@ export default function AdminRevenuePage() {
           subtitle="Placeholder until Sprint 7 ships eps_settlements"
           testId="anomaly-eps-recon"
         >
-          <p className="text-ep-graphite/80 text-sm">
+          <p className="text-mkt-slate/80 text-sm">
             EPS reconciliation mismatches will surface here once Sprint 7 lands the{' '}
             <code className="text-xs">eps_settlements</code> table. Until then, EPS settlement
             reports must be reconciled manually against the order ledger.
@@ -361,7 +366,7 @@ export default function AdminRevenuePage() {
         </SectionCard>
       </div>
 
-      <p className="text-ep-graphite/70 text-xs italic">
+      <p className="text-mkt-slate/70 text-xs italic">
         Money figures are <strong>snapshotted</strong> from each order at creation. Current
         per-tenant fee terms are shown in each tenant&apos;s admin detail page; the dashboard
         deliberately does not recompute (Day-33 Choice A carries to cross-tenant view).

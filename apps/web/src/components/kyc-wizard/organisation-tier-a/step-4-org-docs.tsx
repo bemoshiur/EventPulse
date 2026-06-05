@@ -18,7 +18,7 @@ interface Step4OrgDocsProps {
 export function Step4OrgDocs({ submissionId, uploadedDocs, onUploaded }: Step4OrgDocsProps) {
   return (
     <div className="space-y-4">
-      <p className="text-sm text-[var(--ep-graphite)]">
+      <p className="text-sm text-[var(--color-mkt-slate)]">
         Upload your organisation&apos;s legal documents.
         <span className="ml-1 opacity-70">· প্রতিষ্ঠানের আইনি দলিল আপলোড করুন।</span>
       </p>

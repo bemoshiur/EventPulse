@@ -80,16 +80,18 @@ function DocumentPreview({
   const [dimensions, setDimensions] = useState<string | null>(null)
 
   return (
-    <article className="rounded-2xl border border-[var(--ep-line)] bg-white/60 p-4">
+    <article className="rounded-2xl border border-[var(--color-mkt-line)] bg-white p-4">
       <header className="mb-3 flex items-center justify-between">
-        <h4 className="text-sm font-semibold text-[var(--ep-ink)]">{getDocLabel(docType)}</h4>
+        <h4 className="text-sm font-semibold text-[var(--color-mkt-ink)]">
+          {getDocLabel(docType)}
+        </h4>
         {checklistKey ? (
-          <label className="flex cursor-pointer items-center gap-2 text-xs text-[var(--ep-graphite)]">
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-[var(--color-mkt-slate)]">
             <input
               type="checkbox"
               checked={isChecked}
               onChange={(e) => onToggle(checklistKey, e.target.checked)}
-              className="h-4 w-4 rounded border-[var(--ep-line)]"
+              className="h-4 w-4 rounded border-[var(--color-mkt-line)]"
               aria-label={`Verified: ${getDocLabel(docType)}`}
             />
             Verified
@@ -104,14 +106,16 @@ function DocumentPreview({
             <img
               src={signedUrl}
               alt={`${getDocLabel(docType)} for this submission`}
-              className="max-h-96 w-full rounded-md border border-[var(--ep-line)] object-contain"
+              className="max-h-96 w-full rounded-md border border-[var(--color-mkt-line)] object-contain"
               onLoad={(e) => {
                 const img = e.currentTarget
                 setDimensions(`${img.naturalWidth} × ${img.naturalHeight}`)
               }}
             />
             {dimensions ? (
-              <p className="mt-1 text-xs text-[var(--ep-graphite)]">Dimensions: {dimensions}px</p>
+              <p className="mt-1 text-xs text-[var(--color-mkt-slate)]">
+                Dimensions: {dimensions}px
+              </p>
             ) : null}
           </div>
         ) : (
@@ -119,13 +123,13 @@ function DocumentPreview({
             href={signedUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-block rounded-md bg-[var(--ep-cerulean)]/10 px-3 py-2 text-sm text-[var(--ep-cerulean)] hover:bg-[var(--ep-cerulean)]/20"
+            className="inline-block rounded-md bg-[var(--color-mkt-red)]/10 px-3 py-2 text-sm text-[var(--color-mkt-red)] hover:bg-[var(--color-mkt-red)]/20"
           >
             Open PDF in new tab ↗
           </a>
         )
       ) : (
-        <p className="text-sm text-[var(--ep-rose)] italic">No signed URL available.</p>
+        <p className="text-sm text-[var(--color-mkt-red)] italic">No signed URL available.</p>
       )}
     </article>
   )
@@ -160,7 +164,7 @@ export function DocumentViewer({
   const docTypes = Object.keys(documents)
   if (docTypes.length === 0) {
     return (
-      <div className="rounded-2xl border border-[var(--ep-line)] bg-white/40 p-6 text-sm text-[var(--ep-graphite)]">
+      <div className="rounded-2xl border border-[var(--color-mkt-line)] bg-white p-6 text-sm text-[var(--color-mkt-slate)]">
         No documents uploaded.
       </div>
     )

@@ -46,19 +46,22 @@ export function ReviewerNotes({ submissionId, initialNotes }: Props) {
   return (
     <section
       aria-labelledby="reviewer-notes-heading"
-      className="rounded-2xl border border-[var(--ep-line)] bg-white/60 p-5"
+      className="rounded-2xl border border-[var(--color-mkt-line)] bg-white p-5"
     >
       <header className="mb-2 flex items-center justify-between">
-        <h3 id="reviewer-notes-heading" className="text-base font-semibold text-[var(--ep-ink)]">
+        <h3
+          id="reviewer-notes-heading"
+          className="text-base font-semibold text-[var(--color-mkt-ink)]"
+        >
           Reviewer notes
-          <span className="ml-2 text-xs font-normal text-[var(--ep-graphite)] italic">
+          <span className="ml-2 text-xs font-normal text-[var(--color-mkt-slate)] italic">
             Internal only — not shown to tenant
           </span>
         </h3>
         {mutation.isPending ? (
-          <span className="text-xs text-[var(--ep-graphite)]">Saving…</span>
+          <span className="text-xs text-[var(--color-mkt-slate)]">Saving…</span>
         ) : savedAt ? (
-          <span className="text-xs text-[var(--ep-mint)]">Saved</span>
+          <span className="text-xs text-[#059669]">Saved</span>
         ) : null}
       </header>
       <textarea
@@ -70,14 +73,14 @@ export function ReviewerNotes({ submissionId, initialNotes }: Props) {
         onBlur={handleBlur}
         placeholder="Record your verification process. e.g. 'Verified BIN against NBR VAT portal — active. Trade license registered 2018 but BIN is 13-digit which is the current format — consistent.'"
         rows={6}
-        className="w-full resize-y rounded-md border border-[var(--ep-line)] bg-white px-3 py-2 text-sm text-[var(--ep-ink)]"
+        className="w-full resize-y rounded-md border border-[var(--color-mkt-line)] bg-white px-3 py-2 text-sm text-[var(--color-mkt-ink)]"
       />
       {mutation.isError ? (
-        <p className="mt-2 text-xs text-[var(--ep-rose)]" role="alert">
+        <p className="mt-2 text-xs text-[var(--color-mkt-red)]" role="alert">
           Failed to save notes: {(mutation.error as Error).message}
         </p>
       ) : null}
-      <p className="mt-1 text-right text-xs text-[var(--ep-graphite)]">{notes.length} / 8000</p>
+      <p className="mt-1 text-right text-xs text-[var(--color-mkt-slate)]">{notes.length} / 8000</p>
     </section>
   )
 }

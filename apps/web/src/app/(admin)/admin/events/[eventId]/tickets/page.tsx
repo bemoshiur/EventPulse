@@ -13,9 +13,6 @@
 
 import { useParams } from 'next/navigation'
 
-import { GlassCard } from '@/components/ui/glass-card'
-import { GradientMesh } from '@/components/ui/gradient-mesh'
-
 import { useAdminEventTiers } from '@/hooks/use-admin-tiers'
 
 function formatBdt(paisa: string): string {
@@ -44,117 +41,118 @@ export default function AdminTicketTiersPage() {
 
   return (
     <main className="relative min-h-screen">
-      <GradientMesh />
       <div className="mx-auto max-w-5xl px-6 py-12">
         <header className="mb-8">
-          <h1 className="font-display text-ep-ink text-3xl font-semibold">
+          <h1 className="font-display text-mkt-ink text-3xl font-semibold">
             Ticket tiers — super-admin view
           </h1>
-          <p className="text-ep-graphite mt-1 text-sm">
+          <p className="text-mkt-slate mt-1 text-sm">
             Read-only inspection. The platform does not edit tenant tier configuration.
           </p>
         </header>
 
         {query.isPending && (
-          <GlassCard className="p-8">
-            <p className="text-ep-graphite text-sm">Loading tiers…</p>
-          </GlassCard>
+          <div className="mkt-card p-8">
+            <p className="text-mkt-slate text-sm">Loading tiers…</p>
+          </div>
         )}
 
         {query.isError && (
-          <GlassCard className="p-6" data-testid="admin-tier-error">
-            <p className="text-ep-rose text-sm" role="alert">
+          <div className="mkt-card p-6" data-testid="admin-tier-error">
+            <p className="text-mkt-red text-sm" role="alert">
               Failed to load: {(query.error as Error).message}
             </p>
-          </GlassCard>
+          </div>
         )}
 
         {query.data && (
           <>
-            <GlassCard className="mb-4 p-4" data-testid="admin-tier-event-summary">
-              <dl className="text-ep-graphite grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
+            <div className="mkt-card mb-4 p-4" data-testid="admin-tier-event-summary">
+              <dl className="text-mkt-slate grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
                 <div>
-                  <dt className="text-ep-graphite/70 text-xs">Event title</dt>
-                  <dd className="text-ep-ink">{query.data.event.title}</dd>
+                  <dt className="text-mkt-slate/70 text-xs">Event title</dt>
+                  <dd className="text-mkt-ink">{query.data.event.title}</dd>
                 </div>
                 <div>
-                  <dt className="text-ep-graphite/70 text-xs">Event ID</dt>
-                  <dd className="text-ep-ink font-mono text-xs">{query.data.event.id}</dd>
+                  <dt className="text-mkt-slate/70 text-xs">Event ID</dt>
+                  <dd className="text-mkt-ink font-mono text-xs">{query.data.event.id}</dd>
                 </div>
                 <div>
-                  <dt className="text-ep-graphite/70 text-xs">Tenant ID</dt>
-                  <dd className="text-ep-ink font-mono text-xs">{query.data.event.tenantId}</dd>
+                  <dt className="text-mkt-slate/70 text-xs">Tenant ID</dt>
+                  <dd className="text-mkt-ink font-mono text-xs">{query.data.event.tenantId}</dd>
                 </div>
               </dl>
-            </GlassCard>
+            </div>
 
             {query.data.tiers.length === 0 ? (
-              <GlassCard className="p-8 text-center">
-                <p className="text-ep-graphite text-sm">No tiers configured for this event.</p>
-              </GlassCard>
+              <div className="mkt-card p-8 text-center">
+                <p className="text-mkt-slate text-sm">No tiers configured for this event.</p>
+              </div>
             ) : (
               <ul className="grid grid-cols-1 gap-3" data-testid="admin-tier-list">
                 {query.data.tiers.map((tier) => {
                   const archived = tier.archivedAt !== null
                   return (
                     <li key={tier.id}>
-                      <GlassCard
-                        className={`p-5 ${archived ? 'opacity-60' : ''}`}
+                      <div
+                        className={`mkt-card p-5 ${archived ? 'opacity-60' : ''}`}
                         data-testid={`admin-tier-row-${tier.id}`}
                       >
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                              <h2 className="text-ep-ink text-lg font-semibold">{tier.name}</h2>
+                              <h2 className="text-mkt-ink text-lg font-semibold">{tier.name}</h2>
                               {tier.isComplimentary && (
-                                <span className="bg-ep-mint/20 text-ep-ink rounded-full px-2 py-0.5 text-xs">
+                                <span className="bg-ep-mint/20 text-mkt-ink rounded-full px-2 py-0.5 text-xs">
                                   Complimentary
                                 </span>
                               )}
                               {archived && (
-                                <span className="bg-ep-line/60 text-ep-graphite rounded-full px-2 py-0.5 text-xs">
+                                <span className="bg-ep-line/60 text-mkt-slate rounded-full px-2 py-0.5 text-xs">
                                   Archived
                                 </span>
                               )}
                             </div>
                             {tier.description && (
-                              <p className="text-ep-graphite mt-1 text-sm">{tier.description}</p>
+                              <p className="text-mkt-slate mt-1 text-sm">{tier.description}</p>
                             )}
-                            <dl className="text-ep-graphite mt-3 grid grid-cols-2 gap-x-6 gap-y-1 text-xs md:grid-cols-4">
+                            <dl className="text-mkt-slate mt-3 grid grid-cols-2 gap-x-6 gap-y-1 text-xs md:grid-cols-4">
                               <div>
-                                <dt className="text-ep-graphite/70">Price (BDT)</dt>
-                                <dd className="text-ep-ink font-mono">
+                                <dt className="text-mkt-slate/70">Price (BDT)</dt>
+                                <dd className="text-mkt-ink font-mono">
                                   {formatBdt(tier.pricePaisa)}
                                 </dd>
                               </div>
                               <div>
-                                <dt className="text-ep-graphite/70">Sold / capacity</dt>
-                                <dd className="text-ep-ink">
+                                <dt className="text-mkt-slate/70">Sold / capacity</dt>
+                                <dd className="text-mkt-ink">
                                   {tier.sold} / {tier.capacity}
                                 </dd>
                               </div>
                               <div>
-                                <dt className="text-ep-graphite/70">Sales start</dt>
-                                <dd className="text-ep-ink">{formatDateTime(tier.salesStartAt)}</dd>
+                                <dt className="text-mkt-slate/70">Sales start</dt>
+                                <dd className="text-mkt-ink">
+                                  {formatDateTime(tier.salesStartAt)}
+                                </dd>
                               </div>
                               <div>
-                                <dt className="text-ep-graphite/70">Sales end</dt>
-                                <dd className="text-ep-ink">{formatDateTime(tier.salesEndAt)}</dd>
+                                <dt className="text-mkt-slate/70">Sales end</dt>
+                                <dd className="text-mkt-ink">{formatDateTime(tier.salesEndAt)}</dd>
                               </div>
                               <div>
-                                <dt className="text-ep-graphite/70">Per order</dt>
-                                <dd className="text-ep-ink">
+                                <dt className="text-mkt-slate/70">Per order</dt>
+                                <dd className="text-mkt-ink">
                                   min {tier.minPerOrder} · max {tier.maxPerOrder}
                                 </dd>
                               </div>
                               <div>
-                                <dt className="text-ep-graphite/70">Sort</dt>
-                                <dd className="text-ep-ink">{tier.sortOrder}</dd>
+                                <dt className="text-mkt-slate/70">Sort</dt>
+                                <dd className="text-mkt-ink">{tier.sortOrder}</dd>
                               </div>
                             </dl>
                           </div>
                         </div>
-                      </GlassCard>
+                      </div>
                     </li>
                   )
                 })}

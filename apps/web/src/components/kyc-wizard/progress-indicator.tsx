@@ -59,9 +59,11 @@ export function ProgressIndicator({
               <span
                 className={cn(
                   'flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold transition-colors',
-                  isCurrent && 'bg-[var(--ep-violet)] text-white shadow-md',
-                  !isCurrent && isComplete && 'bg-[var(--ep-mint)] text-white',
-                  !isCurrent && !isComplete && 'bg-[var(--ep-line)] text-[var(--ep-graphite)]',
+                  isCurrent && 'text-mkt-ink bg-[var(--color-mkt-red)] shadow-md',
+                  !isCurrent && isComplete && 'text-mkt-ink bg-[#059669]',
+                  !isCurrent &&
+                    !isComplete &&
+                    'bg-[var(--color-mkt-line)] text-[var(--color-mkt-slate)]',
                 )}
                 aria-hidden
               >
@@ -70,12 +72,12 @@ export function ProgressIndicator({
               <span
                 className={cn(
                   'hidden text-xs font-medium sm:block',
-                  isCurrent ? 'text-[var(--ep-ink)]' : 'text-[var(--ep-graphite)]',
+                  isCurrent ? 'text-[var(--color-mkt-ink)]' : 'text-[var(--color-mkt-slate)]',
                 )}
               >
                 {step.label}
                 {step.labelBn ? (
-                  <span className="ml-1 text-[var(--ep-graphite)] opacity-70">
+                  <span className="ml-1 text-[var(--color-mkt-slate)] opacity-70">
                     · {step.labelBn}
                   </span>
                 ) : null}

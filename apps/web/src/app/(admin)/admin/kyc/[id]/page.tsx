@@ -32,7 +32,7 @@ export default function AdminKycDetailPage() {
       <div
         role="status"
         aria-live="polite"
-        className="rounded-2xl border border-[var(--ep-line)] bg-white/40 p-6 text-sm text-[var(--ep-graphite)]"
+        className="rounded-2xl border border-[var(--color-mkt-line)] bg-white p-6 text-sm text-[var(--color-mkt-slate)]"
       >
         {error
           ? `Failed to load submission: ${(error as Error).message}`
@@ -43,7 +43,7 @@ export default function AdminKycDetailPage() {
 
   return (
     <div className="space-y-6">
-      <nav aria-label="Breadcrumb" className="text-sm text-[var(--ep-graphite)]">
+      <nav aria-label="Breadcrumb" className="text-sm text-[var(--color-mkt-slate)]">
         <Link href="/admin/kyc" className="hover:underline">
           ← Back to queue
         </Link>
@@ -51,10 +51,10 @@ export default function AdminKycDetailPage() {
 
       <header className="flex items-start justify-between">
         <div>
-          <h2 className="text-2xl font-semibold text-[var(--ep-ink)]">
+          <h2 className="text-2xl font-semibold text-[var(--color-mkt-ink)]">
             Submission <code className="text-sm">{data.id.slice(0, 8)}</code>
           </h2>
-          <p className="mt-1 text-sm text-[var(--ep-graphite)]">
+          <p className="mt-1 text-sm text-[var(--color-mkt-slate)]">
             {data.submissionType} · {data.tierRequested} ·{' '}
             <span className="font-medium uppercase">{data.status}</span>
           </p>

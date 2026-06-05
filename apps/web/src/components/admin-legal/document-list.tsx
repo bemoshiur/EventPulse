@@ -16,7 +16,7 @@ export function LegalTrustDocumentList() {
 
   if (isLoading) {
     return (
-      <div className="rounded-2xl border border-[var(--ep-line)] bg-white/60 p-6 text-sm text-[var(--ep-graphite)]">
+      <div className="rounded-2xl border border-[var(--color-mkt-line)] bg-white p-6 text-sm text-[var(--color-mkt-slate)]">
         Loading documents…
       </div>
     )
@@ -26,7 +26,7 @@ export function LegalTrustDocumentList() {
     return (
       <div
         role="alert"
-        className="rounded-2xl border border-[var(--ep-rose)]/40 bg-[var(--ep-rose)]/5 p-5 text-sm text-[var(--ep-ink)]"
+        className="rounded-2xl border border-[var(--color-mkt-red)]/40 bg-[var(--color-mkt-red)]/5 p-5 text-sm text-[var(--color-mkt-ink)]"
       >
         Failed to load: {error.message}
       </div>
@@ -35,7 +35,7 @@ export function LegalTrustDocumentList() {
 
   if (!data || data.length === 0) {
     return (
-      <div className="rounded-2xl border border-[var(--ep-line)] bg-white/60 p-6 text-sm text-[var(--ep-graphite)]">
+      <div className="rounded-2xl border border-[var(--color-mkt-line)] bg-white p-6 text-sm text-[var(--color-mkt-slate)]">
         No documents yet. Run <code>pnpm --filter @eventpulse/api db:seed:legal-documents</code> to
         populate the 18 placeholders.
       </div>
@@ -68,35 +68,37 @@ function Group({
 }) {
   return (
     <section>
-      <h2 className="mb-3 text-xs font-semibold tracking-widest text-[var(--ep-graphite)] uppercase">
+      <h2 className="mb-3 text-xs font-semibold tracking-widest text-[var(--color-mkt-slate)] uppercase">
         {title} · {rows.length}
       </h2>
-      <ul className="divide-y divide-[var(--ep-line)] overflow-hidden rounded-2xl border border-[var(--ep-line)] bg-white/60">
+      <ul className="divide-y divide-[var(--color-mkt-line)] overflow-hidden rounded-2xl border border-[var(--color-mkt-line)] bg-white">
         {rows.map((row) => (
           <li key={row.slug}>
             <Link
               href={`/admin/legal-trust/${row.slug}`}
-              className="flex items-center justify-between gap-4 px-5 py-4 transition hover:bg-[var(--ep-mist)]"
+              className="flex items-center justify-between gap-4 px-5 py-4 transition hover:bg-[var(--color-mkt-soft)]"
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-3">
-                  <p className="truncate text-sm font-medium text-[var(--ep-ink)]">{row.title}</p>
+                  <p className="truncate text-sm font-medium text-[var(--color-mkt-ink)]">
+                    {row.title}
+                  </p>
                   {row.currentVersion.isDraft ? (
                     <span className="shrink-0 rounded-full bg-[var(--ep-amber)]/15 px-2 py-0.5 text-xs font-medium text-[var(--ep-amber)]">
                       Draft
                     </span>
                   ) : null}
                   {!row.hasCurrentVersion ? (
-                    <span className="shrink-0 rounded-full bg-[var(--ep-rose)]/15 px-2 py-0.5 text-xs font-medium text-[var(--ep-rose)]">
+                    <span className="shrink-0 rounded-full bg-[var(--color-mkt-red)]/15 px-2 py-0.5 text-xs font-medium text-[var(--color-mkt-red)]">
                       Unpublished
                     </span>
                   ) : null}
                 </div>
-                <p className="mt-1 truncate text-xs text-[var(--ep-graphite)]">
+                <p className="mt-1 truncate text-xs text-[var(--color-mkt-slate)]">
                   {row.canonicalUrlPath} · version {row.currentVersion.version}
                 </p>
               </div>
-              <span aria-hidden className="text-[var(--ep-graphite)]">
+              <span aria-hidden className="text-[var(--color-mkt-slate)]">
                 →
               </span>
             </Link>

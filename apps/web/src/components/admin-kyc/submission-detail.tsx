@@ -29,13 +29,13 @@ function FieldRow({ label, value, helper }: FieldRowProps) {
         ? value
         : JSON.stringify(value)
   return (
-    <div className="border-b border-[var(--ep-line)] py-3 last:border-b-0">
-      <div className="text-xs font-medium tracking-wide text-[var(--ep-graphite)] uppercase">
+    <div className="border-b border-[var(--color-mkt-line)] py-3 last:border-b-0">
+      <div className="text-xs font-medium tracking-wide text-[var(--color-mkt-slate)] uppercase">
         {label}
       </div>
-      <div className="mt-1 text-sm break-words text-[var(--ep-ink)]">{rendered}</div>
+      <div className="mt-1 text-sm break-words text-[var(--color-mkt-ink)]">{rendered}</div>
       {helper ? (
-        <div className="mt-1 text-xs text-[var(--ep-graphite)] italic">{helper}</div>
+        <div className="mt-1 text-xs text-[var(--color-mkt-slate)] italic">{helper}</div>
       ) : null}
     </div>
   )
@@ -43,8 +43,8 @@ function FieldRow({ label, value, helper }: FieldRowProps) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-[var(--ep-line)] bg-white/60 p-5">
-      <h3 className="mb-2 text-base font-semibold text-[var(--ep-ink)]">{title}</h3>
+    <section className="rounded-2xl border border-[var(--color-mkt-line)] bg-white p-5">
+      <h3 className="mb-2 text-base font-semibold text-[var(--color-mkt-ink)]">{title}</h3>
       <div>{children}</div>
     </section>
   )

@@ -25,7 +25,7 @@ export function Step3SignatoryDocs({
 }: Step3SignatoryDocsProps) {
   return (
     <div className="space-y-4">
-      <p className="text-sm text-[var(--ep-graphite)]">
+      <p className="text-sm text-[var(--color-mkt-slate)]">
         Upload the signatory&apos;s NID and a clear selfie photo.
         <span className="ml-1 opacity-70">· স্বাক্ষরকারীর এনআইডি ও সেলফি আপলোড করুন।</span>
       </p>

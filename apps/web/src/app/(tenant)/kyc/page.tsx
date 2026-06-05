@@ -24,7 +24,7 @@ export default function KycPage() {
   if (isLoading) {
     return (
       <div className="flex justify-center">
-        <div className="h-96 w-full max-w-3xl animate-pulse rounded-2xl bg-[var(--ep-line)]/40" />
+        <div className="h-96 w-full max-w-3xl animate-pulse rounded-2xl bg-[var(--color-mkt-line)]/40" />
       </div>
     )
   }

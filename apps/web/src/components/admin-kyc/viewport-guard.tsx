@@ -35,9 +35,11 @@ export function AdminViewportGuard({ children }: { children: React.ReactNode }) 
     return (
       <div
         role="alert"
-        className="rounded-2xl border border-[var(--ep-amber)]/40 bg-[var(--ep-amber)]/5 p-6 text-[var(--ep-graphite)]"
+        className="rounded-2xl border border-[var(--ep-amber)]/40 bg-[var(--ep-amber)]/5 p-6 text-[var(--color-mkt-slate)]"
       >
-        <h2 className="text-lg font-semibold text-[var(--ep-ink)]">Desktop screen required</h2>
+        <h2 className="text-lg font-semibold text-[var(--color-mkt-ink)]">
+          Desktop screen required
+        </h2>
         <p className="mt-2 text-sm">
           The KYC review queue is desktop-optimised. Please use a screen at least 1024px wide for
           accurate document review.

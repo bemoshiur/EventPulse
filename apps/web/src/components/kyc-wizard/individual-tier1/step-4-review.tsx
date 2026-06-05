@@ -21,11 +21,13 @@ interface Step4ReviewProps {
 
 function fieldRow(label: string, labelBn: string, value: string | undefined) {
   return (
-    <div className="flex justify-between gap-4 border-b border-[var(--ep-line)] py-2 last:border-b-0">
-      <dt className="text-sm font-medium text-[var(--ep-graphite)]">
+    <div className="flex justify-between gap-4 border-b border-[var(--color-mkt-line)] py-2 last:border-b-0">
+      <dt className="text-sm font-medium text-[var(--color-mkt-slate)]">
         {label} <span className="opacity-70">· {labelBn}</span>
       </dt>
-      <dd className="text-sm text-[var(--ep-ink)]">{value || <em className="opacity-50">—</em>}</dd>
+      <dd className="text-sm text-[var(--color-mkt-ink)]">
+        {value || <em className="opacity-50">—</em>}
+      </dd>
     </div>
   )
 }
@@ -62,17 +64,17 @@ export function Step4Review({
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-[var(--ep-graphite)]">
+      <p className="text-sm text-[var(--color-mkt-slate)]">
         Review your information before submitting. Once submitted, your application goes to our
         review team.
         <span className="ml-1 opacity-70">· জমা দেওয়ার আগে আপনার তথ্য যাচাই করুন।</span>
       </p>
 
       <section aria-labelledby="review-identity">
-        <h3 id="review-identity" className="text-base font-semibold text-[var(--ep-ink)]">
+        <h3 id="review-identity" className="text-base font-semibold text-[var(--color-mkt-ink)]">
           Identity <span className="opacity-70">· পরিচয়</span>
         </h3>
-        <dl className="mt-2 rounded-md border border-[var(--ep-line)] bg-white/40 px-4">
+        <dl className="mt-2 rounded-md border border-[var(--color-mkt-line)] bg-white px-4">
           {fieldRow('Full name', 'পুরো নাম', identity?.fullName)}
           {fieldRow('Date of birth', 'জন্ম তারিখ', identity?.dateOfBirth)}
           {fieldRow('NID number', 'এনআইডি নম্বর', maskNid(identity?.nidNumber))}
@@ -80,10 +82,10 @@ export function Step4Review({
       </section>
 
       <section aria-labelledby="review-address">
-        <h3 id="review-address" className="text-base font-semibold text-[var(--ep-ink)]">
+        <h3 id="review-address" className="text-base font-semibold text-[var(--color-mkt-ink)]">
           Address <span className="opacity-70">· ঠিকানা</span>
         </h3>
-        <dl className="mt-2 rounded-md border border-[var(--ep-line)] bg-white/40 px-4">
+        <dl className="mt-2 rounded-md border border-[var(--color-mkt-line)] bg-white px-4">
           {fieldRow('Address line 1', 'ঠিকানা ১', address?.addressLine1)}
           {address?.addressLine2
             ? fieldRow('Address line 2', 'ঠিকানা ২', address.addressLine2)
@@ -101,10 +103,10 @@ export function Step4Review({
       </section>
 
       <section aria-labelledby="review-financial">
-        <h3 id="review-financial" className="text-base font-semibold text-[var(--ep-ink)]">
+        <h3 id="review-financial" className="text-base font-semibold text-[var(--color-mkt-ink)]">
           Financial <span className="opacity-70">· আর্থিক</span>
         </h3>
-        <dl className="mt-2 rounded-md border border-[var(--ep-line)] bg-white/40 px-4">
+        <dl className="mt-2 rounded-md border border-[var(--color-mkt-line)] bg-white px-4">
           {fieldRow('Account type', 'অ্যাকাউন্টের ধরন', financial?.accountType)}
           {fieldRow('Account name', 'নাম', financial?.accountName)}
           {fieldRow('Account number', 'অ্যাকাউন্ট নম্বর', maskAccount(financial?.accountNumber))}
@@ -114,7 +116,7 @@ export function Step4Review({
       </section>
 
       <section aria-labelledby="review-documents">
-        <h3 id="review-documents" className="text-base font-semibold text-[var(--ep-ink)]">
+        <h3 id="review-documents" className="text-base font-semibold text-[var(--color-mkt-ink)]">
           Documents <span className="opacity-70">· দলিল</span>
         </h3>
         <ul className="mt-2 space-y-2">
@@ -123,16 +125,16 @@ export function Step4Review({
             return (
               <li
                 key={d.type}
-                className="flex items-center justify-between rounded-md border border-[var(--ep-line)] bg-white/40 px-4 py-2 text-sm"
+                className="flex items-center justify-between rounded-md border border-[var(--color-mkt-line)] bg-white px-4 py-2 text-sm"
               >
-                <span className="text-[var(--ep-graphite)]">
+                <span className="text-[var(--color-mkt-slate)]">
                   {d.label} <span className="opacity-70">· {d.labelBn}</span>
                 </span>
                 <span
                   className={
                     uploaded
-                      ? 'text-sm font-semibold text-[var(--ep-mint)]'
-                      : 'text-sm font-semibold text-[var(--ep-rose)]'
+                      ? 'text-sm font-semibold text-[#059669]'
+                      : 'text-sm font-semibold text-[var(--color-mkt-red)]'
                   }
                 >
                   {uploaded ? '✓ Uploaded' : '✗ Missing'}
@@ -146,7 +148,7 @@ export function Step4Review({
       {submitError ? (
         <div
           role="alert"
-          className="rounded-md border border-[var(--ep-rose)]/40 bg-[var(--ep-rose)]/5 p-3 text-sm text-[var(--ep-rose)]"
+          className="rounded-md border border-[var(--color-mkt-red)]/40 bg-[var(--color-mkt-red)]/5 p-3 text-sm text-[var(--color-mkt-red)]"
         >
           {submitError}
         </div>
