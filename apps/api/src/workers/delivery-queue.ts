@@ -15,7 +15,8 @@
  *     re-loads everything from the DB (no stale snapshot risk; the
  *     order may have moved through additional state by the time the
  *     job runs).
- *   - **Job id**: `delivery:${orderId}`. BullMQ dedupes by jobId, so
+ *   - **Job id**: `delivery-${orderId}` (hyphen, NOT colon — BullMQ forbids
+ *     ':' in custom job IDs). BullMQ dedupes by jobId, so
  *     enqueueing twice for the same order is a no-op. This is the
  *     enqueue-side idempotency guard; the service-side guard
  *     (`order.delivery_sent` event marker) is the durable one.
@@ -128,7 +129,11 @@ export async function enqueueOrderDelivery(input: DeliveryJobData): Promise<Enqu
     return { enqueued: false, reason: 'no_redis' }
   }
 
-  const jobId = `delivery:${input.orderId}`
+  // BullMQ rejects custom job IDs containing ':' (it's BullMQ's Redis-key
+  // separator → "Custom Id cannot contain :"). Use '-'. Caught by the
+  // 2026-06-05 go-live smoke: a real paid order failed to enqueue delivery
+  // (no ticket email) on `delivery:${orderId}`.
+  const jobId = `delivery-${input.orderId}`
   try {
     const job = await queue.add(DELIVERY_JOB_NAME, input, { jobId })
     logger.info({ orderId: input.orderId, jobId: job.id }, 'tickets.delivery_queue.enqueued')
