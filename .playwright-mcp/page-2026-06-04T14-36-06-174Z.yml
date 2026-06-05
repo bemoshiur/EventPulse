@@ -1,0 +1,882 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "TenderPulse — back to top" [ref=e5] [cursor=pointer]:
+          - /url: /#hero
+          - generic [ref=e8]: TenderPulse
+        - navigation [ref=e9]:
+          - link "Platform" [ref=e10] [cursor=pointer]:
+            - /url: "#platform"
+          - link "Use cases" [ref=e11] [cursor=pointer]:
+            - /url: "#use-cases"
+          - link "Security" [ref=e12] [cursor=pointer]:
+            - /url: "#security"
+          - link "Pricing" [ref=e13] [cursor=pointer]:
+            - /url: /pricing
+          - link "Resources" [ref=e14] [cursor=pointer]:
+            - /url: "#resources"
+      - navigation [ref=e15]:
+        - link "Sign in" [ref=e16] [cursor=pointer]:
+          - /url: /login
+          - button "Sign in" [ref=e17]
+        - button "Start for free" [ref=e18]
+        - link "Book a demo" [ref=e19] [cursor=pointer]:
+          - /url: /book-a-demo
+          - button "Book a demo" [ref=e20]:
+            - generic [ref=e21]: Book a demo
+    - generic [ref=e24]:
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - img [ref=e27]
+          - text: বাংলাদেশ e-GP · PPR ২০০৮ ready
+        - heading "যেকোনো টেন্ডার বুঝুন ৩ মিনিটে।" [level=1] [ref=e30]:
+          - generic [ref=e31]: যেকোনো টেন্ডার বুঝুন ৩ মিনিটে।
+        - paragraph [ref=e32]: Upload any e-GP tender ZIP — bid-ready brief in 3 minutes.
+      - paragraph [ref=e34]:
+        - text: আপনার e-GP ZIP আপলোড করুন। TenderPulse প্রতিটি ফাইল পড়ে এবং একটি
+        - strong [ref=e35]: স্পষ্ট, bid-ready brief — eligibility, BOQ, deadline এবং PPR ২০০৮ clause
+        - text: — সব বাংলায় ব্যাখ্যা করে দেয় যাতে আপনার পুরো টিম প্রতিটি টেন্ডার বুঝতে পারে।
+      - generic [ref=e36]:
+        - generic [ref=e37]:
+          - button "Start for free" [ref=e38]:
+            - img
+            - text: Start for free
+            - img
+          - link "Book a demo" [ref=e39] [cursor=pointer]:
+            - /url: /book-a-demo
+            - button "Book a demo" [ref=e40]:
+              - img
+              - text: Book a demo
+        - paragraph [ref=e41]:
+          - generic [ref=e42]:
+            - img [ref=e43]
+            - text: No credit card · কার্ড লাগবে না
+          - generic [ref=e46]:
+            - img [ref=e47]
+            - text: 2 tenders free · ২টি tender ফ্রি
+          - generic [ref=e50]:
+            - img [ref=e51]
+            - text: AES-256 encrypted secure cloud
+      - generic [ref=e55]:
+        - img [ref=e56]
+        - generic [ref=e59]: AES-256 / KMS encrypted · Aligned with ISO 27001 / SOC 2 controls · BD DSA 2018 + draft PDPA compliant
+      - generic [ref=e62]:
+        - generic [ref=e63]:
+          - img [ref=e64]
+          - text: Ask the AI
+        - heading "Not sure how TenderPulse fits your team?" [level=3] [ref=e67]
+        - paragraph [ref=e68]: Let your favourite assistant give you a clear, neutral answer — we’ll happily compete on the merits.
+        - generic [ref=e69]:
+          - link "Ask ChatGPT" [ref=e70] [cursor=pointer]:
+            - /url: https://chatgpt.com/?q=How%20can%20TenderPulse%20(https%3A%2F%2Ftenderpulse.com.bd)%20help%20my%20Bangladesh%20bidding%20team%20prepare%20e-GP%20tenders%20faster%20while%20staying%20PPR%202008%20compliant%3F%20Walk%20me%20through%20the%20workflow%20and%20pricing.
+            - button "Ask ChatGPT" [ref=e71]:
+              - img
+              - text: Ask ChatGPT
+          - link "Ask Claude" [ref=e72] [cursor=pointer]:
+            - /url: https://claude.ai/new?q=How%20can%20TenderPulse%20(https%3A%2F%2Ftenderpulse.com.bd)%20help%20my%20Bangladesh%20bidding%20team%20prepare%20e-GP%20tenders%20faster%20while%20staying%20PPR%202008%20compliant%3F%20Walk%20me%20through%20the%20workflow%20and%20pricing.
+            - button "Ask Claude" [ref=e73]:
+              - img
+              - text: Ask Claude
+          - link "Book a demo" [ref=e74] [cursor=pointer]:
+            - /url: /book-a-demo
+            - button "Book a demo" [ref=e75]:
+              - text: Book a demo
+              - img
+      - generic [ref=e77]:
+        - generic [ref=e78]:
+          - generic [ref=e83]: tenderpulse · /tenders/lged-145m
+          - generic [ref=e84]:
+            - generic [ref=e85]:
+              - generic [ref=e86]: LGED · মুন্সিগঞ্জ-সিরাজদিখান সড়ক
+              - generic [ref=e87]: Construction of Two-lane Road from Munshigonj to Sirajdikhan
+              - generic [ref=e88]: Local Government Engineering Department · Est. BDT 145,000,000
+              - generic [ref=e89]:
+                - paragraph [ref=e90]: এক নজরে। আপনার ৩টি সরকারি প্রকল্পের অভিজ্ঞতা শক্ত — কিন্তু tender-এর মূল্য আপনার সবচেয়ে বড় প্রকল্পকে ছাড়িয়ে যায়। Bid-এর আগে আর্থিক সক্ষমতা ও bonding capacity শক্ত করতে হবে।
+                - list [ref=e91]:
+                  - listitem [ref=e92]:
+                    - img [ref=e93]
+                    - text: Min similar work BDT 25M ✓ (45M, 32M প্রকল্প যোগ্য)
+                  - listitem [ref=e96]:
+                    - img [ref=e97]
+                    - text: Min turnover BDT 75M — bank solvency cert প্রয়োজন
+                  - listitem [ref=e99]:
+                    - img [ref=e100]
+                    - text: "Bid security: BDT 2,900,000 (২%), 90 দিন বৈধতা"
+            - generic [ref=e103]:
+              - generic [ref=e104]: Fit score
+              - generic [ref=e105]:
+                - img [ref=e106]
+                - generic [ref=e109]:
+                  - generic [ref=e110]: "72"
+                  - generic [ref=e111]: / 100
+              - generic [ref=e112]: বিড করার যোগ্য
+        - paragraph [ref=e113]: একটি আসল LGED tender থেকে নেওয়া output · ১ মিনিট ৪৭ সেকেন্ডে · ~BDT ৮ compute cost
+    - generic [ref=e115]:
+      - generic [ref=e116]:
+        - generic [ref=e117]: Trusted by Bangladesh’s bid teams · Bangladesh-এর bid টিমের জন্য
+        - paragraph [ref=e118]: From road contractors and ICT vendors to medical-equipment suppliers — bid managers across Bangladesh’s e-GP ecosystem run preparation on TenderPulse.
+      - generic [ref=e119]:
+        - generic [ref=e120]: LGED
+        - generic [ref=e122]: RHD
+        - generic [ref=e124]: DPHE
+        - generic [ref=e126]: BPDB
+        - generic [ref=e128]: BWDB
+        - generic [ref=e130]: BTCL
+        - generic [ref=e132]: DSCC
+        - generic [ref=e134]: DNCC
+        - generic [ref=e136]: BR
+        - generic [ref=e138]: BIWTA
+        - generic [ref=e140]: Public Universities
+        - generic [ref=e142]: Ministry of Health
+    - generic [ref=e144]:
+      - generic [ref=e145]:
+        - generic [ref=e146]: The bidding challenge
+        - heading "Bangladesh bid teams drown in tender paperwork." [level=2] [ref=e147]
+        - paragraph [ref=e148]: The slowest part of bidding isn’t the bid — it’s reading the tender. Every wasted prep hour is a tender your team couldn’t submit.
+      - generic [ref=e149]:
+        - generic [ref=e151]:
+          - img [ref=e153]
+          - heading "200-page ZIPs are eating your week." [level=3] [ref=e157]
+          - generic [ref=e158]: একটি ZIP-এই এক সপ্তাহ চলে যায়
+          - paragraph [ref=e159]: "A single e-GP ZIP can be 30+ files: TOR, ITB, BOQ, GCC, SCC, drawings, addenda. Reading them one by one takes a junior engineer 1–2 days — and you have a dozen tenders waiting in the pipeline."
+        - generic [ref=e161]:
+          - img [ref=e163]
+          - heading "Bid prep is slow, manual, and lossy." [level=3] [ref=e166]
+          - generic [ref=e167]: Bid প্রস্তুতি ধীরগতি ও ম্যানুয়াল
+          - paragraph [ref=e168]: Eligibility hunted in spreadsheets. BOQ rates hand-typed from scanned PDFs. Deadlines tracked on WhatsApp. Half your shortlisted tenders never get submitted because the prep didn't finish in time.
+        - generic [ref=e170]:
+          - img [ref=e172]
+          - heading "Bangla teams, English-heavy ITBs." [level=3] [ref=e176]
+          - generic [ref=e177]: বাংলা টিম, ইংরেজি ITB
+          - paragraph [ref=e178]: Your site engineers work in Bangla. The ITB, technical specs and PPR 2008 references are in dense legal English. Translating every clause for every tender is an unwinnable battle.
+    - generic [ref=e180]:
+      - generic [ref=e181]:
+        - generic [ref=e182]: Built for Bangladesh bid teams
+        - heading "One copilot to prepare every bid." [level=2] [ref=e183]
+        - paragraph [ref=e184]: Connect your e-GP downloads, prepare bids in Bangla + English, and keep full control — without rebuilding your team’s workflow.
+      - generic [ref=e185]:
+        - generic [ref=e187]:
+          - img [ref=e189]
+          - generic [ref=e194]: Connect anything
+          - heading "Any e-GP ZIP. Any format. One brief." [level=3] [ref=e195]
+          - paragraph [ref=e196]: Native PDF, scanned PDF, DOCX, image — TenderPulse classifies every file inside the ZIP (TOR / ITB / BOQ / GCC / SCC) and extracts structured data. managed OCR service OCR for scanned BOQ; no manual prep required.
+          - generic [ref=e197]:
+            - link "Document classifier" [ref=e198] [cursor=pointer]:
+              - /url: "#platform"
+              - text: Document classifier
+              - img [ref=e199]
+            - link "BOQ extraction" [ref=e201] [cursor=pointer]:
+              - /url: "#platform"
+              - text: BOQ extraction
+              - img [ref=e202]
+            - link "OCR pipeline" [ref=e204] [cursor=pointer]:
+              - /url: "#platform"
+              - text: OCR pipeline
+              - img [ref=e205]
+        - generic [ref=e208]:
+          - img [ref=e210]
+          - generic [ref=e213]: Operate with humans + AI
+          - heading "Build bids with your team and a bilingual copilot." [level=3] [ref=e214]
+          - paragraph [ref=e215]: Bid managers and site engineers ask in Bangla — copilot answers in Bangla with the exact PPR 2008 rule cited. Profile vault + tender brief + your team's notes, all in one workspace.
+          - generic [ref=e216]:
+            - link "Bilingual copilot" [ref=e217] [cursor=pointer]:
+              - /url: "#platform"
+              - text: Bilingual copilot
+              - img [ref=e218]
+            - link "Workspace" [ref=e220] [cursor=pointer]:
+              - /url: "#platform"
+              - text: Workspace
+              - img [ref=e221]
+            - link "Multi-seat" [ref=e223] [cursor=pointer]:
+              - /url: "#platform"
+              - text: Multi-seat
+              - img [ref=e224]
+        - generic [ref=e227]:
+          - img [ref=e229]
+          - generic [ref=e232]: Stay safe and in control
+          - heading "Encrypted by default. Auditable end to end." [level=3] [ref=e233]
+          - paragraph [ref=e234]: Per-tenant row-level scoping, granular roles, full audit trail. Data stays in our private encrypted region — never crossing into other jurisdictions. Security architecture aligned with ISO 27001 and SOC 2 controls (formal attestation roadmap in progress); Bangladesh DSA 2018 + draft PDPA compliant.
+          - generic [ref=e235]:
+            - link "Roles & permissions" [ref=e236] [cursor=pointer]:
+              - /url: "#security"
+              - text: Roles & permissions
+              - img [ref=e237]
+            - link "Audit trail" [ref=e239] [cursor=pointer]:
+              - /url: "#security"
+              - text: Audit trail
+              - img [ref=e240]
+            - link "Certifications" [ref=e242] [cursor=pointer]:
+              - /url: "#security"
+              - text: Certifications
+              - img [ref=e243]
+    - generic [ref=e245]:
+      - generic [ref=e246]:
+        - generic [ref=e247]: The audit-ready, agile platform
+        - heading "Consolidate every tender your team relies on." [level=2] [ref=e248]
+        - paragraph [ref=e249]: From road construction to medical-equipment supply, TenderPulse handles every PPR-2008 procurement category with the same playbook.
+      - generic [ref=e250]:
+        - generic [ref=e252]:
+          - img [ref=e254]
+          - heading "Construction & infrastructure" [level=3] [ref=e259]
+          - generic [ref=e260]: নির্মাণ ও অবকাঠামো
+          - paragraph [ref=e261]: Roads, bridges, drainage, public buildings — full PPR 2008 works compliance, BOQ line-by-line, PCC / similar-work matching against the Project Completion Certificate.
+        - generic [ref=e263]:
+          - img [ref=e265]
+          - heading "Goods supply" [level=3] [ref=e269]
+          - generic [ref=e270]: পণ্য সরবরাহ
+          - paragraph [ref=e271]: Office equipment, vehicles, generators, machinery — manufacturer authorisation, warranty terms, delivery schedule and OEM-original eligibility automated from the ITB.
+        - generic [ref=e273]:
+          - img [ref=e275]
+          - heading "ICT & software" [level=3] [ref=e278]
+          - generic [ref=e279]: ICT ও সফটওয়্যার
+          - paragraph [ref=e280]: Software development, hardware procurement, cloud + SaaS bids — BASIS / BACCO membership gates, OEM partnership letters, technical certifications surfaced automatically.
+        - generic [ref=e282]:
+          - img [ref=e284]
+          - heading "Consulting & advisory" [level=3] [ref=e287]
+          - generic [ref=e288]: পরামর্শক সেবা
+          - paragraph [ref=e289]: PPR Section 4 quality + cost-based selection, key-personnel CV matching, expression-of-interest preparation. Tech-1 to Tech-5 pre-filled from your profile vault.
+        - generic [ref=e291]:
+          - img [ref=e293]
+          - heading "Healthcare equipment" [level=3] [ref=e296]
+          - generic [ref=e297]: স্বাস্থ্যসেবা সরঞ্জাম
+          - paragraph [ref=e298]: DGHS, MOHFW, hospital authorities — medical-device registration, BMDC clearance, cold-chain delivery commitments. Sensitive specs handled inside our encrypted region.
+        - generic [ref=e300]:
+          - img [ref=e302]
+          - heading "Education & books" [level=3] [ref=e305]
+          - generic [ref=e306]: শিক্ষা ও বই সরবরাহ
+          - paragraph [ref=e307]: NCTB, public universities, autonomous colleges — paper-quality samples, printing schedule, distribution coverage matched against the BOQ and tender notice.
+    - generic [ref=e309]:
+      - generic [ref=e310]:
+        - generic [ref=e311]: Data security
+        - heading "Your bid data never leaves our encrypted region." [level=2] [ref=e312]
+        - paragraph [ref=e313]: TenderPulse runs in a single private encrypted region with low latency to Bangladesh. Documents sit on encrypted-at-rest object storage; database is KMS-managed Postgres. Your tender ZIPs and financials are never used to train any third-party model.
+        - list [ref=e314]:
+          - listitem [ref=e315]:
+            - img [ref=e316]
+            - generic [ref=e319]: AES-256-GCM at rest · TLS 1.3 in flight · KMS-managed keys
+          - listitem [ref=e320]:
+            - img [ref=e321]
+            - generic [ref=e324]: Per-tenant row-level scoping — your team only sees your tenders
+          - listitem [ref=e325]:
+            - img [ref=e326]
+            - generic [ref=e329]: Full audit trail — every login, upload, AI run is recorded
+          - listitem [ref=e330]:
+            - img [ref=e331]
+            - generic [ref=e334]: Bangladesh DSA 2018 + draft PDPA compliant, SOC 2 sub-processors
+          - listitem [ref=e335]:
+            - img [ref=e336]
+            - generic [ref=e339]: Bangladesh Bank–licensed EPS gateway · we never see card / OTP / PIN
+        - generic [ref=e340]:
+          - generic [ref=e341]:
+            - img [ref=e342]
+            - text: AES-256
+          - generic [ref=e345]:
+            - img [ref=e346]
+            - text: TLS 1.3
+          - generic [ref=e349]:
+            - img [ref=e350]
+            - text: ISO 27001
+          - generic [ref=e353]:
+            - img [ref=e354]
+            - text: SOC 2
+          - generic [ref=e357]:
+            - img [ref=e358]
+            - text: DSA 2018
+          - generic [ref=e361]:
+            - img [ref=e362]
+            - text: PDPA-ready
+          - generic [ref=e365]:
+            - img [ref=e366]
+            - text: PCI DSS (via EPS)
+      - generic [ref=e370]:
+        - generic [ref=e371]:
+          - generic [ref=e372]: Audit log
+          - generic [ref=e373]: "tenant: tenderpulse"
+        - list [ref=e374]:
+          - listitem [ref=e375]:
+            - generic [ref=e377]:
+              - generic [ref=e378]: moshiur@ uploaded LGED-145M tender ZIP
+              - generic [ref=e379]: 2 min ago
+          - listitem [ref=e380]:
+            - generic [ref=e382]:
+              - generic [ref=e383]: fariha@ reviewed PPR rule 23 verdict (PASS)
+              - generic [ref=e384]: 8 min ago
+          - listitem [ref=e385]:
+            - generic [ref=e387]:
+              - generic [ref=e388]: ai-pipeline extracted 47 BOQ rows · OCR fallback
+              - generic [ref=e389]: 12 min ago
+          - listitem [ref=e390]:
+            - generic [ref=e392]:
+              - generic [ref=e393]: rakib@ exported eligibility brief to PDF
+              - generic [ref=e394]: 21 min ago
+          - listitem [ref=e395]:
+            - generic [ref=e397]:
+              - generic [ref=e398]: system rotated KMS data key (7-day cadence)
+              - generic [ref=e399]: 1 h ago
+        - generic [ref=e400]:
+          - img [ref=e401]
+          - text: Tamper-evident · 7-year retention
+    - generic [ref=e404]:
+      - generic [ref=e405]:
+        - generic [ref=e406]: Workflow
+        - heading "Build, prepare and control your bids. Fully secured." [level=2] [ref=e407]
+        - paragraph [ref=e408]: Forest-Admin-grade workflow rigour, applied to e-GP bid preparation — with full visibility from profile to submission.
+      - generic [ref=e409]:
+        - generic [ref=e411]:
+          - generic [ref=e412]:
+            - generic [ref=e413]: "01"
+            - generic [ref=e414]: Step
+          - img [ref=e416]
+          - heading "Define your company profile." [level=3] [ref=e421]
+          - generic [ref=e422]: প্রোফাইল তৈরি করুন
+          - paragraph [ref=e423]: Drop your trade license, audited financials, e-GP cert, past project PCC and key-personnel CVs. AI auto-fills your profile vault — the source of truth every future bid pulls from.
+        - generic [ref=e425]:
+          - generic [ref=e426]:
+            - generic [ref=e427]: "02"
+            - generic [ref=e428]: Step
+          - img [ref=e430]
+          - heading "Run the bid prep workflow." [level=3] [ref=e434]
+          - generic [ref=e435]: Bid প্রস্তুতি চালান
+          - paragraph [ref=e436]: Upload the e-GP ZIP. TenderPulse classifies every file, extracts eligibility + BOQ + deadlines, runs the PPR 2008 compliance engine and produces a fit score with named blocking and remediable gaps.
+        - generic [ref=e438]:
+          - generic [ref=e439]:
+            - generic [ref=e440]: "03"
+            - generic [ref=e441]: Step
+          - img [ref=e443]
+          - heading "Control every bid, end to end." [level=3] [ref=e446]
+          - generic [ref=e447]: প্রতি bid-এ পূর্ণ নিয়ন্ত্রণ
+          - paragraph [ref=e448]: Track active and submitted bids on one dashboard. Watch deadlines, review PPR verdicts, share workspaces with site engineers and finance — every action audit-logged.
+      - link "See it on a real LGED tender" [ref=e450] [cursor=pointer]:
+        - /url: /demo
+        - button "See it on a real LGED tender" [ref=e451]:
+          - img
+          - text: See it on a real LGED tender
+    - generic [ref=e453]:
+      - generic [ref=e454]:
+        - generic [ref=e455]: Bilingual copilot
+        - heading "Ask in Bangla. Get the answer with the rule." [level=2] [ref=e456]
+        - paragraph [ref=e457]: Copilot reads your active tender, your company profile and the top-5 most relevant Public Procurement Rules (PPR 2008). Every claim cites a specific rule number — the model never invents authority.
+        - list [ref=e458]:
+          - listitem [ref=e459]:
+            - img [ref=e460]
+            - generic [ref=e463]: Auto-detect EN / বাংলা — toggle anywhere.
+          - listitem [ref=e464]:
+            - img [ref=e465]
+            - generic [ref=e468]: Top-5 PPR rule retrieved per question (Cohere multilingual embeddings).
+          - listitem [ref=e469]:
+            - img [ref=e470]
+            - generic [ref=e473]: Streaming answer — no waiting for the full response.
+          - listitem [ref=e474]:
+            - img [ref=e475]
+            - generic [ref=e478]: Per-tender history saved — your whole team sees the thread.
+      - generic [ref=e479]:
+        - generic [ref=e480]:
+          - generic [ref=e481]: PPR 2008 কোপাইলট
+          - generic [ref=e482]:
+            - generic [ref=e483]: EN
+            - generic [ref=e484]: বাংলা
+        - generic [ref=e485]:
+          - generic [ref=e487]: এই টেন্ডারের জন্য কত টাকা জামানত লাগবে?
+          - generic [ref=e489]:
+            - text: বিধি ২৩ অনুযায়ী, এই টেন্ডারের জন্য দরপত্র জামানত প্রয়োজন।
+            - strong [ref=e490]: "জামানতের পরিমাণ:"
+            - text: "- অনুমিত মূল্যের ২% ="
+            - strong [ref=e491]: BDT 2,900,000
+            - text: "- ফরম্যাট: ব্যাংক গ্যারান্টি, পে অর্ডার, বা ডিমান্ড ড্রাফট"
+            - text: "- বৈধতা: জমাদানের তারিখ থেকে ৯০ দিন"
+        - generic [ref=e492]:
+          - generic [ref=e493]: JV করতে পারব কি?
+          - generic [ref=e494]: Am I eligible?
+          - generic [ref=e495]: কোন কাগজপত্র লাগবে?
+    - generic [ref=e496]:
+      - generic [ref=e497]:
+        - generic [ref=e498]: Customer stories
+        - heading "Bid teams tell it best." [level=2] [ref=e499]
+      - generic [ref=e500]:
+        - generic [ref=e501]:
+          - generic [ref=e502]:
+            - img [ref=e503]
+            - text: LGED civil contractor · Dhaka
+          - img [ref=e507]
+          - blockquote [ref=e510]: “We used to lose two-thirds of our shortlisted tenders to prep time. With TenderPulse, our junior engineers go from a 200-page ZIP to a clear bid-ready brief in under three minutes— every clause explained in Bangla, every BOQ row pre-extracted.”
+          - paragraph [ref=e511]: "Bid manager at a Dhaka-based civil contractor running ~40 LGED & RHD tenders per month. After 2 months on Pro plan: 3× more bids submitted, no missed deadlines."
+          - generic [ref=e512]:
+            - generic [ref=e513]: MR
+            - generic [ref=e514]:
+              - generic [ref=e515]: M. R.
+              - generic [ref=e516]: Bid manager · LGED & RHD contractor
+          - generic [ref=e517]:
+            - link "Book a demo" [ref=e518] [cursor=pointer]:
+              - /url: /book-a-demo
+              - button "Book a demo" [ref=e519]:
+                - text: Book a demo
+                - img
+            - link "See sample analysis" [ref=e520] [cursor=pointer]:
+              - /url: /demo
+              - button "See sample analysis" [ref=e521]:
+                - img
+                - text: See sample analysis
+        - generic [ref=e522]:
+          - generic [ref=e523]:
+            - generic [ref=e524]: 3×
+            - generic [ref=e525]: More bids submitted
+          - generic [ref=e526]:
+            - generic [ref=e527]: 3 min
+            - generic [ref=e528]: Average prep time
+            - generic [ref=e529]: from 1–2 days
+          - generic [ref=e530]:
+            - generic [ref=e531]: "0"
+            - generic [ref=e532]: Missed deadlines
+            - generic [ref=e533]: across 70+ tenders
+          - generic [ref=e534]:
+            - img [ref=e535]
+            - img [ref=e537]
+            - img [ref=e539]
+            - img [ref=e541]
+            - img [ref=e543]
+            - generic [ref=e545]: Internal NPS · representative composite
+    - generic [ref=e551]:
+      - generic [ref=e553]: ✦ TenderPulse · in numbers
+      - generic [ref=e554]:
+        - generic [ref=e556]:
+          - generic [ref=e558]:
+            - generic [ref=e559]: "0"
+            - generic [ref=e560]: min
+          - generic [ref=e561]: ZIP upload to bid-ready brief
+        - generic [ref=e563]:
+          - generic [ref=e567]: ৳0
+          - generic [ref=e568]: compute cost per tender
+        - generic [ref=e570]:
+          - generic [ref=e574]: 0 / 30
+          - generic [ref=e575]: PPR rules encoded today
+        - generic [ref=e577]:
+          - generic [ref=e580]: "0"
+          - generic [ref=e581]: languages — EN + বাংলা · cited
+    - generic [ref=e582]:
+      - generic [ref=e583]:
+        - generic [ref=e584]: Pricing · প্রাইসিং
+        - heading "Simple BDT pricing. No subscription trap." [level=2] [ref=e585]
+        - paragraph [ref=e586]: Every plan is a 30-day prepaid pass. We email 3 days before expiry — one click to renew on EPS. No auto-charge.
+      - generic [ref=e587]:
+        - generic [ref=e588]:
+          - generic [ref=e589]: Profile
+          - generic [ref=e590]:
+            - generic [ref=e591]: ৳999
+            - text: / 30 days
+          - generic [ref=e592]: +৳150 VAT · total ৳1,149
+          - list [ref=e593]:
+            - listitem [ref=e594]:
+              - img [ref=e595]
+              - generic [ref=e598]: 2 tenders / month + 50 AI queries
+            - listitem [ref=e599]:
+              - img [ref=e600]
+              - generic [ref=e603]: Company profile + document vault
+            - listitem [ref=e604]:
+              - img [ref=e605]
+              - generic [ref=e608]: Bilingual PPR 2008 copilot
+            - listitem [ref=e609]:
+              - img [ref=e610]
+              - generic [ref=e613]: Watermarked DOCX export
+            - listitem [ref=e614]:
+              - img [ref=e615]
+              - generic [ref=e618]: Up to 5 org-chart roles
+          - link "Start Profile" [ref=e619] [cursor=pointer]:
+            - /url: /billing/upgrade?plan=PROFILE
+            - button "Start Profile" [ref=e620]
+        - generic [ref=e621]:
+          - generic [ref=e622]: Most popular · জনপ্রিয়
+          - generic [ref=e623]: Starter
+          - generic [ref=e624]:
+            - generic [ref=e625]: ৳2,499
+            - text: / 30 days
+          - generic [ref=e626]: +৳375 VAT · total ৳2,874
+          - list [ref=e627]:
+            - listitem [ref=e628]:
+              - img [ref=e629]
+              - generic [ref=e632]: Everything in Profile
+            - listitem [ref=e633]:
+              - img [ref=e634]
+              - generic [ref=e637]: 8 tenders / month + 200 AI queries
+            - listitem [ref=e638]:
+              - img [ref=e639]
+              - generic [ref=e642]: 3 user seats · 15 GB vault
+            - listitem [ref=e643]:
+              - img [ref=e644]
+              - generic [ref=e647]: Branded DOCX with your letterhead
+            - listitem [ref=e648]:
+              - img [ref=e649]
+              - generic [ref=e652]: Org chart + team builder + RACI
+            - listitem [ref=e653]:
+              - img [ref=e654]
+              - generic [ref=e657]: Financial calculator (EMD · PG · cash-flow)
+          - link "Start Starter" [ref=e658] [cursor=pointer]:
+            - /url: /billing/upgrade?plan=STARTER
+            - button "Start Starter" [ref=e659]
+        - generic [ref=e660]:
+          - generic [ref=e661]: Pro
+          - generic [ref=e662]:
+            - generic [ref=e663]: ৳5,999
+            - text: / 30 days
+          - generic [ref=e664]: +৳900 VAT · total ৳6,899
+          - list [ref=e665]:
+            - listitem [ref=e666]:
+              - img [ref=e667]
+              - generic [ref=e670]: Everything in Starter
+            - listitem [ref=e671]:
+              - img [ref=e672]
+              - generic [ref=e675]: 25 tenders / month + unlimited AI queries
+            - listitem [ref=e676]:
+              - img [ref=e677]
+              - generic [ref=e680]: 8 user seats · 50 GB vault
+            - listitem [ref=e681]:
+              - img [ref=e682]
+              - generic [ref=e685]: Priority support
+            - listitem [ref=e686]:
+              - img [ref=e687]
+              - generic [ref=e690]: Versioned org charts + audit trail
+            - listitem [ref=e691]:
+              - img [ref=e692]
+              - generic [ref=e695]: Editor for generated DOCX templates
+          - link "Start Pro" [ref=e696] [cursor=pointer]:
+            - /url: /billing/upgrade?plan=PRO
+            - button "Start Pro" [ref=e697]
+        - generic [ref=e698]:
+          - generic [ref=e699]: Scale
+          - generic [ref=e700]:
+            - generic [ref=e701]: ৳14,999
+            - text: / 30 days
+          - generic [ref=e702]: +৳2250 VAT · total ৳17,249
+          - list [ref=e703]:
+            - listitem [ref=e704]:
+              - img [ref=e705]
+              - generic [ref=e708]: Everything in Pro
+            - listitem [ref=e709]:
+              - img [ref=e710]
+              - generic [ref=e713]: 100 tenders / month
+            - listitem [ref=e714]:
+              - img [ref=e715]
+              - generic [ref=e718]: 25 user seats · 200 GB vault
+            - listitem [ref=e719]:
+              - img [ref=e720]
+              - generic [ref=e723]: Multi-project-type org charts + RACI
+            - listitem [ref=e724]:
+              - img [ref=e725]
+              - generic [ref=e728]: Win/Loss analytics (Day 2+)
+            - listitem [ref=e729]:
+              - img [ref=e730]
+              - generic [ref=e733]: Dedicated success manager
+          - link "Start Scale" [ref=e734] [cursor=pointer]:
+            - /url: /billing/upgrade?plan=SCALE
+            - button "Start Scale" [ref=e735]
+    - generic [ref=e737]:
+      - generic [ref=e738]:
+        - generic [ref=e739]: Resources
+        - heading "Explore the latest resources." [level=2] [ref=e740]
+      - generic [ref=e741]:
+        - link "Guide PPR 2008 rule engine — what we encode and why. How we picked the first 8 rules to automate, what we surface as BLOCKING vs WARNING, and the roadmap to the full 30-rule corpus. Read more" [ref=e743] [cursor=pointer]:
+          - /url: /manual
+          - generic [ref=e744]:
+            - img [ref=e746]
+            - generic [ref=e749]: Guide
+          - heading "PPR 2008 rule engine — what we encode and why." [level=3] [ref=e750]
+          - paragraph [ref=e751]: How we picked the first 8 rules to automate, what we surface as BLOCKING vs WARNING, and the roadmap to the full 30-rule corpus.
+          - generic [ref=e752]:
+            - text: Read more
+            - img [ref=e753]
+        - link "Playbook The Bangladesh e-GP onboarding playbook. Trade license, TIN, BIN, audited financials, e-GP cert, PCC, BG line letter — what to upload, how the vault uses it, what a perfect profile looks like. Read more" [ref=e756] [cursor=pointer]:
+          - /url: /manual
+          - generic [ref=e757]:
+            - img [ref=e759]
+            - generic [ref=e762]: Playbook
+          - heading "The Bangladesh e-GP onboarding playbook." [level=3] [ref=e763]
+          - paragraph [ref=e764]: Trade license, TIN, BIN, audited financials, e-GP cert, PCC, BG line letter — what to upload, how the vault uses it, what a perfect profile looks like.
+          - generic [ref=e765]:
+            - text: Read more
+            - img [ref=e766]
+        - link "Live demo Watch a real LGED 145M tender analysed end to end. From ZIP upload to fit score, BOQ table and compliance verdict — 1 minute 47 seconds, zero sign-up. Read more" [ref=e769] [cursor=pointer]:
+          - /url: /demo
+          - generic [ref=e770]:
+            - img [ref=e772]
+            - generic [ref=e774]: Live demo
+          - heading "Watch a real LGED 145M tender analysed end to end." [level=3] [ref=e775]
+          - paragraph [ref=e776]: From ZIP upload to fit score, BOQ table and compliance verdict — 1 minute 47 seconds, zero sign-up.
+          - generic [ref=e777]:
+            - text: Read more
+            - img [ref=e778]
+    - generic [ref=e780]:
+      - generic [ref=e781]:
+        - generic [ref=e782]: FAQ
+        - heading "Everything you need to know." [level=2] [ref=e783]
+        - paragraph [ref=e784]:
+          - text: Can’t find your question?
+          - link "Book a demo with our team." [ref=e785] [cursor=pointer]:
+            - /url: /book-a-demo
+      - region [ref=e786]:
+        - heading "What is TenderPulse?" [level=3] [ref=e788]:
+          - button "What is TenderPulse?" [ref=e789]:
+            - text: What is TenderPulse?
+            - img
+        - heading "Does TenderPulse store or use my data to train AI models?" [level=3] [ref=e791]:
+          - button "Does TenderPulse store or use my data to train AI models?" [ref=e792]:
+            - text: Does TenderPulse store or use my data to train AI models?
+            - img
+        - heading "Which tender categories does TenderPulse support?" [level=3] [ref=e794]:
+          - button "Which tender categories does TenderPulse support?" [ref=e795]:
+            - text: Which tender categories does TenderPulse support?
+            - img
+        - heading "How do humans and AI collaborate inside TenderPulse?" [level=3] [ref=e797]:
+          - button "How do humans and AI collaborate inside TenderPulse?" [ref=e798]:
+            - text: How do humans and AI collaborate inside TenderPulse?
+            - img
+        - heading "How is TenderPulse different from a generic LLM or low-code tool?" [level=3] [ref=e800]:
+          - button "How is TenderPulse different from a generic LLM or low-code tool?" [ref=e801]:
+            - text: How is TenderPulse different from a generic LLM or low-code tool?
+            - img
+        - heading "Can I cancel?" [level=3] [ref=e803]:
+          - button "Can I cancel?" [ref=e804]:
+            - text: Can I cancel?
+            - img
+    - generic [ref=e807]:
+      - img [ref=e808]
+      - heading "Understand any tender in 3 minutes." [level=2] [ref=e812]
+      - paragraph [ref=e813]: যেকোনো e-GP টেন্ডার ZIP — bid-ready brief ৩ মিনিটে।
+      - paragraph [ref=e814]: 7-day free trial. 2 real tenders included. No card. Don’t renew — it cancels itself.
+      - generic [ref=e815]:
+        - link "Book a demo" [ref=e816] [cursor=pointer]:
+          - /url: /book-a-demo
+          - button "Book a demo" [ref=e817]:
+            - img
+            - text: Book a demo
+        - button "Start for free" [ref=e818]:
+          - text: Start for free
+          - img
+      - generic [ref=e819]:
+        - strong [ref=e820]: TenderPulse
+        - text: · AES-256 / KMS encrypted · ISO 27001 / SOC 2 aligned · Made in Dhaka 🇧🇩
+    - contentinfo [ref=e821]:
+      - generic [ref=e827]:
+        - generic [ref=e828]:
+          - generic [ref=e833]: আজই শুরু করুন · Start today
+          - heading "পরের tender ZIP-টি ৩ মিনিটে bid-ready করুন" [level=3] [ref=e834]
+          - paragraph [ref=e835]: ৭ দিনের ফ্রি ট্রায়াল · ক্রেডিট কার্ড লাগবে না · ২টি real tender included.
+        - generic [ref=e836]:
+          - link "লাইভ ডেমো" [ref=e837] [cursor=pointer]:
+            - /url: /demo
+            - text: লাইভ ডেমো
+            - img [ref=e838]
+          - button "ফ্রি ট্রায়াল" [ref=e840]:
+            - text: ফ্রি ট্রায়াল
+            - img [ref=e841]
+      - generic [ref=e844]:
+        - generic [ref=e845]:
+          - generic [ref=e846]:
+            - generic [ref=e849]: TenderPulse
+            - generic [ref=e851]: Bid-prep · বিড prep
+          - paragraph [ref=e852]: Bangladesh e-GP-র জন্য AI bid prep — upload a tender ZIP, get fit score, BOQ, deadlines, and PPR 2008 compliance in 3 minutes.
+          - generic [ref=e853]:
+            - generic [ref=e854]:
+              - img [ref=e856]
+              - text: Made in Dhaka · ঢাকা থেকে তৈরি
+            - generic [ref=e859]:
+              - img [ref=e861]
+              - text: ISO 27001 / SOC 2 aligned
+            - generic [ref=e864]:
+              - img [ref=e866]
+              - text: AES-256 · KMS-managed
+            - generic [ref=e869]:
+              - img [ref=e871]
+              - text: PPR 2008 ready
+          - generic [ref=e874]:
+            - link "LinkedIn — TenderPulse" [ref=e875] [cursor=pointer]:
+              - /url: https://www.linkedin.com/company/tender-pulse
+              - img [ref=e876]
+            - link "YouTube — TenderPulse Bangladesh" [ref=e878] [cursor=pointer]:
+              - /url: https://youtube.com/@tenderpulsebd
+              - img [ref=e879]
+            - link "Facebook — TenderPulse" [ref=e881] [cursor=pointer]:
+              - /url: https://www.facebook.com/TenderPulse.com.bd
+              - img [ref=e882]
+            - link "X (Twitter) — @tender_pulse" [ref=e884] [cursor=pointer]:
+              - /url: https://x.com/tender_pulse
+              - img [ref=e885]
+            - link "Email — help@tenderpulse.com.bd" [ref=e887] [cursor=pointer]:
+              - /url: mailto:help@tenderpulse.com.bd
+              - img [ref=e888]
+            - link "help@tenderpulse.com.bd" [ref=e891] [cursor=pointer]:
+              - /url: mailto:help@tenderpulse.com.bd
+        - generic [ref=e892]:
+          - generic [ref=e893]:
+            - generic [ref=e894]: পণ্য
+            - generic [ref=e895]: Product
+          - list [ref=e896]:
+            - listitem [ref=e897]:
+              - link "Live demo · ডেমো" [ref=e898] [cursor=pointer]:
+                - /url: /demo
+                - generic [ref=e899]: Live demo
+                - generic [ref=e900]: · ডেমো
+            - listitem [ref=e901]:
+              - link "Pricing · মূল্য" [ref=e902] [cursor=pointer]:
+                - /url: /pricing
+                - generic [ref=e903]: Pricing
+                - generic [ref=e904]: · মূল্য
+            - listitem [ref=e905]:
+              - link "AI credits" [ref=e906] [cursor=pointer]:
+                - /url: /credits
+                - generic [ref=e907]: AI credits
+            - listitem [ref=e908]:
+              - link "Free trial · ফ্রি ট্রায়াল" [ref=e909] [cursor=pointer]:
+                - /url: /signup
+                - generic [ref=e910]: Free trial
+                - generic [ref=e911]: · ফ্রি ট্রায়াল
+            - listitem [ref=e912]:
+              - link "Book a demo" [ref=e913] [cursor=pointer]:
+                - /url: /book-a-demo
+                - generic [ref=e914]: Book a demo
+            - listitem [ref=e915]:
+              - link "Features" [ref=e916] [cursor=pointer]:
+                - /url: /features
+                - generic [ref=e917]: Features
+            - listitem [ref=e918]:
+              - link "How it works" [ref=e919] [cursor=pointer]:
+                - /url: /how-it-works
+                - generic [ref=e920]: How it works
+        - generic [ref=e921]:
+          - generic [ref=e922]:
+            - generic [ref=e923]: রিসোর্স
+            - generic [ref=e924]: Resources
+          - list [ref=e925]:
+            - listitem [ref=e926]:
+              - link "Blog" [ref=e927] [cursor=pointer]:
+                - /url: /blog
+                - generic [ref=e928]: Blog
+            - listitem [ref=e929]:
+              - link "PPR 2008 engine" [ref=e930] [cursor=pointer]:
+                - /url: /ppr-2008
+                - generic [ref=e931]: PPR 2008 engine
+            - listitem [ref=e932]:
+              - link "User manual · ম্যানুয়াল" [ref=e933] [cursor=pointer]:
+                - /url: /manual
+                - generic [ref=e934]: User manual
+                - generic [ref=e935]: · ম্যানুয়াল
+            - listitem [ref=e936]:
+              - link "Onboarding guide" [ref=e937] [cursor=pointer]:
+                - /url: /how-it-works
+                - generic [ref=e938]: Onboarding guide
+            - listitem [ref=e939]:
+              - link "FAQ" [ref=e940] [cursor=pointer]:
+                - /url: /faq
+                - generic [ref=e941]: FAQ
+            - listitem [ref=e942]:
+              - link "Sample analysis" [ref=e943] [cursor=pointer]:
+                - /url: /demo
+                - generic [ref=e944]: Sample analysis
+            - listitem [ref=e945]:
+              - link "Contact us · যোগাযোগ" [ref=e946] [cursor=pointer]:
+                - /url: /contact
+                - generic [ref=e947]: Contact us
+                - generic [ref=e948]: · যোগাযোগ
+        - generic [ref=e949]:
+          - generic [ref=e950]:
+            - generic [ref=e951]: ট্রাস্ট
+            - generic [ref=e952]: Trust
+          - list [ref=e953]:
+            - listitem [ref=e954]:
+              - link "Trust Center" [ref=e955] [cursor=pointer]:
+                - /url: /trust
+                - generic [ref=e956]: Trust Center
+            - listitem [ref=e957]:
+              - link "Security" [ref=e958] [cursor=pointer]:
+                - /url: /trust/security
+                - generic [ref=e959]: Security
+            - listitem [ref=e960]:
+              - link "SLA" [ref=e961] [cursor=pointer]:
+                - /url: /trust/sla
+                - generic [ref=e962]: SLA
+            - listitem [ref=e963]:
+              - link "Privacy" [ref=e964] [cursor=pointer]:
+                - /url: /privacy
+                - generic [ref=e965]: Privacy
+            - listitem [ref=e966]:
+              - link "Terms" [ref=e967] [cursor=pointer]:
+                - /url: /terms
+                - generic [ref=e968]: Terms
+            - listitem [ref=e969]:
+              - link "EULA" [ref=e970] [cursor=pointer]:
+                - /url: /eula
+                - generic [ref=e971]: EULA
+            - listitem [ref=e972]:
+              - link "DPA" [ref=e973] [cursor=pointer]:
+                - /url: /dpa
+                - generic [ref=e974]: DPA
+            - listitem [ref=e975]:
+              - link "Cookies" [ref=e976] [cursor=pointer]:
+                - /url: /cookies
+                - generic [ref=e977]: Cookies
+            - listitem [ref=e978]:
+              - link "Refund" [ref=e979] [cursor=pointer]:
+                - /url: /refund-policy
+                - generic [ref=e980]: Refund
+            - listitem [ref=e981]:
+              - link "Changelog" [ref=e982] [cursor=pointer]:
+                - /url: /legal/changelog
+                - generic [ref=e983]: Changelog
+      - generic [ref=e985]:
+        - generic [ref=e986]: Trust dossier · ট্রাস্ট
+        - list [ref=e987]:
+          - listitem [ref=e988]:
+            - generic [ref=e989]:
+              - strong [ref=e990]: ISO 27001
+              - generic [ref=e991]: · controls aligned · attestation in progress
+          - listitem [ref=e992]:
+            - generic [ref=e994]:
+              - strong [ref=e995]: SOC 2
+              - generic [ref=e996]: · controls aligned · attestation in progress
+          - listitem [ref=e997]:
+            - generic [ref=e999]:
+              - strong [ref=e1000]: PPR 2008
+              - generic [ref=e1001]: · rule engine encoded
+          - listitem [ref=e1002]:
+            - generic [ref=e1004]:
+              - strong [ref=e1005]: DSA 2018
+              - generic [ref=e1006]: · + draft PDPA aligned
+          - listitem [ref=e1007]:
+            - generic [ref=e1009]:
+              - strong [ref=e1010]: GDPR Art. 28
+              - generic [ref=e1011]: · DPA available
+          - listitem [ref=e1012]:
+            - generic [ref=e1014]:
+              - strong [ref=e1015]: AES-256 / KMS
+              - generic [ref=e1016]: · at rest
+          - listitem [ref=e1017]:
+            - generic [ref=e1019]:
+              - strong [ref=e1020]: TLS 1.3
+              - generic [ref=e1021]: · in flight
+        - generic [ref=e1022]: Operational
+      - paragraph [ref=e1026]:
+        - text: Data resides in our private encrypted region with low Bangladesh latency. Per-tenant row-level scoping, KMS-managed keys, never used to train any third-party model.
+        - link "Read the security stance" [ref=e1027] [cursor=pointer]:
+          - /url: /trust/security
+        - text: .
+      - generic [ref=e1029]:
+        - paragraph [ref=e1030]:
+          - text: © 2026
+          - strong [ref=e1031]: TenderPulse
+          - text: ·Dhaka, Bangladesh·সর্বস্বত্ব সংরক্ষিত · All rights reserved
+        - generic [ref=e1032]:
+          - group "Switch language" [ref=e1033]:
+            - button "Switch to English" [ref=e1034]: EN
+            - button "Switch to বাংলা" [pressed] [ref=e1035]: বাংলা
+          - link "Changelog" [ref=e1036] [cursor=pointer]:
+            - /url: /legal/changelog
+          - link "Sub-processors" [ref=e1037] [cursor=pointer]:
+            - /url: /trust/sub-processors
+          - link "Vulnerability disclosure" [ref=e1038] [cursor=pointer]:
+            - /url: /trust/security/disclosure
+          - link "help@tenderpulse.com.bd" [ref=e1039] [cursor=pointer]:
+            - /url: mailto:help@tenderpulse.com.bd
+    - button "Ask the product assistant" [ref=e1040]:
+      - img [ref=e1042]
+      - generic [ref=e1046]: Ask TenderPulse
+  - region "Notifications alt+T"
+  - alert [ref=e1047]

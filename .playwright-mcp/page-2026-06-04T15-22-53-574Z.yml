@@ -1,0 +1,284 @@
+- main [ref=e2]:
+  - navigation "Primary" [ref=e3]:
+    - generic [ref=e4]:
+      - link "Event Pulse" [ref=e5] [cursor=pointer]:
+        - /url: /
+        - text: Event Pulse
+      - list [ref=e7]:
+        - listitem [ref=e8]:
+          - link "Features" [ref=e9] [cursor=pointer]:
+            - /url: /features
+        - listitem [ref=e10]:
+          - link "Pricing" [ref=e11] [cursor=pointer]:
+            - /url: /pricing
+        - listitem [ref=e12]:
+          - link "Trust" [ref=e13] [cursor=pointer]:
+            - /url: /trust
+        - listitem [ref=e14]:
+          - link "Contact" [ref=e15] [cursor=pointer]:
+            - /url: /contact
+      - generic [ref=e16]:
+        - link "Sign in" [ref=e17] [cursor=pointer]:
+          - /url: /sign-in
+        - link "Get started" [ref=e18] [cursor=pointer]:
+          - /url: /sign-up
+  - generic [ref=e20]:
+    - generic [ref=e21]:
+      - text: Built for Bangladesh · EPS-ready ·
+      - generic [ref=e23]: বাংলায়
+    - heading "Run your event. Get paid in 5 days." [level=1] [ref=e24]
+    - paragraph [ref=e25]: আপনার ইভেন্ট চালান — ব্র্যান্ডেড পেজ, টিকিট বিক্রি, আর ৫ দিনে টাকা বুঝে নিন।
+    - paragraph [ref=e26]:
+      - text: "Event Pulse turns a tangle of spreadsheets, bKash screenshots and WhatsApp lists into one clean flow: a"
+      - strong [ref=e27]: branded event page
+      - text: ", a custom registration form, EPS checkout, QR check-in, and automated"
+      - strong [ref=e28]: T+5 payouts
+      - text: — at a transparent 0.25%.
+    - generic [ref=e29]:
+      - link "Create your first event" [ref=e30] [cursor=pointer]:
+        - /url: /sign-up
+      - link "See pricing" [ref=e31] [cursor=pointer]:
+        - /url: /pricing
+    - paragraph [ref=e32]: Free events are instant. No setup fee, no monthly minimum. KYC only when you sell paid tickets.
+  - generic [ref=e34]:
+    - paragraph [ref=e35]: Made for every kind of organiser · সব আয়োজকের জন্য
+    - list [ref=e36]:
+      - listitem [ref=e37]: Concert promoters
+      - listitem [ref=e38]: Universities
+      - listitem [ref=e39]: Alumni associations
+      - listitem [ref=e40]: Tech conferences
+      - listitem [ref=e41]: NGOs & nonprofits
+      - listitem [ref=e42]: Corporate events
+      - listitem [ref=e43]: Comedy clubs
+      - listitem [ref=e44]: Sports leagues
+  - generic [ref=e46]:
+    - generic [ref=e47]:
+      - paragraph [ref=e48]: The organiser’s headache
+      - heading "Selling tickets in Bangladesh is harder than the event itself." [level=2] [ref=e49]
+      - paragraph [ref=e50]: The work that drains your team isn’t the show — it’s everything around the ticket. Here’s what we replace.
+    - generic [ref=e51]:
+      - generic [ref=e52]:
+        - heading "Registration lives in spreadsheets." [level=3] [ref=e53]
+        - paragraph [ref=e54]: রেজিস্ট্রেশন স্প্রেডশিটে আটকে
+        - paragraph [ref=e55]: Google Forms for sign-ups, bKash screenshots for payment, a WhatsApp group for the guest list. Reconciling who actually paid eats the days you needed for the event itself.
+      - generic [ref=e56]:
+        - heading "Money moves through personal accounts." [level=3] [ref=e57]
+        - paragraph [ref=e58]: টাকা চলে ব্যক্তিগত অ্যাকাউন্টে
+        - paragraph [ref=e59]: Collections land in someone’s personal bKash with no audit trail, no settlement schedule, and no clean way to split fees or refund a buyer. Trust breaks before the event starts.
+      - generic [ref=e60]:
+        - heading "The gate is chaos. Tickets get faked." [level=3] [ref=e61]
+        - paragraph [ref=e62]: গেটে বিশৃঙ্খলা, ভুয়া টিকিট
+        - paragraph [ref=e63]: Screenshot “tickets” get forwarded and reused. Volunteers check names against a printed list while a queue builds. You have no idea who showed up until it’s over.
+  - generic [ref=e65]:
+    - generic [ref=e66]:
+      - paragraph [ref=e67]: One platform, end to end
+      - heading "Everything from the first ticket to the final payout." [level=2] [ref=e68]
+    - generic [ref=e69]:
+      - generic [ref=e70]:
+        - paragraph [ref=e71]: Sell anywhere
+        - heading "Branded pages. Custom forms. Your domain." [level=3] [ref=e72]
+        - paragraph [ref=e73]: Spin up a beautiful event page with your logo and colours, design the exact registration form you need — text, NID, file upload, conditional logic — and put it on your own domain. Share one link, sell everywhere.
+      - generic [ref=e74]:
+        - paragraph [ref=e75]: Run with your team
+        - heading "Roles, an attendee CRM, and a web check-in scanner." [level=3] [ref=e76]
+        - paragraph [ref=e77]: Invite your team with the right access — owner, editor, scanner, finance. Search and export attendees. At the gate, scan QR tickets from any phone browser; every check-in is instant and de-duplicated.
+      - generic [ref=e78]:
+        - paragraph [ref=e79]: Get paid safely
+        - heading "EPS checkout, escrow, and automated T+5 payouts." [level=3] [ref=e80]
+        - paragraph [ref=e81]: Buyers pay through EPS hosted checkout — never a personal wallet. Funds sit in escrow, and net proceeds settle to your bank or MFS account five business days after each sale. Refunds and reconciliation are built in.
+  - generic [ref=e83]:
+    - generic [ref=e84]:
+      - paragraph [ref=e85]: Use cases · ব্যবহার
+      - heading "Whatever you’re hosting, the same toolkit scales." [level=2] [ref=e86]
+      - paragraph [ref=e87]: From a 30-person workshop to a 5,000-seat concert — one workflow, one fee, one payout.
+    - generic [ref=e88]:
+      - generic [ref=e89]:
+        - heading "Concerts & live shows" [level=3] [ref=e90]
+        - paragraph [ref=e91]: কনসার্ট ও লাইভ শো
+        - paragraph [ref=e92]: Multiple ticket tiers, capacity caps, sales windows, and a fast gate. Sell thousands of tickets without your page falling over.
+      - generic [ref=e93]:
+        - heading "Conferences & summits" [level=3] [ref=e94]
+        - paragraph [ref=e95]: কনফারেন্স ও সামিট
+        - paragraph [ref=e96]: Collect designations, organisations, and dietary needs on custom forms. Per-tier pricing for delegates, students, and sponsors.
+      - generic [ref=e97]:
+        - heading "Workshops & training" [level=3] [ref=e98]
+        - paragraph [ref=e99]: ওয়ার্কশপ ও প্রশিক্ষণ
+        - paragraph [ref=e100]: Small-group caps, waitlists, and per-session check-in. Take registrations for a free or paid cohort in minutes.
+      - generic [ref=e101]:
+        - heading "Alumni & reunions" [level=3] [ref=e102]
+        - paragraph [ref=e103]: অ্যালামনাই ও পুনর্মিলনী
+        - paragraph [ref=e104]: Batch-wise pricing, family add-ons, and a clean guest list. Let your committee manage it together with shared access.
+      - generic [ref=e105]:
+        - heading "Sports & tournaments" [level=3] [ref=e106]
+        - paragraph [ref=e107]: খেলাধুলা ও টুর্নামেন্ট
+        - paragraph [ref=e108]: Team and spectator tickets, gate-wise check-in, and day-of capacity tracking across multiple entries.
+      - generic [ref=e109]:
+        - heading "Community & meetups" [level=3] [ref=e110]
+        - paragraph [ref=e111]: কমিউনিটি ও মিটআপ
+        - paragraph [ref=e112]: Free RSVP events publish instantly with no verification. Graduate to paid tickets the moment you’re ready to charge.
+  - generic [ref=e114]:
+    - generic [ref=e115]:
+      - paragraph [ref=e116]: How it works
+      - heading "Live in three steps." [level=2] [ref=e117]
+    - generic [ref=e118]:
+      - generic [ref=e119]:
+        - text: "01"
+        - heading "Create your event." [level=3] [ref=e120]
+        - paragraph [ref=e121]: ইভেন্ট তৈরি করুন
+        - paragraph [ref=e122]: Sign up with your email, pick an event type, and fill in the basics. A branded page is generated for you. Free events go live immediately — no verification.
+      - generic [ref=e123]:
+        - text: "02"
+        - heading "Open ticket sales." [level=3] [ref=e124]
+        - paragraph [ref=e125]: টিকিট বিক্রি শুরু করুন
+        - paragraph [ref=e126]: Add ticket tiers with prices, capacity, and sales windows. The moment you add a paid tier, a quick KYC step verifies you to handle money — then publish and share your link.
+      - generic [ref=e127]:
+        - text: "03"
+        - heading "Get paid in 5 days." [level=3] [ref=e128]
+        - paragraph [ref=e129]: ৫ দিনে টাকা বুঝে নিন
+        - paragraph [ref=e130]: Buyers pay via EPS. Attendees get QR tickets by email. You scan them in at the gate, and net proceeds land in your account T+5 — automatically, with a full statement.
+  - generic [ref=e133]:
+    - generic [ref=e134]:
+      - paragraph [ref=e135]: Your money, protected
+      - heading "A transparent 0.25%. Funds in escrow. Payouts on a schedule." [level=2] [ref=e136]
+      - paragraph [ref=e137]: Money is the part you can’t get wrong — so it’s the part we engineered hardest. Every taka is tracked from checkout to payout, and you always know exactly what you’ll receive.
+      - list [ref=e138]:
+        - listitem [ref=e139]:
+          - generic [ref=e140]: ✓
+          - text: Flat 0.25% platform fee — choose to absorb it or pass it to the buyer, per event.
+        - listitem [ref=e141]:
+          - generic [ref=e142]: ✓
+          - text: EPS gateway fees pass through at cost — we never mark them up.
+        - listitem [ref=e143]:
+          - generic [ref=e144]: ✓
+          - text: Collections held in escrow, separate from any personal account.
+        - listitem [ref=e145]:
+          - generic [ref=e146]: ✓
+          - text: Automated T+5 settlement with a full per-payout statement.
+        - listitem [ref=e147]:
+          - generic [ref=e148]: ✓
+          - text: Built-in refunds and EPS reconciliation — every figure auditable.
+    - generic [ref=e149]:
+      - paragraph [ref=e150]: Settlement preview · per ৳1,000 ticket
+      - generic [ref=e151]:
+        - generic [ref=e152]:
+          - term [ref=e153]: Ticket face value
+          - definition [ref=e154]: ৳1,000.00
+        - generic [ref=e155]:
+          - term [ref=e156]: Platform fee (0.25%)
+          - definition [ref=e157]: − ৳2.50
+        - generic [ref=e158]:
+          - term [ref=e159]: EPS gateway (pass-through)
+          - definition [ref=e160]: buyer pays
+        - generic [ref=e161]:
+          - term [ref=e162]: You receive (T+5)
+          - definition [ref=e163]: ৳997.50
+      - paragraph [ref=e164]: Illustrative. The live calculator shows every fee mode at checkout.
+  - generic [ref=e167]:
+    - generic [ref=e168]:
+      - paragraph [ref=e169]: 90s
+      - paragraph [ref=e170]: from sign-up to a live event page
+    - generic [ref=e171]:
+      - paragraph [ref=e172]: 0.25%
+      - paragraph [ref=e173]: flat platform fee — published, per transaction
+    - generic [ref=e174]:
+      - paragraph [ref=e175]: T+5
+      - paragraph [ref=e176]: business days to your bank or MFS account
+    - generic [ref=e177]:
+      - paragraph [ref=e178]: EN + বাংলা
+      - paragraph [ref=e179]: bilingual event pages for every buyer
+  - generic [ref=e182]:
+    - paragraph [ref=e183]: “We used to run alumni registration on three spreadsheets and a personal bKash. With Event Pulse, sales, the guest list, and the gate are one link — and the payout just arrives.”
+    - paragraph [ref=e184]: Organising committee · university reunion, ~1,200 attendees
+  - generic [ref=e187]:
+    - paragraph [ref=e188]: Pricing · প্রাইসিং
+    - heading "One number. No surprises." [level=2] [ref=e189]
+    - paragraph [ref=e190]: 0.25% per paid transaction. Free events are free, forever. EPS gateway fees pass through at cost, and you decide who carries them.
+    - generic [ref=e191]:
+      - link "See the full breakdown" [ref=e192] [cursor=pointer]:
+        - /url: /pricing
+      - link "Explore all features →" [ref=e193] [cursor=pointer]:
+        - /url: /features
+  - generic [ref=e195]:
+    - generic [ref=e196]:
+      - paragraph [ref=e197]: FAQ
+      - heading "Everything you need to know." [level=2] [ref=e198]
+    - generic [ref=e199]:
+      - group [ref=e200]:
+        - generic "What is Event Pulse?" [ref=e201] [cursor=pointer]:
+          - text: What is Event Pulse?
+          - generic [ref=e202]: +
+      - group [ref=e203]:
+        - generic "Do I need KYC to start?" [ref=e204] [cursor=pointer]:
+          - text: Do I need KYC to start?
+          - generic [ref=e205]: +
+      - group [ref=e206]:
+        - generic "How fast do I get paid?" [ref=e207] [cursor=pointer]:
+          - text: How fast do I get paid?
+          - generic [ref=e208]: +
+      - group [ref=e209]:
+        - generic "What does it cost?" [ref=e210] [cursor=pointer]:
+          - text: What does it cost?
+          - generic [ref=e211]: +
+      - group [ref=e212]:
+        - generic "Can I use my own domain and branding?" [ref=e213] [cursor=pointer]:
+          - text: Can I use my own domain and branding?
+          - generic [ref=e214]: +
+      - group [ref=e215]:
+        - generic "Is my buyers’ data safe?" [ref=e216] [cursor=pointer]:
+          - text: Is my buyers’ data safe?
+          - generic [ref=e217]: +
+  - generic [ref=e219]:
+    - heading "Your next event, live in 90 seconds." [level=2] [ref=e220]
+    - paragraph [ref=e221]: আজই শুরু করুন — ফ্রি ইভেন্ট সঙ্গে সঙ্গে লাইভ।
+    - paragraph [ref=e222]: Sign up with your email — free events publish instantly, paid events graduate through a quick KYC check before tickets go live.
+    - link "Start free" [ref=e224] [cursor=pointer]:
+      - /url: /sign-up
+  - generic [ref=e226]:
+    - generic [ref=e227]:
+      - generic [ref=e228]:
+        - link "Event Pulse" [ref=e229] [cursor=pointer]:
+          - /url: /
+          - text: Event Pulse
+        - paragraph [ref=e231]: Built for Bangladesh. Hosted by Public Pulse Agency · TiCON System Limited.
+      - generic [ref=e232]:
+        - heading "Product" [level=3] [ref=e233]
+        - list [ref=e234]:
+          - listitem [ref=e235]:
+            - link "Features" [ref=e236] [cursor=pointer]:
+              - /url: /features
+          - listitem [ref=e237]:
+            - link "Pricing" [ref=e238] [cursor=pointer]:
+              - /url: /pricing
+          - listitem [ref=e239]:
+            - link "What’s new" [ref=e240] [cursor=pointer]:
+              - /url: /legal/changelog
+      - generic [ref=e241]:
+        - heading "Company" [level=3] [ref=e242]
+        - list [ref=e243]:
+          - listitem [ref=e244]:
+            - link "Contact" [ref=e245] [cursor=pointer]:
+              - /url: /contact
+          - listitem [ref=e246]:
+            - link "Trust Center" [ref=e247] [cursor=pointer]:
+              - /url: /trust
+          - listitem [ref=e248]:
+            - link "Security disclosure" [ref=e249] [cursor=pointer]:
+              - /url: /trust/security/disclosure
+      - generic [ref=e250]:
+        - heading "Legal" [level=3] [ref=e251]
+        - list [ref=e252]:
+          - listitem [ref=e253]:
+            - link "Terms of Service" [ref=e254] [cursor=pointer]:
+              - /url: /terms
+          - listitem [ref=e255]:
+            - link "Privacy Policy" [ref=e256] [cursor=pointer]:
+              - /url: /privacy
+          - listitem [ref=e257]:
+            - link "Refund Policy" [ref=e258] [cursor=pointer]:
+              - /url: /refund-policy
+          - listitem [ref=e259]:
+            - link "Cookie Policy" [ref=e260] [cursor=pointer]:
+              - /url: /cookies
+    - generic [ref=e261]:
+      - generic [ref=e262]: © 2026 Public Pulse Agency · TiCON System Limited
+      - generic [ref=e263]: Dhaka, Bangladesh 🇧🇩

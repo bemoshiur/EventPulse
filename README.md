@@ -294,7 +294,7 @@ A unit of work is "done" only when (CLAUDE.md §25):
 
 ## Contact
 
-Project owner: **Moshiur Rahman**, Public Pulse Agency / TiCON System Limited.
+Project owner: **Moshiur Rahman**, Public Pulse Agency.
 
 - Sales / partnerships / press → public site contact form
 - Security disclosures → `security@eventpulse.com.bd` (72-hour response SLA)

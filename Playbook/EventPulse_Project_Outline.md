@@ -2,7 +2,7 @@
 
 ## Bangladesh's Event Ticketing & Registration SaaS — Comprehensive Project Outline & Depth Analysis
 
-**Prepared for:** S M Moshiur Rahman, Public Pulse Agency / TiCON System Limited
+**Prepared for:** S M Moshiur Rahman, Public Pulse Agency
 **Version:** 1.1 — Brand & White-Label Locked
 **Date:** 16 May 2026
 
@@ -16,7 +16,7 @@
 
 ## 1. Executive Summary
 
-Event Pulse is a multi-tenant SaaS ticketing and event registration platform purpose-built for Bangladesh, operated by Public Pulse Agency on TiCON System Limited's cloud infrastructure. The platform enables any organisation or individual — concert promoters, alumni associations, comedy clubs, conference hosts, community organisers, NGOs, religious groups, schools — to create a branded event landing page, design a custom registration or ticket purchase form via drag-and-drop tooling, accept payment through EPS (Easy Payment System) Bangladesh, and receive automated T+5 disbursement to a bank or MFS account.
+Event Pulse is a multi-tenant SaaS ticketing and event registration platform purpose-built for Bangladesh, operated by Public Pulse Agency. The platform enables any organisation or individual — concert promoters, alumni associations, comedy clubs, conference hosts, community organisers, NGOs, religious groups, schools — to create a branded event landing page, design a custom registration or ticket purchase form via drag-and-drop tooling, accept payment through EPS (Easy Payment System) Bangladesh, and receive automated T+5 disbursement to a bank or MFS account.
 
 The revenue model is intentionally lean and transparent: **0.25% platform fee on every successful paid transaction**, with EPS gateway charges passed through separately (a configurable choice between buyer-borne or organiser-borne, decided per event by the tenant).
 
@@ -903,7 +903,7 @@ Aligned with Public Pulse Agency's existing stack (TenderPulse pattern):
 
 ### 8.3 AWS Region & Hosting
 
-Recommended: **ap-southeast-1 (Singapore)** — same as your TiCON deployments. Lower latency than Mumbai for Bangladesh users on most ISPs, mature services, better service availability than ap-south-1.
+Recommended: **ap-southeast-1 (Singapore)** — the Public Pulse Agency standard region. Lower latency than Mumbai for Bangladesh users on most ISPs, mature services, better service availability than ap-south-1.
 
 ### 8.4 Environments
 
@@ -1236,7 +1236,7 @@ Total MVP: ~7 FTE for 8 weeks.
 
 ### 16.3 Development Cost (MVP)
 
-7 FTE × 8 weeks at blended Bangladesh rates ≈ BDT 35–50 lakh for MVP. Could be lower if leveraging existing TiCON team capacity.
+7 FTE × 8 weeks at blended Bangladesh rates ≈ BDT 35–50 lakh for MVP. Could be lower if leveraging existing Public Pulse Agency team capacity.
 
 ### 16.4 Unit Economics
 
@@ -1315,7 +1315,7 @@ Break-even on monthly fixed costs (~BDT 8–10 lakh fully loaded) at ~700–900 
 1. **EPS fee handling:** buyer-borne, organiser-borne, or per-event configurable? *(Recommend: configurable, default buyer-borne.)*
 2. **Free events:** allow RSVP-only events with no payment? *(Recommend: yes, drives adoption.)*
 3. **Attendee accounts:** required, optional, or guest-only at MVP? *(Recommend: guest-only at MVP, accounts in Phase 3.)*
-4. **AWS region:** ap-southeast-1 (Singapore) or ap-south-1 (Mumbai)? *(Recommend: Singapore, matches your TiCON pattern.)*
+4. **AWS region:** ap-southeast-1 (Singapore) or ap-south-1 (Mumbai)? *(Recommend: Singapore, Public Pulse Agency standard.)*
 5. **KYC strictness for MVP:** ship with light/standard tiers only, or all three? *(Recommend: light + org Tier A for MVP, expand in Phase 2.)*
 6. **Launch market:** Dhaka-only or nationwide? *(Recommend: nationwide soft launch, Dhaka-focused marketing.)*
 7. **Bilingual UI:** Bangla + English from day one or English-first? *(Recommend: English-first for tenant portal, Bangla on attendee landing pages from day one — bilingual everywhere by Phase 3.)*

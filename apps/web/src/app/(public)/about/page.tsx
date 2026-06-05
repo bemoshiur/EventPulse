@@ -102,7 +102,7 @@ export default function AboutPage() {
         <div className="mx-auto max-w-3xl px-6 py-16 text-center md:py-20">
           <h2 className="text-2xl font-bold tracking-tight md:text-3xl">Built in Dhaka 🇧🇩</h2>
           <p className="text-mkt-slate mt-3 text-base leading-relaxed">
-            Public Pulse Agency · TiCON System Limited. Reach us any time at{' '}
+            Public Pulse Agency. Reach us any time at{' '}
             <a
               href="mailto:hello@eventpulse.com.bd"
               className="text-mkt-red font-semibold hover:underline"

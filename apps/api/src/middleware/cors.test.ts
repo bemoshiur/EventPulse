@@ -14,6 +14,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createApp } from '../app.js'
+import { allowedOrigins } from './cors.js'
 
 const ALLOWED = 'https://app.eventpulse.com.bd'
 const ADMIN = 'https://admin.eventpulse.com.bd'
@@ -70,5 +71,21 @@ describe('CORS preflight (browser-auth integration)', () => {
     // (/health is 503 without a DB in the unit rig — irrelevant here).
     expect(res.headers.get('access-control-allow-origin')).toBe(ADMIN)
     expect(res.headers.get('access-control-allow-credentials')).toBe('true')
+  })
+})
+
+describe('allowedOrigins() default (no EVENTPULSE_CORS_ORIGINS env)', () => {
+  const ORIG = process.env['EVENTPULSE_CORS_ORIGINS']
+  beforeAll(() => delete process.env['EVENTPULSE_CORS_ORIGINS'])
+  afterAll(() => {
+    if (ORIG === undefined) delete process.env['EVENTPULSE_CORS_ORIGINS']
+    else process.env['EVENTPULSE_CORS_ORIGINS'] = ORIG
+  })
+
+  it('includes the apex + www (auth pages are served there) so login is not CORS-blocked', () => {
+    const origins = allowedOrigins()
+    expect(origins).toContain('https://eventpulse.com.bd')
+    expect(origins).toContain('https://www.eventpulse.com.bd')
+    expect(origins).toContain('https://app.eventpulse.com.bd')
   })
 })
