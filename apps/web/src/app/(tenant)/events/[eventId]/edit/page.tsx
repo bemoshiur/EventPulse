@@ -22,6 +22,7 @@ function apiBase(): string {
 
 interface EventDetail {
   id: string
+  slug: string
   type: EventType
   title: string
   titleBn: string | null
@@ -46,6 +47,8 @@ export function EditEvent() {
   const eventId = params.eventId
   const [state, setState] = useState<State>({ kind: 'loading' })
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [slug, setSlug] = useState('')
+  const [originalSlug, setOriginalSlug] = useState('')
 
   useEffect(() => {
     void (async () => {
@@ -59,6 +62,8 @@ export function EditEvent() {
         }
         const body = (await res.json()) as { data: EventDetail }
         setState({ kind: 'ready', event: body.data })
+        setSlug(body.data.slug)
+        setOriginalSlug(body.data.slug)
       } catch {
         setState({ kind: 'error', message: 'Network error. Please try again.' })
       }
@@ -68,13 +73,30 @@ export function EditEvent() {
   async function save(values: EventCreateInput) {
     setSaveError(null)
     try {
-      // EventUpdateSchema accepts the same field shape (all optional). Dates
-      // serialise to ISO via JSON.stringify; the schema coerces them back.
+      // Send only EventUpdateSchema fields (it's .strict() — `type` and other
+      // create-only keys would be rejected). Dates serialise to ISO; the schema
+      // coerces them back. Include the slug only when it actually changed.
+      const patch: Record<string, unknown> = {
+        title: values.title,
+        titleBn: values.titleBn,
+        description: values.description,
+        descriptionBn: values.descriptionBn,
+        startsAt: values.startsAt,
+        endsAt: values.endsAt,
+        timezone: values.timezone,
+        venue: values.venue,
+        capacity: values.capacity,
+        visibility: values.visibility,
+        bannerImageUrl: values.bannerImageUrl ?? null,
+      }
+      const trimmedSlug = slug.trim().toLowerCase()
+      if (trimmedSlug && trimmedSlug !== originalSlug) patch['slug'] = trimmedSlug
+
       const res = await fetch(`${apiBase()}/api/v1/tenant/events/${eventId}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(values),
+        body: JSON.stringify(patch),
       })
       if (res.ok) {
         window.location.assign(`/events/${eventId}`)
@@ -126,6 +148,28 @@ export function EditEvent() {
           Update the details below. Changes go live immediately on your event page.
         </p>
       </header>
+
+      <div className="border-mkt-line rounded-2xl border bg-white p-5">
+        <label htmlFor="event-slug" className="text-mkt-ink block text-sm font-medium">
+          Event link <span className="opacity-70">· ইভেন্ট লিংক</span>
+        </label>
+        <div className="mt-1 flex items-center gap-1">
+          <span className="text-mkt-slate text-sm">…/{`{handle}`}/</span>
+          <input
+            id="event-slug"
+            type="text"
+            value={slug}
+            onChange={(e) => setSlug(e.target.value.toLowerCase())}
+            autoCapitalize="none"
+            spellCheck={false}
+            className="border-mkt-line focus:border-mkt-red min-w-0 flex-1 rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-mkt-red)]/30 focus:outline-none"
+          />
+        </div>
+        <p className="text-mkt-slate mt-1 text-xs">
+          The last part of your event’s URL. Lowercase letters, numbers and hyphens. Note: renaming
+          this changes the link — anything you’ve already shared won’t redirect.
+        </p>
+      </div>
 
       <EventForm type={event.type} initialValues={initialValues} onValidSubmit={save} />
 

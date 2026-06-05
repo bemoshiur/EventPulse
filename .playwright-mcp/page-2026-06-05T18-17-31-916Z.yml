@@ -1,0 +1,72 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - main [ref=e4]:
+      - generic [ref=e8]: Moshiur Rahman
+      - generic [ref=e10]:
+        - paragraph [ref=e11]: concert
+        - heading "Cosmic Omniverse Expo-2026" [level=1] [ref=e12]
+        - paragraph [ref=e13]: কসমিক অমনিভার্স এক্সপো-২০২৬
+        - generic [ref=e14]:
+          - generic [ref=e15]:
+            - term [ref=e16]: Starts
+            - definition [ref=e17]: Sat, 06 June 2026 at 12:00
+          - generic [ref=e18]:
+            - term [ref=e19]: Ends
+            - definition [ref=e20]: Sat, 06 June 2026 at 16:00
+          - generic [ref=e21]:
+            - term [ref=e22]: Venue
+            - definition [ref=e23]: BGB Banquet Hall,Shimanto Square,Dhanmondi · Shimanto Square,Dhanmondi · Dhaka
+      - paragraph [ref=e25]: "🌌 Cosmic OmniVerse Expo 2026 – Event Brief Get ready to step into a world where every universe collides. Cosmic OmniVerse Expo 2026 is Bangladesh’s ultimate all-in-one pop culture convention, bringing together fans of Marvel, DC, Anime, Web Series, Gaming, and beyond into one massive experience. From superheroes to anime legends, from dark anti-heroes to multiverse icons, this is where your fandom comes alive. 🎯 Event Segments Cosplay Competition OmniVerse Magic Show Multiverse Movie & Anime Quiz Comic & Manga Quiz Gift Giveaways Stalls & Food Facilities After Party 🔥 What to Expect ✨ All-Universe Cosplay Competition Dress as your favorite character from any universe — MCU, DCU, Anime, The Boys, or anything you love — and compete on the biggest stage. 🎮 Gaming & Experience Zones Dive into immersive gaming, VR setups, and interactive fan experiences. 🎤 Live Shows & Performances Enjoy live music, DJ sets, and high-energy performances throughout the event. 📸 Content Creator & Photography Zones Perfect spots for reels, photos, and content creation with stunning themed setups. 🛍️ Merchandise Marketplace Explore exclusive collectibles, anime merch, comics, and fan-made products. 🧠 Fan Meetups & Panels Connect with fellow fans, creators, and communities across different universes. 🎯 Who Should Attend? Anime lovers 🎌 Marvel & DC fans 🦸‍♂️ Gamers 🎮 Cosplayers 👗 Content creators 📱 Anyone who loves pop culture ✨ 📅 Event Details Organizer: Cosmic Forum Chief Guest: Antik Mahmud Special Guests: Khaled Nur, Shamima Sraboni Expected Audience: 5,000+ attendees Location & Date: June 18, BGB Banquet Hall, Shimanto Square, Dhanmondi 🚀 Why You Can’t Miss This This isn’t just an event — it’s a multiverse experience where you can: Become your favorite character Meet people who share your passion Create viral content Be part of something never done before in Bangladesh ⚡ Join the OmniVerse Prepare your cosplay. Gather your squad. Because this is where all universes unite."
+      - region "Tickets· টিকিট" [ref=e26]:
+        - heading "Tickets· টিকিট" [level=2] [ref=e27]
+        - generic [ref=e28]:
+          - list [ref=e29]:
+            - listitem [ref=e30]:
+              - generic [ref=e32]:
+                - generic [ref=e33]:
+                  - heading "Early Bird" [level=3] [ref=e34]
+                  - paragraph [ref=e35]: Early Bird
+                  - paragraph [ref=e36]: 100 available
+                - generic [ref=e37]:
+                  - paragraph [ref=e38]: ৳ 350.00
+                  - generic [ref=e39]:
+                    - generic [ref=e40]: Qty
+                    - spinbutton "Qty" [ref=e41]: "0"
+          - group "Your details· আপনার তথ্য" [ref=e42]:
+            - generic [ref=e43]: Your details· আপনার তথ্য
+            - generic [ref=e44]:
+              - generic [ref=e45]:
+                - generic [ref=e46]: Full name / পুরো নাম
+                - textbox "Full name / পুরো নাম" [ref=e47]
+              - generic [ref=e48]:
+                - generic [ref=e49]: Email / ইমেইল
+                - textbox "Email / ইমেইল" [ref=e50]
+              - generic [ref=e51]:
+                - generic [ref=e52]: Phone / ফোন
+                - textbox "Phone / ফোন" [ref=e53]
+              - generic [ref=e54]:
+                - generic [ref=e55]: NID last 4 digits (optional)
+                - textbox "NID last 4 digits (optional)" [ref=e56]
+          - group [ref=e57]:
+            - generic "Buyer Terms (v1.0) · ক্রেতা শর্তাবলী" [ref=e58] [cursor=pointer]
+          - generic [ref=e59]:
+            - paragraph [ref=e60]:
+              - generic [ref=e61]:
+                - text: "\"Continue with bKash\" বাটনে ক্লিক করে আপনি Event Pulse-এর Buyer Terms (v1.0) এবং"
+                - link "প্রাইভেসি পলিসিতে" [ref=e62] [cursor=pointer]:
+                  - /url: /privacy
+                - text: সম্মত হচ্ছেন।
+              - generic [ref=e63]:
+                - text: By clicking "Continue with bKash" you agree to Event Pulse's
+                - link "Buyer Terms (v1.0)" [ref=e64] [cursor=pointer]:
+                  - /url: /buyer-terms
+                - text: and
+                - link "Privacy Policy" [ref=e65] [cursor=pointer]:
+                  - /url: /privacy
+                - text: .
+            - button "Continue with bKash · bKash দিয়ে চালিয়ে যান" [disabled] [ref=e66]
+      - paragraph [ref=e69]:
+        - text: Hosted by
+        - strong [ref=e70]: Moshiur Rahman
+        - text: · Powered by Event Pulse
+  - alert [ref=e71]

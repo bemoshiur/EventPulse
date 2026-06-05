@@ -50,6 +50,7 @@ import {
   EventInvalidStatusForEditError,
   EventInvalidTransitionError,
   EventNotFoundError,
+  EventSlugConflictError,
   createEvent,
   getEvent,
   listEvents,
@@ -417,6 +418,55 @@ describeIfDb('events service — CRUD + state machine + RLS', () => {
         const diff = audit[0]?.diff as { changed_fields: string[] }
         expect(diff.changed_fields.sort()).toEqual(['capacity', 'title'])
       })
+    })
+
+    it('renames the event slug', async () => {
+      const created = await createEvent({
+        tenantId: fx.tenantAId,
+        actorUserId: fx.ownerId,
+        type: 'concert',
+        title: 'Slug Rename Source',
+        startsAt: futureStart(),
+        endsAt: futureEnd(),
+        venue: physicalVenue,
+      })
+      await updateEvent({
+        tenantId: fx.tenantAId,
+        eventId: created.id,
+        actorUserId: fx.ownerId,
+        patch: { slug: 'my-renamed-event' },
+      })
+      const after = await getEvent({ tenantId: fx.tenantAId, eventId: created.id })
+      expect(after.slug).toBe('my-renamed-event')
+    })
+
+    it('rejects a slug already used by another event of the same tenant', async () => {
+      const a = await createEvent({
+        tenantId: fx.tenantAId,
+        actorUserId: fx.ownerId,
+        type: 'concert',
+        title: 'Slug Clash A',
+        startsAt: futureStart(),
+        endsAt: futureEnd(),
+        venue: physicalVenue,
+      })
+      const b = await createEvent({
+        tenantId: fx.tenantAId,
+        actorUserId: fx.ownerId,
+        type: 'concert',
+        title: 'Slug Clash B',
+        startsAt: futureStart(),
+        endsAt: futureEnd(),
+        venue: physicalVenue,
+      })
+      await expect(
+        updateEvent({
+          tenantId: fx.tenantAId,
+          eventId: b.id,
+          actorUserId: fx.ownerId,
+          patch: { slug: a.slug },
+        }),
+      ).rejects.toBeInstanceOf(EventSlugConflictError)
     })
 
     it('empty patch is a no-op (no audit row)', async () => {

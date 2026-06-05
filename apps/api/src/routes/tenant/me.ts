@@ -190,4 +190,52 @@ me.patch('/handle', zValidator('json', renameSchema), async (c) => {
   }
 })
 
+const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a 6-digit hex colour like #d32f2f')
+const brandSchema = z
+  .object({
+    logoUrl: z.string().url().max(1000).nullable().optional(),
+    colorPrimary: hexColor.nullable().optional(),
+    colorAccent: hexColor.nullable().optional(),
+  })
+  .refine((b) => Object.keys(b).length > 0, { message: 'at least one brand field is required' })
+
+/**
+ * PATCH /api/v1/tenant/me/brand — set the tenant's brand (logo URL + primary +
+ * accent hex colours). These drive the public event page hero gradient + logo
+ * (event-landing reads them as --brand-primary / --brand-accent). RLS-scoped to
+ * the caller's tenant via withTenant.
+ */
+me.patch('/brand', zValidator('json', brandSchema), async (c) => {
+  const tenantId = c.get('tenantId')
+  const requestId = c.req.header('x-request-id') ?? null
+  if (!tenantId) {
+    return c.json(
+      {
+        error: { code: 'AUTH_REQUIRED', message: 'tenant context required', request_id: requestId },
+      },
+      401,
+    )
+  }
+  const patch = c.req.valid('json')
+  const setObj: Record<string, unknown> = { updatedAt: new Date() }
+  if ('logoUrl' in patch) setObj['brandLogoUrl'] = patch.logoUrl
+  if ('colorPrimary' in patch) setObj['brandColorPrimary'] = patch.colorPrimary
+  if ('colorAccent' in patch) setObj['brandColorAccent'] = patch.colorAccent
+
+  try {
+    await withTenant(tenantId, async (tx) =>
+      tx.update(tenants).set(setObj).where(eq(tenants.id, tenantId)),
+    )
+    return c.json({ data: { ok: true } })
+  } catch (err) {
+    logger.error({ err, tenantId, request_id: requestId }, 'tenant brand update failed')
+    return c.json(
+      {
+        error: { code: 'INTERNAL_ERROR', message: 'failed to update brand', request_id: requestId },
+      },
+      500,
+    )
+  }
+})
+
 export { me as meRoutes }
