@@ -64,7 +64,7 @@ function requireBucket(): string {
   if (!bucket) {
     throw new Error(
       'KYC_BUCKET_NAME is not set. Required for any KYC document-read code path. ' +
-        'Bootstrap script (infra/scripts/bootstrap-staging.sh) materialises this from Secrets Manager.',
+        'Bootstrap script (infra/scripts/bootstrap-prod.sh) materialises this from Secrets Manager.',
     )
   }
   return bucket

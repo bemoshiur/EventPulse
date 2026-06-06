@@ -72,7 +72,7 @@ function requireBucket(): string {
   if (!bucket) {
     throw new Error(
       'KYC_BUCKET_NAME is not set. Required for any KYC upload code path. ' +
-        'Bootstrap script (infra/scripts/bootstrap-staging.sh) materialises this from Secrets Manager.',
+        'Bootstrap script (infra/scripts/bootstrap-prod.sh) materialises this from Secrets Manager.',
     )
   }
   return bucket
@@ -83,7 +83,7 @@ function requireKmsKeyArn(): string {
   if (!arn) {
     throw new Error(
       'KYC_KMS_KEY_ARN is not set. Required for any KYC upload code path. ' +
-        'Bootstrap script (infra/scripts/bootstrap-staging.sh) materialises this from Secrets Manager.',
+        'Bootstrap script (infra/scripts/bootstrap-prod.sh) materialises this from Secrets Manager.',
     )
   }
   return arn

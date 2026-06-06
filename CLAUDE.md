@@ -2598,6 +2598,8 @@ Any violation halts new batch creation and pages the on-call.
 
 ## §17 — Infrastructure: Single EC2 First
 
+> **⚠️ STAGING DECOMMISSIONED (2026-06-06).** Production is now the **only** environment. The staging box, `staging.eventpulse.com.bd` DNS, the `deploy-staging.yml` + `load-test.yml` workflows, `infra/nginx/eventpulse-staging.conf`, `infra/scripts/bootstrap-staging.sh`, and the `STAGING_PAYMENT_BLOCK` env var were all removed. Every "staging" reference in §17 below is **historical** (accurate when written); for current ops read only the production-target / prod columns. `deploy.sh` defaults `EVENTPULSE_ENV` to `production`. See `.claude/memory/decisions.md` "Staging environment decommissioned" (2026-06-06). (EPS *sandbox* mode is retained — that's EPS's test environment, not "staging".)
+
 ### 17.1 Architecture (MVP) — One Server, Two Domains, Zero Magic
 
 The MVP deploys to **a single AWS EC2 instance** in `ap-southeast-1`. Everything runs there: Next.js, Hono API, Postgres, Redis, BullMQ workers, Nginx, certbot. AWS services used: **EC2 + Route 53 + S3 + SES** only. No Lambda, no Aurora, no API Gateway, no ECS, no CloudFront.

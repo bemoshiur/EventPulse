@@ -31,12 +31,10 @@ PM2="/usr/bin/pm2"
 PNPM="/usr/bin/pnpm"
 LOG_DIR="/home/eventpulse/logs"
 DEPLOY_LOG="$LOG_DIR/deploy.log"
-# Per-box environment marker, written once at bootstrap.
-# bootstrap-prod.sh writes "production"; the existing staging box has no
-# marker file and falls through to "staging" — so this change is fully
-# backward-compatible with staging. This is the ONLY env-specific line in
-# deploy.sh (the nginx reload + pm2 ecosystem steps are env-agnostic).
-EVENTPULSE_ENV="$(cat /home/eventpulse/.eventpulse-env 2>/dev/null || echo staging)"
+# Per-box environment marker, written once at bootstrap (bootstrap-prod.sh
+# writes "production"). Staging was decommissioned (decisions.md 2026-06-06);
+# production is the only environment, so the fallback defaults to production.
+EVENTPULSE_ENV="$(cat /home/eventpulse/.eventpulse-env 2>/dev/null || echo production)"
 ENV_FILE="/home/eventpulse/.env.${EVENTPULSE_ENV}"
 
 mkdir -p "$LOG_DIR"
@@ -44,7 +42,7 @@ exec > >(tee -a "$DEPLOY_LOG") 2>&1
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] deploy start ref=$REF"
 
 # 0) Source env file. Required for DATABASE_URL, JWT_*, REDIS_URL etc.
-# Bootstrap (one-time) writes this file via infra/scripts/bootstrap-staging.sh.
+# Bootstrap (one-time) writes this file via infra/scripts/bootstrap-prod.sh.
 # If it's missing, fail loudly BEFORE running pnpm — much clearer than a
 # midway db:migrate "DATABASE_URL not set" error.
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -159,8 +157,8 @@ $PNPM --filter @eventpulse/api db:seed:legal-v1
 
 # 4.5) Nginx vhost reload — Fix 6b from Day 21 silent-failure remediation.
 #
-# Nginx vhost config lives in the repo at infra/nginx/eventpulse-staging.conf
-# and is SYMLINKED into /etc/nginx/sites-enabled/ via bootstrap-staging.sh.
+# Nginx vhost config lives in the repo at infra/nginx/eventpulse-prod.conf
+# and is SYMLINKED into /etc/nginx/sites-enabled/ via bootstrap-prod.sh.
 # That means `git reset --hard` (step 1) propagates vhost changes via the
 # symlink immediately — but Nginx itself doesn't reload until something
 # calls `systemctl reload nginx`. Previously the manual SSM workaround
