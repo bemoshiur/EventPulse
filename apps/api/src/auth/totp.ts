@@ -131,12 +131,18 @@ export function hashRecoveryCode(code: string): string {
   return bytesToHex(sha256(new TextEncoder().encode(code.replace(/[\s-]/g, '').toLowerCase())))
 }
 
-/** Generate plaintext recovery codes (show once) + their stored hashes. */
+/**
+ * Generate plaintext recovery codes (show once) + their stored hashes. Each
+ * code carries 128 bits of entropy — it bypasses the second factor, so it must
+ * be infeasible to guess even given the password. Stored as SHA-256 (a
+ * high-entropy random token, not a human password, so a fast hash is correct +
+ * matches how sessions / magic-links are hashed in this codebase).
+ */
 export function generateRecoveryCodes(): { codes: string[]; hashes: string[] } {
   const codes: string[] = []
   for (let i = 0; i < RECOVERY_COUNT; i++) {
-    const raw = bytesToHex(randomBytes(5)) // 10 hex chars
-    codes.push(`${raw.slice(0, 5)}-${raw.slice(5)}`)
+    const raw = bytesToHex(randomBytes(16)) // 128 bits → 32 hex chars
+    codes.push(`${raw.slice(0, 8)}-${raw.slice(8, 16)}-${raw.slice(16, 24)}-${raw.slice(24)}`)
   }
   return { codes, hashes: codes.map(hashRecoveryCode) }
 }
