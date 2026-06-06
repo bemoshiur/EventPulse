@@ -4,6 +4,29 @@ Things that broke, surprised us, or took >30 min to figure out. Add the moment y
 
 ---
 
+## The first REAL EPS payment (2026-06-05 go-live smoke) exposed 3 bugs sandbox never could
+
+A single real ৳357.88 card payment (the BDT-100 go-live smoke) surfaced three production-only failures in the pay→ticket loop. None were catchable by sandbox/unit tests because each depended on the exact real EPS production response shape or real BullMQ/Redis behaviour. Lesson: **a real-money smoke is mandatory before declaring payments live** — "it works in sandbox" proved nothing here.
+
+**Bug 1 — EPS v5 Verify `PaymentReferance: null` rejected as schema-invalid → paid orders stuck.**
+- Why: real EPS prod returns `Status:"Success"` but `PaymentReferance` (+ other fields) as literal `null`, not absent. `V5VerifyResponseSchema` used `z.string().optional()` (allows `undefined`, NOT `null`) → zod threw → `EpsResponseError` → `settle` treated a genuinely-PAID order as "verify failed". Real money charged, order stuck `awaiting_payment`, no ticket.
+- Fix: declared fields → `.nullable().optional()`. PR #339 / v0.4.24. Regression test pins the exact real response.
+- Avoid: EPS prod sends nulls liberally; default new EPS-response schema fields to `.nullable().optional()`, validate only `MerchantTransactionId` + `Status` strictly (read from passthrough raw).
+
+**Bug 2 — `/orders/return/*` + `/buyer-terms` pages never existed → 404 after payment.**
+- Why: the EPS return handler 302s the browser to `${WEB}/orders/return/{outcome}?orderId=…`, but those frontend pages were deferred ("Day 28+ scope") and never built. `/buyer-terms` (the checkout consent link) likewise had a seeded DB doc but no page. Buyer paid → landed on a 404, no receipt, no ticket.
+- Fix: built `/orders/return/[outcome]` (success/pending/fail/cancel/error) + `GET /api/v1/public/orders/:id/status` + `/buyer-terms`. PR #341 / v0.4.25.
+- Avoid: an outbound redirect target in API code is a frontend-route contract — grep that every `${WEB}/...` redirect has a matching `page.tsx`.
+
+**Bug 3 — BullMQ jobId `delivery:${orderId}` rejected ("Custom Id cannot contain :") → no ticket email.**
+- Why: order settled `paid` but `enqueueOrderDelivery` threw because BullMQ forbids `:` in custom job IDs (it's BullMQ's Redis-key separator). The enqueue is wrapped never-throw (settlement-reliability invariant), so it failed silently — paid buyer, no QR email.
+- Fix: jobId → `delivery-${orderId}` (hyphen). PR #340 / v0.4.25.
+- Avoid: never put `:` in a BullMQ custom jobId. Re-enqueue a stuck paid order with a one-off `node -e` calling `enqueueOrderDelivery({orderId})` (the running in-process worker picks it up; deliver-order is idempotent on attendee generation).
+
+**Watch:** a `webhook.ses.bounce.suppressed` event appeared around the redelivery. If a ticket email silently doesn't arrive, check the SES suppression list for the recipient — a prior bounce can suppress future sends even when `tickets.deliver.delivered` logs success.
+
+---
+
 ## An env-ONLY change to `.env.production` does NOT take effect with `pm2 reload --update-env` — use `pm2 restart --update-env`
 
 **Why it happens:** `pm2/ecosystem.config.cjs` only pins `NODE_ENV` + `PORT`; every other var (STAGING_PAYMENT_BLOCK, EPS_*, etc.) is INHERITED from the shell that runs pm2. `deploy.sh` does `set -a; source .env.production; set +a; pm2 reload ecosystem --update-env`. On a normal deploy this works because the **code changed**, so pm2 re-execs the process (picking up the sourced env). But for an **env-only** change with unchanged code, `pm2 reload` (graceful) keeps the running process as-is — `--update-env` updated pm2's stored definition but the live process still had the old value. Verified: after `pm2 reload`, `pm2 jlist` still showed `STAGING_PAYMENT_BLOCK=1` despite the file (and shell) being `=0`.
