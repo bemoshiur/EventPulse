@@ -57,6 +57,10 @@ export const users = pgTable(
     passwordHash: text('password_hash'),
     mfaEnabled: boolean('mfa_enabled').notNull().default(false),
     mfaSecret: text('mfa_secret'),
+    mfaRecoveryCodes: text('mfa_recovery_codes')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
     phoneVerifiedAt: timestamp('phone_verified_at', { withTimezone: true }),
     avatarUrl: text('avatar_url'),

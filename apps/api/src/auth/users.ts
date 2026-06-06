@@ -19,6 +19,7 @@ export interface UserRecord {
   fullName: string
   passwordHash: string | null
   emailVerifiedAt: Date | null
+  mfaEnabled: boolean
 }
 
 export async function findUserByEmail(email: string): Promise<UserRecord | null> {
@@ -30,6 +31,7 @@ export async function findUserByEmail(email: string): Promise<UserRecord | null>
         fullName: users.fullName,
         passwordHash: users.passwordHash,
         emailVerifiedAt: users.emailVerifiedAt,
+        mfaEnabled: users.mfaEnabled,
       })
       .from(users)
       .where(eq(users.email, email))
@@ -47,6 +49,7 @@ export async function findUserById(id: string): Promise<UserRecord | null> {
         fullName: users.fullName,
         passwordHash: users.passwordHash,
         emailVerifiedAt: users.emailVerifiedAt,
+        mfaEnabled: users.mfaEnabled,
       })
       .from(users)
       .where(eq(users.id, id))
@@ -76,6 +79,7 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
         fullName: users.fullName,
         passwordHash: users.passwordHash,
         emailVerifiedAt: users.emailVerifiedAt,
+        mfaEnabled: users.mfaEnabled,
       })
     return row!
   })
@@ -91,6 +95,72 @@ export async function markEmailVerified(userId: string): Promise<void> {
 export async function setPassword(userId: string, passwordHash: string): Promise<void> {
   await withSuperAdmin(async (db) => {
     await db.update(users).set({ passwordHash }).where(eq(users.id, userId))
+  })
+}
+
+// ─── MFA / TOTP (§5.2) ──────────────────────────────────────────────────
+
+export interface MfaState {
+  enabled: boolean
+  secret: string | null
+  recoveryCodes: string[]
+}
+
+export async function getMfaState(userId: string): Promise<MfaState | null> {
+  return withSuperAdmin(async (db) => {
+    const [row] = await db
+      .select({
+        enabled: users.mfaEnabled,
+        secret: users.mfaSecret,
+        recoveryCodes: users.mfaRecoveryCodes,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+    return row ?? null
+  })
+}
+
+/** Store a provisional TOTP secret (MFA NOT yet enabled — confirmed by a code). */
+export async function setMfaSecret(userId: string, secret: string): Promise<void> {
+  await withSuperAdmin(async (db) => {
+    await db.update(users).set({ mfaSecret: secret, mfaEnabled: false }).where(eq(users.id, userId))
+  })
+}
+
+/** Turn MFA on after a confirming code + store the recovery-code hashes. */
+export async function enableMfa(userId: string, recoveryHashes: string[]): Promise<void> {
+  await withSuperAdmin(async (db) => {
+    await db
+      .update(users)
+      .set({ mfaEnabled: true, mfaRecoveryCodes: recoveryHashes })
+      .where(eq(users.id, userId))
+  })
+}
+
+export async function disableMfa(userId: string): Promise<void> {
+  await withSuperAdmin(async (db) => {
+    await db
+      .update(users)
+      .set({ mfaEnabled: false, mfaSecret: null, mfaRecoveryCodes: [] })
+      .where(eq(users.id, userId))
+  })
+}
+
+/** Remove a used recovery-code hash; returns true if it was present (valid). */
+export async function consumeRecoveryCode(userId: string, codeHash: string): Promise<boolean> {
+  return withSuperAdmin(async (db) => {
+    const [row] = await db
+      .select({ codes: users.mfaRecoveryCodes })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+    if (!row || !row.codes.includes(codeHash)) return false
+    await db
+      .update(users)
+      .set({ mfaRecoveryCodes: row.codes.filter((h) => h !== codeHash) })
+      .where(eq(users.id, userId))
+    return true
   })
 }
 
@@ -134,6 +204,7 @@ export async function findUserByOAuthIdentity(
         userFullName: users.fullName,
         userPasswordHash: users.passwordHash,
         userEmailVerifiedAt: users.emailVerifiedAt,
+        userMfaEnabled: users.mfaEnabled,
       })
       .from(oauthIdentities)
       .innerJoin(users, eq(users.id, oauthIdentities.userId))
@@ -153,6 +224,7 @@ export async function findUserByOAuthIdentity(
         fullName: row.userFullName,
         passwordHash: row.userPasswordHash,
         emailVerifiedAt: row.userEmailVerifiedAt,
+        mfaEnabled: row.userMfaEnabled,
       },
       identity: {
         id: row.identityId,

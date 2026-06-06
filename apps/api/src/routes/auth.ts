@@ -28,7 +28,7 @@ import { resolveConsumeBase } from '../auth/consume-url.js'
 import { clearSessionCookie, setSessionCookie } from '../auth/cookie.js'
 import { hashPassword, verifyPassword } from '../auth/hash.js'
 import { allowedOrigins } from '../middleware/cors.js'
-import { signTokens } from '../auth/jwt.js'
+import { signMfaChallenge, signTokens, verifyMfaChallenge } from '../auth/jwt.js'
 import { consumeMagicLink, requestMagicLink } from '../auth/magic-link.js'
 import { requireUser } from '../auth/middleware.js'
 import {
@@ -38,7 +38,26 @@ import {
   type SessionAudience,
 } from '../auth/sessions.js'
 import { hashToken } from '../auth/tokens.js'
-import { createUser, findUserByEmail, markEmailVerified, setPassword } from '../auth/users.js'
+import {
+  consumeRecoveryCode,
+  createUser,
+  disableMfa,
+  enableMfa,
+  findUserByEmail,
+  findUserById,
+  getMfaState,
+  markEmailVerified,
+  setMfaSecret,
+  setPassword,
+} from '../auth/users.js'
+import {
+  buildOtpauthUri,
+  generateRecoveryCodes,
+  generateTotpSecret,
+  hashRecoveryCode,
+  verifyTotp,
+} from '../auth/totp.js'
+import QRCode from 'qrcode'
 import { sendEmail } from '../infra/ses/client.js'
 import { renderResetPassword } from '../infra/ses/templates/reset-password.js'
 import { renderVerifyEmail } from '../infra/ses/templates/verify-email.js'
@@ -176,27 +195,46 @@ auth.post('/password/login', zValidator('json', loginSchema), async (c) => {
       403,
     )
   }
+  // MFA gate: a user with 2FA on does NOT get a session from password alone —
+  // we issue a short-lived challenge token; /mfa/verify exchanges it + a TOTP
+  // (or recovery) code for the session. The grant was already validated above.
+  if (user.mfaEnabled) {
+    const challengeToken = await signMfaChallenge({
+      sub: user.id,
+      audience,
+      tenantId: audience === 'tenant' ? input.tenantId! : null,
+    })
+    return c.json({ data: { mfaRequired: true, challengeToken } })
+  }
+  return issueSession(c, user, audience, audience === 'tenant' ? input.tenantId! : null)
+})
+
+/**
+ * Open a session for any audience + set the cookie, returning the standard
+ * { user, session } envelope. Shared by /password/login (non-MFA) + /mfa/verify.
+ */
+async function issueSession(
+  c: Context,
+  user: { id: string; email: string; fullName: string },
+  audience: SessionAudience['audience'],
+  tenantId: string | null,
+) {
   const { token, expiresAt } = await createSession({
     userId: user.id,
     audience,
-    tenantId: audience === 'tenant' ? input.tenantId! : undefined,
+    tenantId: tenantId ?? undefined,
     ip: c.req.header('x-forwarded-for') ?? null,
     userAgent: c.req.header('user-agent') ?? null,
   })
   setSessionCookie(c, token, expiresAt)
-  const tokens = await signTokens({
-    sub: user.id,
-    audience,
-    tenantId: audience === 'tenant' ? input.tenantId! : null,
-    sessionId: hashToken(token),
-  })
+  const tokens = await signTokens({ sub: user.id, audience, tenantId, sessionId: hashToken(token) })
   return c.json({
     data: {
       user: { id: user.id, email: user.email, fullName: user.fullName },
       session: { token, ...tokens },
     },
   })
-})
+}
 
 /**
  * Open an attendee session for a user + set the cookie. Shared by the
@@ -348,6 +386,96 @@ auth.post('/logout', zValidator('json', logoutSchema), async (c) => {
   await revokeSession(c.req.valid('json').token)
   clearSessionCookie(c)
   return c.json({ data: { revoked: true } })
+})
+
+// ─── MFA / TOTP (§5.2, QA P2) ───────────────────────────────────────────
+
+const codeSchema = z.object({ code: z.string().min(6).max(20) })
+
+/** Try a 6-digit TOTP, then fall back to a single-use recovery code. */
+async function verifyMfaCode(userId: string, secret: string, code: string): Promise<boolean> {
+  if (verifyTotp(secret, code)) return true
+  return consumeRecoveryCode(userId, hashRecoveryCode(code))
+}
+
+// GET /mfa/status — is MFA on for me? (settings UI)
+auth.get('/mfa/status', requireUser, async (c) => {
+  const state = await getMfaState(c.get('auth')!.sub)
+  return c.json({ data: { enabled: state?.enabled ?? false } })
+})
+
+// POST /mfa/enroll — start setup: provisional secret + QR (NOT enabled yet).
+auth.post('/mfa/enroll', requireUser, async (c) => {
+  const claims = c.get('auth')!
+  const state = await getMfaState(claims.sub)
+  if (state?.enabled) {
+    return c.json({ error: { code: 'CONFLICT', message: 'MFA is already enabled' } }, 409)
+  }
+  const secret = generateTotpSecret()
+  await setMfaSecret(claims.sub, secret)
+  // The otpauth label uses the account id; the app shows it as "Event Pulse".
+  const otpauthUri = buildOtpauthUri(`user-${claims.sub.slice(0, 8)}`, secret)
+  const qrDataUrl = await QRCode.toDataURL(otpauthUri, { margin: 1, width: 240 })
+  return c.json({ data: { secret, otpauthUri, qrDataUrl } })
+})
+
+// POST /mfa/confirm — finish setup: a valid code turns MFA on + returns recovery codes.
+auth.post('/mfa/confirm', requireUser, zValidator('json', codeSchema), async (c) => {
+  const claims = c.get('auth')!
+  const state = await getMfaState(claims.sub)
+  if (!state?.secret) {
+    return c.json({ error: { code: 'CONFLICT', message: 'start enrollment first' } }, 409)
+  }
+  if (state.enabled) {
+    return c.json({ error: { code: 'CONFLICT', message: 'MFA already enabled' } }, 409)
+  }
+  if (!verifyTotp(state.secret, c.req.valid('json').code)) {
+    return c.json({ error: { code: 'VALIDATION_ERROR', message: 'incorrect code' } }, 400)
+  }
+  const { codes, hashes } = generateRecoveryCodes()
+  await enableMfa(claims.sub, hashes)
+  return c.json({ data: { enabled: true, recoveryCodes: codes } })
+})
+
+// POST /mfa/disable — turn MFA off (requires a current code or recovery code).
+auth.post('/mfa/disable', requireUser, zValidator('json', codeSchema), async (c) => {
+  const claims = c.get('auth')!
+  const state = await getMfaState(claims.sub)
+  if (!state?.enabled || !state.secret) {
+    return c.json({ error: { code: 'CONFLICT', message: 'MFA is not enabled' } }, 409)
+  }
+  if (!(await verifyMfaCode(claims.sub, state.secret, c.req.valid('json').code))) {
+    return c.json({ error: { code: 'VALIDATION_ERROR', message: 'incorrect code' } }, 400)
+  }
+  await disableMfa(claims.sub)
+  return c.json({ data: { enabled: false } })
+})
+
+const mfaVerifySchema = z.object({
+  challengeToken: z.string().min(20),
+  code: z.string().min(6).max(20),
+})
+
+// POST /mfa/verify — the login second factor: exchange the challenge + a code
+// for a session (the audience/tenant grant was validated at /password/login).
+auth.post('/mfa/verify', zValidator('json', mfaVerifySchema), async (c) => {
+  const input = c.req.valid('json')
+  const challenge = await verifyMfaChallenge(input.challengeToken)
+  if (!challenge) {
+    return c.json({ error: { code: 'AUTH_REQUIRED', message: 'challenge expired' } }, 401)
+  }
+  const state = await getMfaState(challenge.sub)
+  if (!state?.enabled || !state.secret) {
+    return c.json({ error: { code: 'AUTH_REQUIRED', message: 'MFA not set up' } }, 401)
+  }
+  if (!(await verifyMfaCode(challenge.sub, state.secret, input.code))) {
+    return c.json({ error: { code: 'AUTH_REQUIRED', message: 'incorrect code' } }, 401)
+  }
+  const user = await findUserById(challenge.sub)
+  if (!user) {
+    return c.json({ error: { code: 'AUTH_REQUIRED', message: 'account not found' } }, 401)
+  }
+  return issueSession(c, user, challenge.audience, challenge.tenantId)
 })
 
 export { auth as authRoutes }
