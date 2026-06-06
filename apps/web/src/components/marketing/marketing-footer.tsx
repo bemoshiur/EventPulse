@@ -2,6 +2,8 @@ import { ArrowRight, ChevronRight, Mail, ShieldCheck } from 'lucide-react'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
+import { LanguageToggle } from './language-toggle'
+
 /**
  * Marketing footer — three bands: a CTA band, a brand + nav grid, and a trust
  * dossier strip + bottom bar. Red/white marketing theme, bilingual EN + বাংলা.
@@ -205,6 +207,7 @@ export function MarketingFooter() {
             &copy; 2026 <strong className="text-mkt-ink">Event Pulse</strong> · Public Pulse Agency
           </span>
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+            <LanguageToggle />
             <Link href="/legal/changelog" className="hover:text-mkt-red transition">
               Changelog
             </Link>

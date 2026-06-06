@@ -1,5 +1,7 @@
 import Link from 'next/link'
 
+import { LanguageToggle } from './language-toggle'
+
 const NAV_LINKS = [
   { href: '/discover', label: 'Discover events' },
   { href: '/features', label: 'Features' },
@@ -47,6 +49,7 @@ export function MarketingNavbar({ current }: { current?: string }) {
         </ul>
 
         <div className="flex items-center gap-1.5">
+          <LanguageToggle className="hidden sm:inline-flex" />
           <Link
             href="/sign-in"
             className="text-mkt-slate hover:text-mkt-ink hidden h-9 items-center rounded-md px-3 text-sm font-medium transition md:inline-flex"

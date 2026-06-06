@@ -44,7 +44,7 @@ export const metadata: Metadata = {
     'টিকিট বিক্রি',
     'ইভেন্ট রেজিস্ট্রেশন',
   ],
-  alternates: { canonical: '/' },
+  alternates: { canonical: '/', languages: { en: '/', bn: '/bn' } },
   openGraph: {
     type: 'website',
     siteName: 'Event Pulse',
