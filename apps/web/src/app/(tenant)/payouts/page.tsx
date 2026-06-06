@@ -14,6 +14,7 @@
  * (and priced disbursement is gated on the truth gate).
  */
 
+import { PayoutAccounts } from '@/components/tenant/payout-accounts'
 import { PayoutsView } from '@/components/tenant/payouts-view'
 
 export default function TenantPayoutsPage() {
@@ -27,6 +28,7 @@ export default function TenantPayoutsPage() {
           when payouts go live.
         </p>
       </header>
+      <PayoutAccounts />
       <PayoutsView />
     </div>
   )

@@ -1042,6 +1042,39 @@ export const notificationLog = pgTable(
   ],
 )
 
+// ─── tenant_payout_accounts (§9.7, migration 0022) ──────────────────────
+// The disbursement entry point: a tenant's bank / MFS account for payouts.
+// Adding one is gated on kyc_status='approved' at the application layer
+// (KYC-at-disbursement, decisions.md 2026-06-06). RLS = tenant isolation.
+
+export const tenantPayoutAccounts = pgTable(
+  'tenant_payout_accounts',
+  {
+    id: uuid()
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    accountType: text('account_type').notNull(),
+    accountName: text('account_name').notNull(),
+    accountNumber: text('account_number').notNull(),
+    bankName: text('bank_name'),
+    branchName: text('branch_name'),
+    routingNumber: text('routing_number'),
+    isPrimary: boolean('is_primary').notNull().default(false),
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'tenant_payout_accounts_type_chk',
+      sql`${t.accountType} IN ('bank','bkash','nagad','rocket','upay')`,
+    ),
+    index('idx_tenant_payout_accounts_tenant').on(t.tenantId, t.createdAt),
+  ],
+)
+
 // ─── consent_records (Day 39 Phase 2) ───────────────────────────────────
 //
 // Buyer-Terms-Lite v1.0 consent capture per Phase 2 wire-in. The CLAUDE.md
