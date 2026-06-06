@@ -4949,3 +4949,15 @@ No `*.staging.eventpulse.com.bd` wildcard. The wildcard pattern in §17.6 is for
 **Decision:** Build to the v2.0 playbook exactly. All §29 items marked ✓ are settled; the remaining open items will be resolved as we hit them.
 
 **Consequences:** Claude Code defers to the playbook on any conflict. Any deviation requires an entry here before being implemented.
+
+## 2026-06-06 · Onboarding → password-only + email verification; magic-link LOGIN removed
+
+**Context:** Moshiur wants a TenderPulse-like onboarding: users sign up with a password, confirm their email via a link, then log in with email+password. The platform was magic-link-only in the UI (passwordless; a link emailed on every login). Password signup/login endpoints already existed server-side but were unused. Four forks were locked with Moshiur (2026-06-06): start with onboarding; `/bn` URL-prefix bilingual (later); **magic-link login removed entirely**; **KYC gate moves to disbursement-only**.
+
+**Decision:** Password-only auth with mandatory email verification.
+- `/password/signup` creates the user with `email_verified_at = NULL` and **no session**, then emails a confirmation link. `/verify-email/consume` confirms the address and opens the session. `/password/login` is blocked with `403 EMAIL_NOT_VERIFIED` until verified.
+- `/password/forgot` + `/password/reset` added (reset also verifies the address + revokes all existing sessions).
+- Magic-link LOGIN endpoints (`/magic-link/request`, `/magic-link/consume`) **removed**. The `magic_links` table stays as the single-use, TTL'd, /24-bound token store — `purpose` widened (migration 0021) to add `email_verify` + `password_reset`.
+- Bilingual SES templates `auth_verify_email` + `auth_password_reset` (red brand).
+
+**Consequences:** Supersedes "Third-party login removed — email + OTP only" for the login method (verification token machinery is retained, not the magic-link login). Existing passwordless users (passwordHash NULL) set a password via forgot-password. Frontend (/sign-up, /sign-in rebuilt to password; new /verify-email, /forgot-password, /reset-password; magic-link form + /auth/magic page removed; unverified banner) ships in the same workstream before prod cutover. CLAUDE.md §5 to be updated. KYC-at-disbursement + `/bn` bilingual + landing/footer parity are the following workstreams (see session todo mega-list).
