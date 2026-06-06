@@ -55,4 +55,15 @@ describe('TOTP', () => {
     expect(hashRecoveryCode(codes[0]!.toUpperCase())).toBe(hashes[0])
     expect(hashRecoveryCode(codes[0]!.replace('-', ''))).toBe(hashes[0])
   })
+
+  it('recovery codes are ≥128-bit entropy AND fit the auth code schema bounds [6,40]', () => {
+    // Regression guard: the /mfa/* `code` field is validated as min(6).max(40).
+    // A recovery code that overflows that bound is silently un-enterable.
+    const { codes } = generateRecoveryCodes()
+    for (const code of codes) {
+      expect(code.replace(/-/g, '').length).toBeGreaterThanOrEqual(32) // 128 bits as hex
+      expect(code.length).toBeGreaterThanOrEqual(6)
+      expect(code.length).toBeLessThanOrEqual(40)
+    }
+  })
 })

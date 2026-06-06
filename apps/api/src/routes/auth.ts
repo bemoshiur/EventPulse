@@ -390,7 +390,9 @@ auth.post('/logout', zValidator('json', logoutSchema), async (c) => {
 
 // ─── MFA / TOTP (§5.2, QA P2) ───────────────────────────────────────────
 
-const codeSchema = z.object({ code: z.string().min(6).max(20) })
+// `code` accepts a 6-digit TOTP OR a recovery code (128-bit, formatted with
+// dashes → up to ~35 chars). max(40) keeps headroom for both.
+const codeSchema = z.object({ code: z.string().min(6).max(40) })
 
 /** Try a 6-digit TOTP, then fall back to a single-use recovery code. */
 async function verifyMfaCode(userId: string, secret: string, code: string): Promise<boolean> {
@@ -453,7 +455,7 @@ auth.post('/mfa/disable', requireUser, zValidator('json', codeSchema), async (c)
 
 const mfaVerifySchema = z.object({
   challengeToken: z.string().min(20),
-  code: z.string().min(6).max(20),
+  code: z.string().min(6).max(40), // TOTP or a recovery code (see codeSchema)
 })
 
 // POST /mfa/verify — the login second factor: exchange the challenge + a code
