@@ -4972,3 +4972,15 @@ No `*.staging.eventpulse.com.bd` wildcard. The wildcard pattern in §17.6 is for
 - Tenant `/payouts` page shows a "Verify your identity to receive payouts" CTA → `/kyc` when not approved (or "under review" when submitted); the add-account form once approved.
 
 **Consequences:** Matches the §2.3 "graduation moment" intent but moves the trigger from paid-sale to payout-setup (organisers can sell first, verify before withdrawing — less signup friction, and money is still gated by KYC + the T+5 hold before it leaves the platform). No add-paid-tier gate to remove (never existed). The §13.4 trigger description is superseded by this; CLAUDE.md §1.6 + §5.2 annotated. Actual disbursement execution remains admin-driven (CSV export) until the Sprint 7 settlement engine; this adds only the account-capture surface + its KYC gate.
+
+## 2026-06-06 · Staging environment decommissioned — production is the only environment
+
+**Context:** Staging (`staging.eventpulse.com.bd`, the t3.small box) was wound down once prod cut over and payments went live. Its scaffolding lingered in the repo: a deploy-staging CI workflow, a staging nginx vhost, `bootstrap-staging.sh`, the `STAGING_PAYMENT_BLOCK` payment guard, and a k6 "load test (staging)" workflow pointed at the dead staging host. Moshiur asked to fully remove the staging part.
+
+**Decision:** Remove the staging environment + scaffolding; production is the sole environment.
+- **Deleted:** `.github/workflows/deploy-staging.yml`, `.github/workflows/load-test.yml` (staging-targeted), `infra/nginx/eventpulse-staging.conf`, `infra/scripts/bootstrap-staging.sh`.
+- **deploy.sh:** the `.eventpulse-env` fallback default changed `staging` → `production`; comments repointed to `bootstrap-prod.sh` / `eventpulse-prod.conf`.
+- **`STAGING_PAYMENT_BLOCK` removed from the prod env file** (`/home/eventpulse/.env.production`, backup `.bak-prestaging-removal`) + api restarted. The guard reads the var at call time; unset → always-allow, i.e. **identical to the prior `=0`** — no payment-behaviour change.
+- **KEPT (deliberately):** (a) the `staging-payment-block.ts` guard CODE — now permanently inert (no env var sets it), retained rather than gutting the live EPS init money-path in a bulk cleanup; a focused removal can follow. (b) **EPS *sandbox* mode** (`sandbox-config.ts`, `EPS_MODE='sandbox'`) — that's EPS's legitimate test environment, not "staging"; removing it would lose the only safe way to test EPS.
+
+**Consequences:** Merging to `main` no longer deploys to staging (workflow gone). Future infra docs (CLAUDE.md §17 staging blocks) are historical; a banner notes the decommission. If a non-prod environment is ever needed again, re-provision from `bootstrap-prod.sh` with a distinct marker + env file.

@@ -86,7 +86,7 @@ function envInstanceId(): string {
   if (!id) {
     throw new Error(
       'STAGING_EC2_INSTANCE_ID env var is required for tenant subdomain provisioning. ' +
-        'Set in bootstrap-staging.sh or override in test fixtures via SUBDOMAIN_PROVISION_DRY_RUN=1.',
+        'Set in bootstrap-prod.sh or override in test fixtures via SUBDOMAIN_PROVISION_DRY_RUN=1.',
     )
   }
   return id
