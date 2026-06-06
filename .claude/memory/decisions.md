@@ -4961,3 +4961,14 @@ No `*.staging.eventpulse.com.bd` wildcard. The wildcard pattern in §17.6 is for
 - Bilingual SES templates `auth_verify_email` + `auth_password_reset` (red brand).
 
 **Consequences:** Supersedes "Third-party login removed — email + OTP only" for the login method (verification token machinery is retained, not the magic-link login). Existing passwordless users (passwordHash NULL) set a password via forgot-password. Frontend (/sign-up, /sign-in rebuilt to password; new /verify-email, /forgot-password, /reset-password; magic-link form + /auth/magic page removed; unverified banner) ships in the same workstream before prod cutover. CLAUDE.md §5 to be updated. KYC-at-disbursement + `/bn` bilingual + landing/footer parity are the following workstreams (see session todo mega-list).
+
+## 2026-06-06 · KYC gate at disbursement, not paid-tier
+
+**Context:** Moshiur: "KYC is needed when any user tries disbursement." The playbook (§13.4) had floated a KYC gate at "add paid tier", but on inspection **no such gate was ever implemented** — paid tiers + orders have zero KYC checks in code, and there was no tenant payout flow at all (only an admin CSV export; `tenant_payout_accounts` wasn't even in the Drizzle schema).
+
+**Decision:** KYC is enforced at the **disbursement entry point** — adding a payout account — not at paid-tier creation. A tenant publishes free AND paid events and sells tickets without KYC; KYC (`tenants.kyc_status='approved'`) is required only to add a bank/MFS payout account (i.e. to set up receiving money).
+- Built `tenant_payout_accounts` (migration 0022, §9.7) + RLS + Drizzle schema.
+- `POST /api/v1/tenant/payout-accounts` is gated: `KycNotApprovedError` → `403 KYC_NOT_APPROVED` until approved. `GET` lists accounts with the number masked to last-4.
+- Tenant `/payouts` page shows a "Verify your identity to receive payouts" CTA → `/kyc` when not approved (or "under review" when submitted); the add-account form once approved.
+
+**Consequences:** Matches the §2.3 "graduation moment" intent but moves the trigger from paid-sale to payout-setup (organisers can sell first, verify before withdrawing — less signup friction, and money is still gated by KYC + the T+5 hold before it leaves the platform). No add-paid-tier gate to remove (never existed). The §13.4 trigger description is superseded by this; CLAUDE.md §1.6 + §5.2 annotated. Actual disbursement execution remains admin-driven (CSV export) until the Sprint 7 settlement engine; this adds only the account-capture surface + its KYC gate.
