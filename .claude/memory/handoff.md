@@ -1,20 +1,28 @@
 # Event Pulse — Handoff (session exit state)
 
-**Last update:** 2026-06-06 — **Day 49.** Prod on **v0.4.30**. Driver: Claude Code (Opus 4.8). Single EC2 `i-0c41fae1286527654`, SSM-only, deploy via `deploy-prod.yml` (checks out the **release tag**, NOT the prod branch). API `api.eventpulse.com.bd`; web `app.`/apex/`my.`. Org `The-Public-Pulse-Agency/EventPulse`, AWS acct `739275468267`.
+**Last update:** 2026-06-06 — **Day 49 (cont).** Prod on **v0.4.35**. Single EC2 `i-0c41fae1286527654` (`eventpulse-prod`, IP 52.76.69.96), SSM-only, deploy via `deploy-prod.yml` (checks out the **release tag**). API `api.eventpulse.com.bd`; web apex + `app.`/`admin.`. Org `The-Public-Pulse-Agency/EventPulse`, AWS `739275468267`. **Staging fully decommissioned** — production is the only environment.
 
-## ✅ Shipped this session (v0.4.23 → v0.4.30, all LIVE + verified)
-- **EPS PAYMENTS WENT LIVE.** All methods open (retired bKash-only guard); `STAGING_PAYMENT_BLOCK=0` flipped via SSM. The first real ৳357 smoke caught **3 prod-only bugs** (all fixed): (1) v5 Verify `PaymentReferance: null` rejected by schema → `.nullable().optional()` (#339, v0.4.24); (2) `/orders/return/*` + `/buyer-terms` 404 → built return pages + status endpoint + buyer-terms (#341, v0.4.25); (3) BullMQ jobId had `:` → ticket delivery never enqueued → `delivery-${id}` (#340). Operator's order re-enqueued + ticket delivered.
-- **On-page ticket PDF download** (#343, v0.4.26) — `GET /public/orders/:id/tickets.pdf`, multi-page, shared `drawTicketPage`.
-- **notification_log** (#344, v0.4.27, migration 0020) — queryable per-send delivery record; delivery worker writes a row per email (recipient hashed, R5).
-- **A — Password onboarding** (#345/#346, v0.4.28, migration 0021) — signup→email-verify→password login, forgot/reset, **magic-link LOGIN removed** (token store kept). Bilingual verify/reset emails. CLAUDE.md §5.2/§1.6 updated.
-- **B — KYC at disbursement** (#347, v0.4.29, migration 0022) — `tenant_payout_accounts` + RLS; `POST /tenant/payout-accounts` gated on `kyc_status='approved'` (403 KYC_NOT_APPROVED); `/payouts` "verify to get paid" CTA. NO add-paid-tier gate existed to remove.
-- **D/E — Parity** (#348, v0.4.30) — homepage "by the numbers" metrics strip; footer Trust column completed (SLA/EULA/DPA/Cookies). Cross-check found homepage (12+ bilingual sections) + /trust (6+12 card grid) were ALREADY at parity.
-- **G — QA:** link sweep = all 30 marketing/trust/auth routes 200, zero broken links.
+## ✅ Shipped this session (v0.4.23 → v0.4.35, all LIVE + verified)
+- **EPS payments LIVE** (all methods) + the first real-money smoke caught **3 prod-only bugs** (v5 Verify null PaymentReferance, missing /orders/return + /buyer-terms pages, BullMQ jobId `:`) — all fixed; ticket re-delivered. + **ticket PDF download** (v0.4.26), **notification_log** (v0.4.27, migration 0020).
+- **A — Password onboarding** (v0.4.28, migration 0021): signup→email-verify→login, forgot/reset, magic-link removed.
+- **B — KYC at disbursement** (v0.4.29, migration 0022): `tenant_payout_accounts` + RLS, payout-account add gated on kyc_status='approved'.
+- **Discover** (v0.4.31): BookMyShow-style `/discover` — category + area (venue.district) + search; GET /api/v1/public/discover[/cities].
+- **Marketing parity** (v0.4.30): homepage metrics strip + footer legal links.
+- **QA audit + UAT plan** → `docs/qa/UAT-plan.md` (#351). All P1 findings fixed:
+- **P1 My-tickets** (v0.4.32, migration 0023): `/my-tickets` — buyer retrieves tickets by email (single-use link) → view + PDF re-download. + payout T+5 disclosure.
+- **P2 MFA/2FA** (v0.4.33, migration 0024): in-house TOTP (RFC 6238), enroll/confirm/disable/verify + login challenge gate + 128-bit recovery codes + Settings UI. (2 security-review fixes folded in: recovery entropy 40→128-bit, code schema max 20→40.)
+- **P2 Bilingual `/bn`** (v0.4.34): middleware rewrite /bn/*→/* (pages already bilingual inline → no mixed-language state, SSG preserved), EN|বাংলা toggle in nav+footer, hreflang.
+- **Staging decommissioned** (v0.4.35): deleted deploy-staging.yml + load-test.yml + staging nginx conf + bootstrap-staging.sh; deploy.sh fallback → production; STAGING_PAYMENT_BLOCK env var removed (guard now inert). No staging EC2/DNS/vhost remain (already gone). EPS *sandbox* mode + the inert guard code kept deliberately.
 
-## ⏭ Open (next session)
-- **C — Bilingual `/bn` routing + EN|বাংলা toggle** — the ONE real remaining TenderPulse gap. Pages show both langs inline but no toggle / `/bn` URLs. Deliberately deferred: cross-cutting refactor; half-done = mixed-language site. Do in one clean stretch: dict structure → LanguageToggle → `/bn` rewrite (NO middleware.ts exists yet — greenfield) → page-by-page. Locked decisions: `/bn` prefix (EN un-prefixed), magic-link removed, KYC disbursement-only.
-- **A-smoke (operator):** real signup→confirm-email→signin→reset (can't do — needs a mailbox).
-- Watch: `webhook.ses.bounce.suppressed` seen earlier — if a ticket/auth email doesn't land, check SES suppression list (operator's address was NOT suppressed; sends are real, DKIM-verified).
+## 🔑 Test accounts created on PROD (rotate/delete after testing)
+- **Super-admin:** `admin@eventpulse.com.bd` / `Adm-FrH154yoXXz6A9!` (login `/admin-sign-in`).
+- **Organiser:** `organiser@eventpulse.com.bd` / `Org-xKenx3JXwZ7NA9!` (tenant "Test Organiser", active + KYC-approved; portal via `/choose-tenant`).
+- Both pre-verified. All logins verified working (admin 200, org attendee+tenant 200, wrong-pw 401).
+
+## ⏭ Open
+- **Operator UAT pass** (`docs/qa/UAT-plan.md`) — the human+inbox smokes (payment, onboarding email, MFA enroll, my-tickets).
+- **Optional / offered, not done:** (a) nginx hard-404 for `staging.*` (currently wildcard-catches to marketing — harmless); (b) focused removal of the now-inert payment-guard code; (c) `/bn` Bengali-*primary* presentation (currently same bilingual content under both locales).
+- Legal docs still v0.1 placeholders → counsel review gates the first *paying* tenant.
 
 ## Next step
-Start C (bilingual /bn) as a focused task, or whatever the operator raises. Nothing is half-built; prod = main = v0.4.30, all green.
+Operator runs UAT. Prod = main = v0.4.35, all green. Nothing half-built.
