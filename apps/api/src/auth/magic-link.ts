@@ -28,6 +28,7 @@ export type MagicLinkPurpose =
   | 'email_change'
   | 'email_verify'
   | 'password_reset'
+  | 'ticket_access'
 
 export interface RequestMagicLinkInput {
   email: string

@@ -175,6 +175,12 @@ export function PayoutAccounts() {
         </p>
       )}
 
+      <p className="text-mkt-slate mt-3 rounded-md border border-[var(--color-mkt-line)] bg-[var(--color-mkt-soft)] px-3 py-2 text-xs leading-relaxed">
+        How payouts work: settlements are released <strong>5 business days (T+5)</strong> after each
+        paid event and reviewed by our finance team before the transfer is sent to your primary
+        account. You’ll be emailed when a payout is on its way.
+      </p>
+
       <ul className="mt-4 space-y-2">
         {accounts.map((a) => (
           <li

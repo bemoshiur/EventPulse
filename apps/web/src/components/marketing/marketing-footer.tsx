@@ -29,6 +29,7 @@ const COLUMNS = [
     heading: 'Company',
     bn: 'কোম্পানি',
     links: [
+      { href: '/my-tickets', label: 'Find my tickets' },
       { href: '/about', label: 'About' },
       { href: '/contact', label: 'Contact' },
       { href: '/book-a-demo', label: 'Book a demo' },
