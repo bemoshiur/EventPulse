@@ -44,6 +44,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 
 import { fetchOrderStatus } from '../../domain/public-orders/status.js'
+import { buildOrderTicketsPdf } from '../../services/tickets/download-order-tickets.js'
 import { logger } from '../../lib/logger.js'
 import { idempotencyMiddleware } from '../../middleware/idempotency.js'
 import {
@@ -218,5 +219,36 @@ publicOrdersRoutes.get('/:id/status', zValidator('param', orderIdParam), async (
   } catch (err) {
     logger.error({ err, orderId: id }, 'public.order.status.failed')
     return c.json({ error: { code: 'INTERNAL_ERROR', message: 'failed to load order' } }, 500)
+  }
+})
+
+// ─── GET /:id/tickets.pdf ──────────────────────────────────────────────
+//
+// On-page ticket download for the success page. One multi-page PDF (a page per
+// attendee). Only paid orders with issued tickets return a PDF.
+
+publicOrdersRoutes.get('/:id/tickets.pdf', zValidator('param', orderIdParam), async (c) => {
+  const { id } = c.req.valid('param')
+  try {
+    const result = await buildOrderTicketsPdf(id)
+    if (result.kind === 'not_found') {
+      return c.json({ error: { code: 'NOT_FOUND', message: 'order not found' } }, 404)
+    }
+    if (result.kind === 'not_paid') {
+      return c.json({ error: { code: 'CONFLICT', message: 'order is not paid' } }, 409)
+    }
+    if (result.kind === 'no_tickets') {
+      return c.json({ error: { code: 'NOT_FOUND', message: 'no tickets issued yet' } }, 404)
+    }
+    // Copy into a fresh Uint8Array — a Node Buffer's underlying ArrayBuffer can
+    // be pooled/oversized, and Hono's c.body() types accept Uint8Array, not Buffer.
+    const bytes = new Uint8Array(result.pdf.pdf)
+    c.header('Content-Type', 'application/pdf')
+    c.header('Content-Disposition', `attachment; filename="${result.filename}"`)
+    c.header('Cache-Control', 'private, no-store')
+    return c.body(bytes)
+  } catch (err) {
+    logger.error({ err, orderId: id }, 'public.order.tickets_pdf.failed')
+    return c.json({ error: { code: 'INTERNAL_ERROR', message: 'failed to build tickets' } }, 500)
   }
 })

@@ -134,6 +134,67 @@ export async function renderTicketPdf(input: RenderTicketPdfInput): Promise<Rend
     doc.on('error', reject)
   })
 
+  drawTicketPage(doc, input, qr.png)
+
+  doc.end()
+  await done
+
+  const pdf = Buffer.concat(chunks)
+  return { pdf, bytes: pdf.length }
+}
+
+/**
+ * Renders ALL tickets for an order into ONE multi-page PDF (one page per
+ * attendee) — backs the on-page "Download tickets" button on the post-payment
+ * success page. Same per-page layout as the emailed single-ticket PDF; pages
+ * share the order's event/tenant context but carry each attendee's name + QR.
+ */
+export async function renderOrderTicketsPdf(
+  inputs: readonly RenderTicketPdfInput[],
+): Promise<RenderedTicketPdf> {
+  if (inputs.length === 0) {
+    throw new Error('renderOrderTicketsPdf: no tickets to render')
+  }
+  // Render every QR first (fail before opening the doc if any throws).
+  const qrs = await Promise.all(inputs.map((i) => renderQrPng({ qrToken: i.qrToken })))
+
+  const first = inputs[0]!
+  const doc = new PDFDocument({
+    size: 'A4',
+    margin: 40,
+    info: {
+      Title: `Tickets — ${first.eventTitle}`,
+      Author: 'Event Pulse',
+      Subject: `Tickets for ${first.eventTitle}`,
+      Creator: 'eventpulse.com.bd',
+    },
+  })
+  const chunks: Buffer[] = []
+  doc.on('data', (chunk: Buffer) => chunks.push(chunk))
+  const done = new Promise<void>((resolve, reject) => {
+    doc.on('end', resolve)
+    doc.on('error', reject)
+  })
+
+  inputs.forEach((input, idx) => {
+    if (idx > 0) doc.addPage()
+    drawTicketPage(doc, input, qrs[idx]!.png)
+  })
+
+  doc.end()
+  await done
+
+  const pdf = Buffer.concat(chunks)
+  return { pdf, bytes: pdf.length }
+}
+
+/**
+ * Draws one ticket onto the current page of `doc`. Shared by the single-ticket
+ * (emailed) renderer and the multi-page (downloaded) renderer so the layout
+ * never drifts between the two. Uses absolute coordinates + `doc.page.*`, so it
+ * is correct on any page (including after `doc.addPage()`).
+ */
+function drawTicketPage(doc: PDFKit.PDFDocument, input: RenderTicketPdfInput, qrPng: Buffer): void {
   const brand = sanitiseBrandColor(input.brandColorPrimary) ?? DEFAULT_BRAND_PRIMARY
   const t = i18n(input.locale)
 
@@ -210,7 +271,7 @@ export async function renderTicketPdf(input: RenderTicketPdfInput): Promise<Rend
     .text(formatVenue(input.venue), 40, detailsTop + 72, { width: 300 })
 
   // ─── QR (right side) ────────────────────────────────────────────
-  doc.image(qr.png, doc.page.width - 200, detailsTop, { width: 160, height: 160 })
+  doc.image(qrPng, doc.page.width - 200, detailsTop, { width: 160, height: 160 })
   doc
     .fontSize(9)
     .fillColor('#6B6B7A')
@@ -234,12 +295,6 @@ export async function renderTicketPdf(input: RenderTicketPdfInput): Promise<Rend
       width: doc.page.width - 80,
       align: 'center',
     })
-
-  doc.end()
-  await done
-
-  const pdf = Buffer.concat(chunks)
-  return { pdf, bytes: pdf.length }
 }
 
 // ─── helpers ────────────────────────────────────────────────────────

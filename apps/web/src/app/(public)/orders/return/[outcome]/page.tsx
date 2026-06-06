@@ -198,6 +198,14 @@ export default function OrderReturnPage({ params }: { params: Promise<{ outcome:
           )}
 
           <div className="mt-7 flex flex-col gap-2 sm:flex-row sm:justify-center">
+            {isPaid && orderId && (
+              <a
+                href={`${apiBase()}/api/v1/public/orders/${orderId}/tickets.pdf`}
+                className="bg-mkt-red inline-flex h-11 items-center justify-center rounded-md px-6 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg"
+              >
+                Download ticket{order && order.tickets.length === 1 ? '' : 's'} (PDF)
+              </a>
+            )}
             {!isPaid && eventUrl && (
               <Link
                 href={eventUrl}
