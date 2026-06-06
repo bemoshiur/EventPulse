@@ -13,6 +13,7 @@ import { createApp } from '../app.js'
 import { resetPool, withSuperAdmin } from '../db/client.js'
 import { superAdmins, tenantUsers, tenants, users } from '../db/schema/index.js'
 import { eq, inArray } from 'drizzle-orm'
+import { generateTotp } from '../auth/totp.js'
 
 const HAS_DB = Boolean(process.env['DATABASE_URL'])
 const describeIfDb = HAS_DB ? describe : describe.skip
@@ -311,5 +312,85 @@ describeIfDb('auth routes (integration)', () => {
       body: JSON.stringify({ email, password: PW, audience: 'tenant', tenantId }),
     })
     expect(res.status).toBe(200)
+  })
+
+  // ─── MFA / TOTP login gate ──────────────────────────────────────────────
+  it('MFA: enroll → confirm → login is gated → /mfa/verify with a TOTP issues a session; recovery code also works', async () => {
+    const email = `mfa-${stamp}@test.local`
+    const { token } = await signupRaw(email, 'MFA User')
+    const verifyRes = await app.request('/api/v1/auth/verify-email/consume', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ token }),
+    })
+    const accessToken = ((await verifyRes.json()) as { data: { session: { accessToken: string } } })
+      .data.session.accessToken
+    const authed = { ...JSON_HEADERS, authorization: `Bearer ${accessToken}` }
+
+    // enroll → secret
+    const enroll = await app.request('/api/v1/auth/mfa/enroll', { method: 'POST', headers: authed })
+    expect(enroll.status).toBe(200)
+    const { secret } = ((await enroll.json()) as { data: { secret: string } }).data
+
+    // confirm with a live code → enabled + recovery codes
+    const confirm = await app.request('/api/v1/auth/mfa/confirm', {
+      method: 'POST',
+      headers: authed,
+      body: JSON.stringify({ code: generateTotp(secret) }),
+    })
+    expect(confirm.status).toBe(200)
+    const recovery = ((await confirm.json()) as { data: { recoveryCodes: string[] } }).data
+      .recoveryCodes
+    expect(recovery.length).toBeGreaterThan(0)
+
+    // login now returns a challenge, NOT a session
+    const login = await app.request('/api/v1/auth/password/login', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email, password: PW }),
+    })
+    expect(login.status).toBe(200)
+    const loginBody = (await login.json()) as {
+      data: { mfaRequired?: boolean; challengeToken?: string; session?: unknown }
+    }
+    expect(loginBody.data.mfaRequired).toBe(true)
+    expect(loginBody.data.session).toBeUndefined()
+
+    // wrong code → 401
+    const bad = await app.request('/api/v1/auth/mfa/verify', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ challengeToken: loginBody.data.challengeToken, code: '000000' }),
+    })
+    expect(bad.status).toBe(401)
+
+    // correct TOTP → session
+    const verify = await app.request('/api/v1/auth/mfa/verify', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        challengeToken: loginBody.data.challengeToken,
+        code: generateTotp(secret),
+      }),
+    })
+    expect(verify.status).toBe(200)
+    expect(
+      ((await verify.json()) as { data: { session: { token: string } } }).data.session.token,
+    ).toBeTruthy()
+
+    // a recovery code works as a second factor on a fresh challenge
+    const login2 = await app.request('/api/v1/auth/password/login', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email, password: PW }),
+    })
+    const challenge2 = ((await login2.json()) as { data: { challengeToken: string } }).data
+      .challengeToken
+    const rec = await app.request('/api/v1/auth/mfa/verify', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ challengeToken: challenge2, code: recovery[0] }),
+    })
+    expect(rec.status).toBe(200)
   })
 })

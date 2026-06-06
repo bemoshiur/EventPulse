@@ -75,6 +75,48 @@ export async function signTokens(claims: AccessClaims): Promise<SignedTokens> {
   }
 }
 
+// ─── MFA challenge token ────────────────────────────────────────────────
+//
+// Issued by /password/login when the user has MFA on: it proves "password +
+// email already passed" without opening a session. Short-lived (5 min), carries
+// the intended audience + tenantId so /mfa/verify can open the right session.
+// Signed with JWT_ACCESS_SECRET + a `purpose: 'mfa_challenge'` claim so it can't
+// be replayed as an access token.
+
+const MFA_CHALLENGE_TTL_SEC = 300
+
+export interface MfaChallenge {
+  sub: string
+  audience: SessionAudience['audience']
+  tenantId: string | null
+}
+
+export async function signMfaChallenge(c: MfaChallenge): Promise<string> {
+  return new SignJWT({ audience: c.audience, tenantId: c.tenantId, purpose: 'mfa_challenge' })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(c.sub)
+    .setIssuedAt()
+    .setIssuer('eventpulse')
+    .setExpirationTime(`${MFA_CHALLENGE_TTL_SEC}s`)
+    .sign(secret('JWT_ACCESS_SECRET'))
+}
+
+export async function verifyMfaChallenge(token: string): Promise<MfaChallenge | null> {
+  try {
+    const { payload } = await jwtVerify(token, secret('JWT_ACCESS_SECRET'), {
+      issuer: 'eventpulse',
+    })
+    if (payload['purpose'] !== 'mfa_challenge' || typeof payload.sub !== 'string') return null
+    return {
+      sub: payload.sub,
+      audience: payload['audience'] as SessionAudience['audience'],
+      tenantId: (payload['tenantId'] as string | null) ?? null,
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function verifyAccessToken(token: string): Promise<AccessClaims | null> {
   try {
     const { payload } = await jwtVerify(token, secret('JWT_ACCESS_SECRET'), {

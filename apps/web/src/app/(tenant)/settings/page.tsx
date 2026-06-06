@@ -11,6 +11,7 @@
 
 import { useEffect, useState } from 'react'
 
+import { MfaSettings } from '@/components/auth/mfa-settings'
 import { ImageUpload } from '@/components/tenant/image-upload'
 
 function apiBase(): string {
@@ -288,6 +289,16 @@ export function TenantSettings() {
             {brandBusy ? 'Saving…' : 'Save branding'}
           </button>
         </form>
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">Security</h2>
+          <p className="text-mkt-slate mt-1 text-sm">
+            Add two-factor authentication for an extra layer of protection at sign-in.
+          </p>
+        </div>
+        <MfaSettings />
       </section>
     </div>
   )
