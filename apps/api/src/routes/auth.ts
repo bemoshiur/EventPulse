@@ -1,43 +1,58 @@
 /**
  * Auth routes for Sprint 1 Day 7-8. Mounted at /api/v1/auth.
  *
- * Surface (today):
- *   POST /password/signup         — email+password registration (no KYC)
- *   POST /password/login          — email+password login
- *   POST /magic-link/request      — email a one-time sign-in token
- *   POST /magic-link/consume      — exchange token for session + JWTs
- *   GET  /session                 — current session identity (layout auth-gate)
- *   POST /logout                  — revoke the session bound to the request
+ * Surface:
+ *   POST /password/signup          — email+password registration → sends verify email (no session)
+ *   POST /password/login           — email+password login (blocked until email verified)
+ *   POST /verify-email/request     — (re)send the confirmation email
+ *   POST /verify-email/consume     — confirm address from the link → session
+ *   POST /password/forgot          — email a reset link
+ *   POST /password/reset           — set a new password from the link → session
+ *   GET  /session                  — current session identity (layout auth-gate)
+ *   POST /logout                   — revoke the session bound to the request
  *
- * Third-party (Google/OAuth) sign-in was REMOVED 2026-06-04 per product
- * decision — email-only auth (magic link). See decisions.md "Third-party login
- * removed — email + OTP only". The oauth_identities table + users.ts OAuth
- * helpers remain for historical rows but no runtime path writes them.
- *
- * NOTE: Email delivery is stubbed — `requestMagicLink` returns the token
- * inline in the response when `process.env.AUTH_RETURN_MAGIC_LINK === '1'`
- * (dev / test only). Day 9-10 wires SES.
+ * Onboarding is password-only with email verification (decisions.md 2026-06-06
+ * "Onboarding → password-only + email verification; magic-link LOGIN removed").
+ * The magic_links table remains the single-use TTL'd token store backing
+ * 'email_verify' + 'password_reset'; there is no magic-link LOGIN path.
+ * Third-party (Google/OAuth) sign-in was removed 2026-06-04. The
+ * oauth_identities table + helpers remain for historical rows only.
  */
 
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 
 import { decideAudience, fetchAudienceGrants } from '../auth/audience-grant.js'
-import { deriveDisplayName } from '../auth/display-name.js'
-import { buildConsumeUrl, resolveConsumeBase } from '../auth/consume-url.js'
+import { resolveConsumeBase } from '../auth/consume-url.js'
 import { clearSessionCookie, setSessionCookie } from '../auth/cookie.js'
 import { hashPassword, verifyPassword } from '../auth/hash.js'
 import { allowedOrigins } from '../middleware/cors.js'
 import { signTokens } from '../auth/jwt.js'
-import { consumeMagicLink, requestMagicLink, type MagicLinkPurpose } from '../auth/magic-link.js'
+import { consumeMagicLink, requestMagicLink } from '../auth/magic-link.js'
 import { requireUser } from '../auth/middleware.js'
-import { createSession, revokeSession, type SessionAudience } from '../auth/sessions.js'
+import {
+  createSession,
+  revokeAllUserSessions,
+  revokeSession,
+  type SessionAudience,
+} from '../auth/sessions.js'
 import { hashToken } from '../auth/tokens.js'
-import { createUser, findUserByEmail, markEmailVerified } from '../auth/users.js'
+import { createUser, findUserByEmail, markEmailVerified, setPassword } from '../auth/users.js'
 import { sendEmail } from '../infra/ses/client.js'
-import { renderMagicLink } from '../infra/ses/templates/magic-link.js'
+import { renderResetPassword } from '../infra/ses/templates/reset-password.js'
+import { renderVerifyEmail } from '../infra/ses/templates/verify-email.js'
 import { logger } from '../lib/logger.js'
+
+/**
+ * Resolve the web base URL a verification / reset link should land on. Prefers
+ * the request Origin (if allow-listed) so the link returns the user to the
+ * portal they started from; else the per-env web base.
+ */
+function webBase(originHeader: string | undefined): string {
+  const fallback = process.env['EVENTPULSE_WEB_BASE_URL'] ?? 'https://eventpulse.com.bd'
+  return resolveConsumeBase(originHeader, allowedOrigins(), fallback)
+}
 
 const auth = new Hono()
 
@@ -49,45 +64,65 @@ const signupSchema = z.object({
   fullName: z.string().min(2).max(120),
 })
 
+/**
+ * Issue an email_verify token + send the confirmation email. Shared by signup
+ * and the resend endpoint. Returns expiresAt; never throws on SES failure (we
+ * don't want signup to 500 on a transient send error — the user can resend).
+ */
+async function sendVerificationEmail(
+  c: Context,
+  email: string,
+  userId: string | null,
+): Promise<{ token: string; expiresAt: Date }> {
+  const { token, expiresAt } = await requestMagicLink({
+    email,
+    purpose: 'email_verify',
+    userId,
+    ip: c.req.header('x-forwarded-for') ?? null,
+  })
+  const url = `${webBase(c.req.header('origin'))}/verify-email?token=${encodeURIComponent(token)}`
+  const rendered = renderVerifyEmail({ url, expiresAt })
+  try {
+    await sendEmail({
+      to: email,
+      subject: rendered.subject,
+      text: rendered.text,
+      html: rendered.html,
+      tags: { template_id: rendered.templateId, purpose: 'email_verify' },
+    })
+  } catch (err) {
+    logger.error({ err, email_sha: hashToken(email).slice(0, 16) }, 'verify_email.send_failed')
+  }
+  return { token, expiresAt }
+}
+
+/** Dev/test only: surface the token inline so integration tests (and local dev
+ *  without a mailbox) can complete the flow. NEVER set in production. */
+const DEBUG_INLINE_TOKEN = (): boolean => process.env['AUTH_RETURN_MAGIC_LINK'] === '1'
+
 auth.post('/password/signup', zValidator('json', signupSchema), async (c) => {
   const input = c.req.valid('json')
   const existing = await findUserByEmail(input.email)
   if (existing) {
-    return c.json(
-      {
-        error: {
-          code: 'CONFLICT',
-          message: 'email already registered',
-        },
-      },
-      409,
-    )
+    return c.json({ error: { code: 'CONFLICT', message: 'email already registered' } }, 409)
   }
   const hash = await hashPassword(input.password)
+  // Account is created UNVERIFIED (email_verified_at stays null). No session is
+  // issued — the user must confirm their email before they can log in. This is
+  // the TenderPulse-style onboarding (decisions.md 2026-06-06).
   const user = await createUser({
     email: input.email,
     fullName: input.fullName,
     passwordHash: hash,
   })
-  // New attendee account by default; tenant/super-admin require explicit grant.
-  const { token, expiresAt } = await createSession({
-    userId: user.id,
-    audience: 'attendee',
-    ip: c.req.header('x-forwarded-for') ?? null,
-    userAgent: c.req.header('user-agent') ?? null,
-  })
-  setSessionCookie(c, token, expiresAt)
-  const tokens = await signTokens({
-    sub: user.id,
-    audience: 'attendee',
-    tenantId: null,
-    sessionId: hashToken(token),
-  })
+  const { token, expiresAt } = await sendVerificationEmail(c, user.email, user.id)
   return c.json(
     {
       data: {
         user: { id: user.id, email: user.email, fullName: user.fullName },
-        session: { token, ...tokens },
+        emailVerificationRequired: true,
+        verificationExpiresAt: expiresAt.toISOString(),
+        ...(DEBUG_INLINE_TOKEN() ? { _debug_token: token } : {}),
       },
     },
     201,
@@ -110,6 +145,19 @@ auth.post('/password/login', zValidator('json', loginSchema), async (c) => {
   const ok = await verifyPassword(input.password, hash)
   if (!user || !user.passwordHash || !ok) {
     return c.json({ error: { code: 'AUTH_REQUIRED', message: 'invalid credentials' } }, 401)
+  }
+  // Email-verification gate: a created-but-unconfirmed account cannot sign in.
+  // The client surfaces a "resend confirmation" affordance on this code.
+  if (!user.emailVerifiedAt) {
+    return c.json(
+      {
+        error: {
+          code: 'EMAIL_NOT_VERIFIED',
+          message: 'Please confirm your email before signing in. Check your inbox.',
+        },
+      },
+      403,
+    )
   }
   const audience = input.audience as SessionAudience['audience']
   if (audience === 'tenant' && !input.tenantId) {
@@ -150,122 +198,133 @@ auth.post('/password/login', zValidator('json', loginSchema), async (c) => {
   })
 })
 
-const magicRequestSchema = z.object({
-  email: z.string().email().toLowerCase().trim(),
-  purpose: z.enum(['signup', 'signin']).default('signin'),
-  // Which portal the link logs into. Travels in the link; the #267 grant check
-  // at consume is the authority (requesting super-admin without the role → 403).
-  // `tenant` is omitted here — a tenant session needs a tenantId the magic-link
-  // flow doesn't carry; tenant context is entered via the context switcher.
-  audience: z.enum(['super-admin', 'attendee']).default('attendee'),
-})
-
-auth.post('/magic-link/request', zValidator('json', magicRequestSchema), async (c) => {
-  const input = c.req.valid('json')
-  const user = await findUserByEmail(input.email)
-  // Always respond 202 to avoid enumeration. Generate a token regardless.
-  const { token, expiresAt } = await requestMagicLink({
-    email: input.email,
-    purpose: input.purpose as MagicLinkPurpose,
-    userId: user?.id ?? null,
-    ip: c.req.header('x-forwarded-for') ?? null,
-  })
-
-  // Land the link on the portal the user signed in from (request Origin, if
-  // allow-listed), else the per-env default. NEVER the old staging fallback.
-  const fallbackBase = process.env['EVENTPULSE_BASE_URL'] ?? 'https://app.eventpulse.com.bd'
-  const base = resolveConsumeBase(c.req.header('origin'), allowedOrigins(), fallbackBase)
-  const url = buildConsumeUrl({ base, token, purpose: input.purpose, audience: input.audience })
-
-  const rendered = renderMagicLink({
-    url,
-    expiresAt,
-    purpose: input.purpose as 'signin' | 'signup',
-  })
-  try {
-    await sendEmail({
-      to: input.email,
-      subject: rendered.subject,
-      text: rendered.text,
-      html: rendered.html,
-      tags: { template_id: rendered.templateId, purpose: input.purpose },
-    })
-  } catch (err) {
-    logger.error({ err, email_sha: hashToken(input.email).slice(0, 16) }, 'magic_link.send_failed')
-    // Still return 202 so we don't reveal account state on transient SES errors.
-  }
-
-  const debugInline = process.env['AUTH_RETURN_MAGIC_LINK'] === '1'
-  return c.json(
-    {
-      data: {
-        delivered: true,
-        expiresAt: expiresAt.toISOString(),
-        ...(debugInline ? { _debug_token: token, _debug_url: url } : {}),
-      },
-    },
-    202,
-  )
-})
-
-const magicConsumeSchema = z.object({
-  token: z.string().min(20),
-  audience: audienceSchema.default('attendee'),
-  tenantId: z.string().uuid().optional(),
-  fullName: z.string().min(2).max(120).optional(), // for signup path
-})
-
-auth.post('/magic-link/consume', zValidator('json', magicConsumeSchema), async (c) => {
-  const input = c.req.valid('json')
-  const ip = c.req.header('x-forwarded-for') ?? null
-  const result = await consumeMagicLink(input.token, ip)
-  if (!result) {
-    return c.json({ error: { code: 'AUTH_REQUIRED', message: 'invalid or expired link' } }, 401)
-  }
-
-  let user = await findUserByEmail(result.email)
-  if (!user) {
-    if (result.purpose !== 'signup') {
-      return c.json({ error: { code: 'NOT_FOUND', message: 'no account for this email' } }, 404)
-    }
-    // Passwordless signup has no name step — use the supplied name if any, else
-    // derive a friendly display name from the email (editable later in settings).
-    const fullName = input.fullName?.trim() || deriveDisplayName(result.email)
-    user = await createUser({ email: result.email, fullName })
-  }
-  await markEmailVerified(user.id)
-
-  const audience = input.audience as SessionAudience['audience']
-  // Audience-grant authority (Day-45 critical auth fix): same enforcement as
-  // /password/login — the magic-link path must not trust the client audience.
-  const grant = decideAudience(audience, await fetchAudienceGrants(user.id), input.tenantId)
-  if (!grant.allowed) {
-    return c.json(
-      { error: { code: 'FORBIDDEN', message: grant.reason ?? 'audience not granted' } },
-      403,
-    )
-  }
+/**
+ * Open an attendee session for a user + set the cookie. Shared by the
+ * verify-email and password-reset consume paths (both prove email control, so
+ * they log the user straight in as an attendee — tenant/super-admin context is
+ * entered later via the context switcher under audience-grant authority).
+ */
+async function openAttendeeSession(
+  c: Context,
+  user: { id: string; email: string; fullName: string },
+) {
   const { token, expiresAt } = await createSession({
     userId: user.id,
-    audience,
-    tenantId: audience === 'tenant' ? input.tenantId : undefined,
-    ip,
+    audience: 'attendee',
+    ip: c.req.header('x-forwarded-for') ?? null,
     userAgent: c.req.header('user-agent') ?? null,
   })
   setSessionCookie(c, token, expiresAt)
   const tokens = await signTokens({
     sub: user.id,
-    audience,
-    tenantId: audience === 'tenant' ? (input.tenantId ?? null) : null,
+    audience: 'attendee',
+    tenantId: null,
     sessionId: hashToken(token),
   })
-
   return c.json({
     data: {
       user: { id: user.id, email: user.email, fullName: user.fullName },
       session: { token, ...tokens },
     },
   })
+}
+
+const emailOnlySchema = z.object({ email: z.string().email().toLowerCase().trim() })
+const tokenOnlySchema = z.object({ token: z.string().min(20) })
+
+// POST /verify-email/request — (re)send the confirmation email. Always 202
+// (no account enumeration); only sends for an existing, still-unverified user.
+auth.post('/verify-email/request', zValidator('json', emailOnlySchema), async (c) => {
+  const { email } = c.req.valid('json')
+  const user = await findUserByEmail(email)
+  if (user && !user.emailVerifiedAt) {
+    await sendVerificationEmail(c, user.email, user.id)
+  }
+  return c.json({ data: { delivered: true } }, 202)
+})
+
+// POST /verify-email/consume — confirm the address from the emailed link, then
+// log the user in. The token's purpose MUST be 'email_verify'.
+auth.post('/verify-email/consume', zValidator('json', tokenOnlySchema), async (c) => {
+  const { token } = c.req.valid('json')
+  const result = await consumeMagicLink(token, c.req.header('x-forwarded-for') ?? null)
+  if (!result || result.purpose !== 'email_verify') {
+    return c.json({ error: { code: 'AUTH_REQUIRED', message: 'invalid or expired link' } }, 401)
+  }
+  const user = await findUserByEmail(result.email)
+  if (!user) {
+    return c.json({ error: { code: 'NOT_FOUND', message: 'no account for this email' } }, 404)
+  }
+  await markEmailVerified(user.id)
+  return openAttendeeSession(c, user)
+})
+
+// POST /password/forgot — email a reset link. Always 202 (no enumeration).
+auth.post('/password/forgot', zValidator('json', emailOnlySchema), async (c) => {
+  const { email } = c.req.valid('json')
+  const user = await findUserByEmail(email)
+  let debugToken: string | null = null
+  if (user) {
+    const { token, expiresAt } = await requestMagicLink({
+      email: user.email,
+      purpose: 'password_reset',
+      userId: user.id,
+      ip: c.req.header('x-forwarded-for') ?? null,
+    })
+    debugToken = token
+    const url = `${webBase(c.req.header('origin'))}/reset-password?token=${encodeURIComponent(token)}`
+    const rendered = renderResetPassword({ url, expiresAt })
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: rendered.subject,
+        text: rendered.text,
+        html: rendered.html,
+        tags: { template_id: rendered.templateId, purpose: 'password_reset' },
+      })
+    } catch (err) {
+      logger.error(
+        { err, email_sha: hashToken(user.email).slice(0, 16) },
+        'password_reset.send_failed',
+      )
+    }
+  }
+  return c.json(
+    {
+      data: {
+        delivered: true,
+        ...(DEBUG_INLINE_TOKEN() && debugToken ? { _debug_token: debugToken } : {}),
+      },
+    },
+    202,
+  )
+})
+
+const resetSchema = z.object({
+  token: z.string().min(20),
+  password: z.string().min(8).max(200),
+})
+
+// POST /password/reset — consume the reset token, set the new password, and log
+// the user in. A successful reset also confirms email control, so it verifies a
+// still-unverified account. The token's purpose MUST be 'password_reset'.
+auth.post('/password/reset', zValidator('json', resetSchema), async (c) => {
+  const input = c.req.valid('json')
+  const result = await consumeMagicLink(input.token, c.req.header('x-forwarded-for') ?? null)
+  if (!result || result.purpose !== 'password_reset') {
+    return c.json({ error: { code: 'AUTH_REQUIRED', message: 'invalid or expired link' } }, 401)
+  }
+  const user = await findUserByEmail(result.email)
+  if (!user) {
+    return c.json({ error: { code: 'NOT_FOUND', message: 'no account for this email' } }, 404)
+  }
+  await setPassword(user.id, await hashPassword(input.password))
+  // Reset proves control of the inbox → treat the address as verified.
+  if (!user.emailVerifiedAt) await markEmailVerified(user.id)
+  // Invalidate any other sessions (a reset is also the "I've been compromised"
+  // lever) before opening a fresh one.
+  await revokeAllUserSessions(user.id)
+  return openAttendeeSession(c, user)
 })
 
 /**

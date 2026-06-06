@@ -1,8 +1,8 @@
 /**
- * Auth routes set/clear the session cookie — browser-auth integration
- * (Day 46, Option B, steps 3-4). On a successful signup/login/consume the
- * API must emit an HttpOnly `ep_session` cookie; logout must clear it.
- * DB-gated: runs in CI (postgres:16), skips locally.
+ * Auth routes set/clear the session cookie — browser-auth integration.
+ * Password onboarding: signup does NOT open a session (email must be verified
+ * first); verify-email/consume + login + reset open a session and emit the
+ * HttpOnly `ep_session` cookie; logout clears it. DB-gated: CI only.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -21,6 +21,7 @@ describeIfDb('auth routes set/clear the session cookie (integration)', () => {
   const stamp = Date.now()
   const email = `cookie-auth-${stamp}@test.local`
   const password = 'correcthorse123'
+  let verifyToken = ''
 
   beforeAll(() => {
     process.env['JWT_ACCESS_SECRET'] = 'a'.repeat(64)
@@ -35,23 +36,25 @@ describeIfDb('auth routes set/clear the session cookie (integration)', () => {
     await resetPool()
   })
 
-  it('password/signup sets an HttpOnly ep_session cookie', async () => {
+  it('password/signup does NOT open a session (no session cookie yet)', async () => {
     const res = await app.request('/api/v1/auth/password/signup', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ email, password, fullName: 'Cookie Auth' }),
     })
     expect(res.status).toBe(201)
+    const body = (await res.json()) as { data: { _debug_token: string } }
+    verifyToken = body.data._debug_token
+    expect(verifyToken).toBeTruthy()
     const sc = res.headers.get('set-cookie') ?? ''
-    expect(sc).toContain(`${SESSION_COOKIE_NAME}=`)
-    expect(sc).toMatch(/HttpOnly/i)
+    expect(sc).not.toContain(`${SESSION_COOKIE_NAME}=`)
   })
 
-  it('password/login sets an HttpOnly ep_session cookie', async () => {
-    const res = await app.request('/api/v1/auth/password/login', {
+  it('verify-email/consume sets an HttpOnly ep_session cookie', async () => {
+    const res = await app.request('/api/v1/auth/verify-email/consume', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password }), // audience defaults to attendee
+      body: JSON.stringify({ token: verifyToken }),
     })
     expect(res.status).toBe(200)
     const sc = res.headers.get('set-cookie') ?? ''
@@ -59,17 +62,11 @@ describeIfDb('auth routes set/clear the session cookie (integration)', () => {
     expect(sc).toMatch(/HttpOnly/i)
   })
 
-  it('magic-link/consume sets the cookie', async () => {
-    const reqRes = await app.request('/api/v1/auth/magic-link/request', {
+  it('password/login (now verified) sets an HttpOnly ep_session cookie', async () => {
+    const res = await app.request('/api/v1/auth/password/login', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, purpose: 'signin' }),
-    })
-    const reqBody = (await reqRes.json()) as { data: { _debug_token: string } }
-    const res = await app.request('/api/v1/auth/magic-link/consume', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ token: reqBody.data._debug_token, audience: 'attendee' }),
+      body: JSON.stringify({ email, password }), // audience defaults to attendee
     })
     expect(res.status).toBe(200)
     const sc = res.headers.get('set-cookie') ?? ''

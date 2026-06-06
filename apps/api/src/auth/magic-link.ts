@@ -22,7 +22,12 @@ import { generateToken, hashToken, ipv4Prefix24 } from './tokens.js'
 
 const TTL_MIN = 15
 
-export type MagicLinkPurpose = 'signup' | 'signin' | 'email_change'
+export type MagicLinkPurpose =
+  | 'signup'
+  | 'signin'
+  | 'email_change'
+  | 'email_verify'
+  | 'password_reset'
 
 export interface RequestMagicLinkInput {
   email: string

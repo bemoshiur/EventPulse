@@ -199,7 +199,10 @@ export const magicLinks = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check('magic_links_purpose_chk', sql`${t.purpose} IN ('signup','signin','email_change')`),
+    check(
+      'magic_links_purpose_chk',
+      sql`${t.purpose} IN ('signup','signin','email_change','email_verify','password_reset')`,
+    ),
     index('idx_magic_links_email').on(t.email, t.expiresAt),
   ],
 )

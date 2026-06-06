@@ -1,8 +1,10 @@
 /**
- * Integration tests for /api/v1/auth/* routes.
+ * Integration tests for /api/v1/auth/* routes (password onboarding).
  *
  * Requires a real DATABASE_URL (CI integration-tests job provides it).
- * Skipped automatically without one.
+ * Skipped automatically without one. AUTH_RETURN_MAGIC_LINK=1 surfaces the
+ * email-verify / password-reset tokens inline so the flow is testable without
+ * a mailbox.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -15,6 +17,8 @@ import { eq, inArray } from 'drizzle-orm'
 const HAS_DB = Boolean(process.env['DATABASE_URL'])
 const describeIfDb = HAS_DB ? describe : describe.skip
 
+const JSON_HEADERS = { 'content-type': 'application/json' }
+
 describeIfDb('auth routes (integration)', () => {
   const app = createApp()
   const cleanup: string[] = []
@@ -22,17 +26,34 @@ describeIfDb('auth routes (integration)', () => {
   const tenantIdCleanup: string[] = []
   const stamp = Date.now()
 
-  // Signup helper: returns the created user's id + records it for cleanup.
-  async function signup(email: string, fullName = 'Grant Test'): Promise<string> {
+  const PW = 'correcthorse123'
+
+  // Raw signup — creates an UNVERIFIED user; returns id + the inline verify token.
+  async function signupRaw(
+    email: string,
+    fullName = 'Grant Test',
+  ): Promise<{ userId: string; token: string }> {
     cleanup.push(email)
     const res = await app.request('/api/v1/auth/password/signup', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password: 'correcthorse123', fullName }),
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email, password: PW, fullName }),
     })
-    const body = (await res.json()) as { data: { user: { id: string } } }
+    const body = (await res.json()) as { data: { user: { id: string }; _debug_token: string } }
     userIdCleanup.push(body.data.user.id)
-    return body.data.user.id
+    return { userId: body.data.user.id, token: body.data._debug_token }
+  }
+
+  // Verified signup — signs up + confirms the email; returns the user id.
+  async function signup(email: string, fullName = 'Grant Test'): Promise<string> {
+    const { userId, token } = await signupRaw(email, fullName)
+    const res = await app.request('/api/v1/auth/verify-email/consume', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ token }),
+    })
+    expect(res.status).toBe(200)
+    return userId
   }
 
   beforeAll(() => {
@@ -44,8 +65,6 @@ describeIfDb('auth routes (integration)', () => {
 
   afterAll(async () => {
     await withSuperAdmin(async (db) => {
-      // FK order: tenant_users + super_admins reference users; tenants is referenced
-      // by tenant_users. Delete children before parents.
       if (userIdCleanup.length > 0) {
         await db.delete(tenantUsers).where(inArray(tenantUsers.userId, userIdCleanup))
         await db.delete(superAdmins).where(inArray(superAdmins.userId, userIdCleanup))
@@ -60,50 +79,102 @@ describeIfDb('auth routes (integration)', () => {
     await resetPool()
   })
 
-  it('POST /password/signup creates a user + session + tokens', async () => {
+  it('POST /password/signup creates an UNVERIFIED user + sends verification (no session)', async () => {
     const email = `signup-${stamp}@test.local`
     cleanup.push(email)
     const res = await app.request('/api/v1/auth/password/signup', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password: 'correcthorse123', fullName: 'Sign Up' }),
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email, password: PW, fullName: 'Sign Up' }),
     })
     expect(res.status).toBe(201)
     const body = (await res.json()) as {
-      data: { user: { id: string; email: string }; session: { token: string; accessToken: string } }
+      data: {
+        user: { id: string; email: string }
+        emailVerificationRequired: boolean
+        session?: unknown
+        _debug_token: string
+      }
     }
+    userIdCleanup.push(body.data.user.id)
     expect(body.data.user.email).toBe(email)
-    expect(body.data.session.token).toMatch(/^[A-Za-z0-9_-]+$/)
-    expect(body.data.session.accessToken.split('.').length).toBe(3)
+    expect(body.data.emailVerificationRequired).toBe(true)
+    expect(body.data.session).toBeUndefined()
+    expect(body.data._debug_token).toBeTruthy()
   })
 
   it('signup with same email returns 409', async () => {
     const email = `dupe-${stamp}@test.local`
-    cleanup.push(email)
-    await app.request('/api/v1/auth/password/signup', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password: 'correcthorse123', fullName: 'First' }),
-    })
+    await signupRaw(email, 'First')
     const second = await app.request('/api/v1/auth/password/signup', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password: 'correcthorse123', fullName: 'Second' }),
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email, password: PW, fullName: 'Second' }),
     })
     expect(second.status).toBe(409)
   })
 
-  it('login with wrong password returns 401', async () => {
-    const email = `wrongpw-${stamp}@test.local`
-    cleanup.push(email)
-    await app.request('/api/v1/auth/password/signup', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password: 'correcthorse123', fullName: 'Wrong' }),
-    })
+  it('login BEFORE verifying email → 403 EMAIL_NOT_VERIFIED', async () => {
+    const email = `unverified-${stamp}@test.local`
+    await signupRaw(email)
     const res = await app.request('/api/v1/auth/password/login', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email, password: PW }),
+    })
+    expect(res.status).toBe(403)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('EMAIL_NOT_VERIFIED')
+  })
+
+  it('verify-email/consume confirms the address + opens a session', async () => {
+    const email = `verify-${stamp}@test.local`
+    const { token } = await signupRaw(email)
+    const res = await app.request('/api/v1/auth/verify-email/consume', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ token }),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { data: { session: { token: string; accessToken: string } } }
+    expect(body.data.session.token).toMatch(/^[A-Za-z0-9_-]+$/)
+    expect(body.data.session.accessToken.split('.').length).toBe(3)
+  })
+
+  it('verify-email token is single-use', async () => {
+    const email = `verify-single-${stamp}@test.local`
+    const { token } = await signupRaw(email)
+    const first = await app.request('/api/v1/auth/verify-email/consume', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ token }),
+    })
+    expect(first.status).toBe(200)
+    const second = await app.request('/api/v1/auth/verify-email/consume', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ token }),
+    })
+    expect(second.status).toBe(401)
+  })
+
+  it('login AFTER verifying → 200', async () => {
+    const email = `verified-login-${stamp}@test.local`
+    await signup(email)
+    const res = await app.request('/api/v1/auth/password/login', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email, password: PW }),
+    })
+    expect(res.status).toBe(200)
+  })
+
+  it('login with wrong password returns 401 (checked before the verify gate)', async () => {
+    const email = `wrongpw-${stamp}@test.local`
+    await signupRaw(email)
+    const res = await app.request('/api/v1/auth/password/login', {
+      method: 'POST',
+      headers: JSON_HEADERS,
       body: JSON.stringify({ email, password: 'wrongpassword' }),
     })
     expect(res.status).toBe(401)
@@ -112,106 +183,82 @@ describeIfDb('auth routes (integration)', () => {
   it('login for nonexistent email also returns 401 (no enumeration leak)', async () => {
     const res = await app.request('/api/v1/auth/password/login', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: JSON_HEADERS,
       body: JSON.stringify({ email: `nobody-${stamp}@test.local`, password: 'whatever123' }),
     })
     expect(res.status).toBe(401)
   })
 
-  it('magic-link signup flow: request, then consume creates the user', async () => {
-    const email = `magic-${stamp}@test.local`
-    cleanup.push(email)
-
-    const reqRes = await app.request('/api/v1/auth/magic-link/request', {
+  it('forgot → reset → login with the NEW password', async () => {
+    const email = `reset-${stamp}@test.local`
+    await signup(email)
+    const forgot = await app.request('/api/v1/auth/password/forgot', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, purpose: 'signup' }),
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email }),
     })
-    expect(reqRes.status).toBe(202)
-    const reqBody = (await reqRes.json()) as {
-      data: { _debug_token: string }
-    }
-    expect(reqBody.data._debug_token).toBeTruthy()
-
-    const consumeRes = await app.request('/api/v1/auth/magic-link/consume', {
+    expect(forgot.status).toBe(202)
+    const forgotBody = (await forgot.json()) as { data: { _debug_token: string } }
+    const reset = await app.request('/api/v1/auth/password/reset', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        token: reqBody.data._debug_token,
-        audience: 'attendee',
-        fullName: 'Magic Link',
-      }),
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ token: forgotBody.data._debug_token, password: 'brandnewpass456' }),
     })
-    expect(consumeRes.status).toBe(200)
-    const consumeBody = (await consumeRes.json()) as {
-      data: { user: { email: string }; session: { token: string } }
-    }
-    expect(consumeBody.data.user.email).toBe(email)
-    expect(consumeBody.data.session.token).toBeTruthy()
+    expect(reset.status).toBe(200)
+    // Old password no longer works.
+    const oldPw = await app.request('/api/v1/auth/password/login', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email, password: PW }),
+    })
+    expect(oldPw.status).toBe(401)
+    // New password works.
+    const newPw = await app.request('/api/v1/auth/password/login', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email, password: 'brandnewpass456' }),
+    })
+    expect(newPw.status).toBe(200)
   })
 
-  it('magic-link token is single-use', async () => {
-    const email = `single-use-${stamp}@test.local`
-    cleanup.push(email)
-    // create user first
-    const signup = await app.request('/api/v1/auth/password/signup', {
+  it('forgot for a nonexistent email still returns 202 (no enumeration)', async () => {
+    const res = await app.request('/api/v1/auth/password/forgot', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password: 'correcthorse123', fullName: 'Single Use' }),
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email: `ghost-${stamp}@test.local` }),
     })
-    expect(signup.status).toBe(201)
-    const reqRes = await app.request('/api/v1/auth/magic-link/request', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, purpose: 'signin' }),
-    })
-    const reqBody = (await reqRes.json()) as { data: { _debug_token: string } }
-    const token = reqBody.data._debug_token
-
-    const first = await app.request('/api/v1/auth/magic-link/consume', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ token, audience: 'attendee' }),
-    })
-    expect(first.status).toBe(200)
-
-    const second = await app.request('/api/v1/auth/magic-link/consume', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ token, audience: 'attendee' }),
-    })
-    expect(second.status).toBe(401)
+    expect(res.status).toBe(202)
   })
 
   it('logout revokes the session', async () => {
     const email = `logout-${stamp}@test.local`
-    cleanup.push(email)
-    const signupRes = await app.request('/api/v1/auth/password/signup', {
+    const { token } = await signupRaw(email, 'Out')
+    const verifyRes = await app.request('/api/v1/auth/verify-email/consume', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password: 'correcthorse123', fullName: 'Out' }),
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ token }),
     })
-    const { data } = (await signupRes.json()) as { data: { session: { token: string } } }
+    const { data } = (await verifyRes.json()) as { data: { session: { token: string } } }
     const logoutRes = await app.request('/api/v1/auth/logout', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: JSON_HEADERS,
       body: JSON.stringify({ token: data.session.token }),
     })
     expect(logoutRes.status).toBe(200)
   })
 
   // ─── audience-grant enforcement (Day-45 critical auth fix) ──────────────
-  // Login/consume must NOT trust a client-supplied audience: super-admin
-  // requires a super_admins row; tenant requires a tenant_users row for that
-  // tenantId. Negatives below fail (return 200) against the pre-fix code.
+  // Login must NOT trust a client-supplied audience: super-admin requires a
+  // super_admins row; tenant requires a tenant_users row for that tenantId.
+  // (Users are verified by the signup() helper so login reaches the grant check.)
 
   it('login with audience=super-admin for a NON-super-admin user → 403', async () => {
     const email = `grant-sa-neg-${stamp}@test.local`
     await signup(email)
     const res = await app.request('/api/v1/auth/password/login', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password: 'correcthorse123', audience: 'super-admin' }),
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email, password: PW, audience: 'super-admin' }),
     })
     expect(res.status).toBe(403)
   })
@@ -224,8 +271,8 @@ describeIfDb('auth routes (integration)', () => {
     })
     const res = await app.request('/api/v1/auth/password/login', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password: 'correcthorse123', audience: 'super-admin' }),
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email, password: PW, audience: 'super-admin' }),
     })
     expect(res.status).toBe(200)
   })
@@ -235,10 +282,10 @@ describeIfDb('auth routes (integration)', () => {
     await signup(email)
     const res = await app.request('/api/v1/auth/password/login', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: JSON_HEADERS,
       body: JSON.stringify({
         email,
-        password: 'correcthorse123',
+        password: PW,
         audience: 'tenant',
         tenantId: '99999999-9999-9999-9999-999999999999',
       }),
@@ -260,26 +307,9 @@ describeIfDb('auth routes (integration)', () => {
     tenantIdCleanup.push(tenantId)
     const res = await app.request('/api/v1/auth/password/login', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password: 'correcthorse123', audience: 'tenant', tenantId }),
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email, password: PW, audience: 'tenant', tenantId }),
     })
     expect(res.status).toBe(200)
-  })
-
-  it('magic-link consume with audience=super-admin for a NON-super-admin → 403', async () => {
-    const email = `grant-magic-${stamp}@test.local`
-    await signup(email)
-    const reqRes = await app.request('/api/v1/auth/magic-link/request', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, purpose: 'signin' }),
-    })
-    const reqBody = (await reqRes.json()) as { data: { _debug_token: string } }
-    const res = await app.request('/api/v1/auth/magic-link/consume', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ token: reqBody.data._debug_token, audience: 'super-admin' }),
-    })
-    expect(res.status).toBe(403)
   })
 })
