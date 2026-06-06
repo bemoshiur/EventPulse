@@ -7,6 +7,7 @@ import { corsMiddleware } from './middleware/cors.js'
 import { authRoutes } from './routes/auth.js'
 import { publicChangelogRoutes } from './routes/public/changelog.js'
 import { publicContactRoutes } from './routes/public/contact.js'
+import { publicDiscoverRoutes } from './routes/public/discover.js'
 import { publicEventsRoutes } from './routes/public/events.js'
 import { publicHandlesRoutes } from './routes/public/handles.js'
 import { publicLegalRoutes } from './routes/public/legal.js'
@@ -104,6 +105,7 @@ export function createApp() {
   // RLS context is super-admin (BYPASSRLS) because public reads
   // cross tenant boundaries by design.
   app.route('/api/v1/public/events', publicEventsRoutes)
+  app.route('/api/v1/public/discover', publicDiscoverRoutes)
   // Handle redirect resolver — old {handle} → current slug (handle_history,
   // §9.14). The public event page calls this on 404 to 301 renamed URLs.
   app.route('/api/v1/public/handles', publicHandlesRoutes)

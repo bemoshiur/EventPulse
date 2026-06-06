@@ -16,6 +16,7 @@ const COLUMNS = [
     heading: 'Product',
     bn: 'প্রোডাক্ট',
     links: [
+      { href: '/discover', label: 'Discover events' },
       { href: '/features', label: 'Features' },
       { href: '/how-it-works', label: 'How it works' },
       { href: '/pricing', label: 'Pricing' },
