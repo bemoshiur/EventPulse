@@ -333,6 +333,28 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ── By the numbers ───────────────────────────────────── */}
+      <section className="bg-mkt-ink text-white">
+        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-px overflow-hidden px-6 py-14 md:grid-cols-4 md:py-16">
+          {[
+            { stat: '0.25%', label: 'Platform fee', bn: 'প্ল্যাটফর্ম ফি' },
+            { stat: 'T+5', label: 'Days to payout', bn: '৫ দিনে পেআউট' },
+            { stat: '90s', label: 'Landing to live', bn: 'লাইভ হতে' },
+            { stat: '5', label: 'Bank + MFS payout methods', bn: 'পেআউট মাধ্যম' },
+          ].map((m) => (
+            <div key={m.label} className="px-4 text-center">
+              <div className="text-mkt-red text-4xl font-bold tracking-tight md:text-5xl">
+                {m.stat}
+              </div>
+              <div className="mt-2 text-sm font-medium text-white/90">{m.label}</div>
+              <div className="mt-0.5 text-xs text-white/55">
+                <Bn>{m.bn}</Bn>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* ── Money & trust ────────────────────────────────────── */}
       <section className="mkt-glow border-b border-[var(--color-mkt-line)]">
         <div className="mx-auto max-w-6xl px-6 py-16 md:py-20">
