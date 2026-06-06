@@ -102,6 +102,13 @@ export async function revokeSession(token: string): Promise<void> {
   })
 }
 
+/** Revoke ALL of a user's sessions (used on password reset). */
+export async function revokeAllUserSessions(userId: string): Promise<void> {
+  await withSuperAdmin(async (db) => {
+    await db.delete(sessions).where(eq(sessions.userId, userId))
+  })
+}
+
 /**
  * Janitor: drop sessions that have already expired. Cheap to run on a
  * schedule; can also be invoked on every Nth request as a side task.

@@ -87,6 +87,13 @@ export async function markEmailVerified(userId: string): Promise<void> {
   })
 }
 
+/** Set (or reset) a user's argon2id password hash. Used by password reset. */
+export async function setPassword(userId: string, passwordHash: string): Promise<void> {
+  await withSuperAdmin(async (db) => {
+    await db.update(users).set({ passwordHash }).where(eq(users.id, userId))
+  })
+}
+
 // ─── OAuth identity helpers (Sprint 2 Item 4) ─────────────────────────
 //
 // Type is Google-only at MVP per decisions.md "Apple Sign-In dropped
