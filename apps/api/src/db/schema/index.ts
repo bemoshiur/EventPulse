@@ -1004,6 +1004,41 @@ export const emailSuppressionList = pgTable(
   ],
 )
 
+// ─── notification_log (§9.10, migration 0020) ───────────────────────────
+// Queryable delivery record for every outbound email/SMS. One row per send
+// attempt; status 'sent' on provider accept. tenant_id nullable (auth/system
+// emails). RLS enforces tenant isolation on the read path (§10.2).
+// recipient_hash = sha256(lower(email)) per §1.3 R5 — raw recipient not stored.
+// Added after the 2026-06-05 go-live smoke found delivery could only be
+// inferred from app logs.
+
+export const notificationLog = pgTable(
+  'notification_log',
+  {
+    id: uuid()
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id').references(() => tenants.id),
+    channel: text().notNull(),
+    templateId: text('template_id').notNull(),
+    recipientHash: text('recipient_hash').notNull(),
+    provider: text().notNull(),
+    providerMessageId: text('provider_message_id'),
+    status: text().notNull(),
+    payload: jsonb(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('notification_log_channel_chk', sql`${t.channel} IN ('email','sms','in_app','push')`),
+    check(
+      'notification_log_status_chk',
+      sql`${t.status} IN ('queued','sent','delivered','bounced','failed')`,
+    ),
+    index('idx_notification_log_tenant').on(t.tenantId, t.createdAt),
+    index('idx_notification_log_provider_msg').on(t.providerMessageId),
+  ],
+)
+
 // ─── consent_records (Day 39 Phase 2) ───────────────────────────────────
 //
 // Buyer-Terms-Lite v1.0 consent capture per Phase 2 wire-in. The CLAUDE.md

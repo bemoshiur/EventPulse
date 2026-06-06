@@ -69,6 +69,7 @@ import { withSuperAdmin } from '../../db/client.js'
 import {
   attendees,
   events,
+  notificationLog,
   orderEvents,
   orders,
   tenants,
@@ -81,6 +82,10 @@ import { logger } from '../../lib/logger.js'
 
 import { writeOrderDelivered } from '../audit/orders.js'
 import { selectLocale } from '../notifications/locale.js'
+import {
+  buildEmailNotificationRows,
+  type SentEmailRecord,
+} from '../notifications/notification-log.js'
 
 import { generateAttendeesForOrder } from '../attendees/generate.js'
 import { renderTicketPdf } from './render-ticket-pdf.js'
@@ -264,6 +269,16 @@ export async function deliverOrder(input: DeliverOrderInput): Promise<DeliverOrd
     tags: { template: 'order_confirmed', order_id: orderRow.id },
   })
 
+  // Collect every send into a notification_log record (§9.10). Recipients are
+  // hashed in buildEmailNotificationRows (R5); rows are inserted in STEP 8's tx.
+  const sendRecords: SentEmailRecord[] = [
+    {
+      recipient: orderRow.buyerEmail,
+      templateId: 'order_confirmed',
+      providerMessageId: buyerResult.messageId,
+    },
+  ]
+
   // STEP 7 — per-attendee emails (PDF attached).
   const attendeeMessageIds: string[] = []
   for (const att of ctx.attendeeRows) {
@@ -303,6 +318,11 @@ export async function deliverOrder(input: DeliverOrderInput): Promise<DeliverOrd
       tags: { template: 'attendee_ticket', order_id: orderRow.id, attendee_id: att.id },
     })
     attendeeMessageIds.push(sendResult.messageId)
+    sendRecords.push({
+      recipient,
+      templateId: 'attendee_ticket',
+      providerMessageId: sendResult.messageId,
+    })
   }
 
   // STEP 8 — mark delivered + audit. Single tx.
@@ -327,6 +347,13 @@ export async function deliverOrder(input: DeliverOrderInput): Promise<DeliverOrd
       attendeeCount: ctx.attendeeRows.length,
       locale,
     })
+
+    // notification_log (§9.10) — one queryable row per email sent for this
+    // order. Same tx as the delivery audit so they commit atomically.
+    const notificationRows = buildEmailNotificationRows(sendRecords, orderRow.tenantId)
+    if (notificationRows.length > 0) {
+      await db.insert(notificationLog).values(notificationRows)
+    }
   })
 
   logger.info(
