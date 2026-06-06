@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { MagicLinkForm } from '@/components/auth/magic-link-form'
+
+import { SignInForm } from '@/components/auth/sign-in-form'
 
 export const metadata: Metadata = {
   title: 'Sign in',
@@ -15,15 +16,11 @@ export default function SignInPage() {
         <p className="text-mkt-slate mt-2 text-sm">Welcome back to Event Pulse.</p>
       </header>
 
-      <p className="text-mkt-slate mt-8 text-center text-sm">
-        Enter your email and we’ll send you a one-time sign-in link.
-      </p>
-
-      <div className="mt-4">
-        <MagicLinkForm />
+      <div className="mt-8">
+        <SignInForm />
       </div>
 
-      <p className="text-mkt-slate mt-8 text-center text-xs">
+      <p className="text-mkt-slate mt-6 text-center text-xs">
         By continuing you agree to our{' '}
         <Link href="/terms" className="text-mkt-ink font-medium hover:underline">
           Terms
