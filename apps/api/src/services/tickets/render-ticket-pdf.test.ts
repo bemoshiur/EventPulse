@@ -30,7 +30,11 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { renderTicketPdf, type RenderTicketPdfInput } from './render-ticket-pdf.js'
+import {
+  renderOrderTicketsPdf,
+  renderTicketPdf,
+  type RenderTicketPdfInput,
+} from './render-ticket-pdf.js'
 
 const PDF_MAGIC = '%PDF-'
 
@@ -200,5 +204,28 @@ describe('renderTicketPdf — brand colour', () => {
     expect(evil.pdf.toString('binary')).not.toContain('javascript:alert')
     // Sanitised → falls back to default → same content size.
     expect(evil.pdf.length).toBe(def.pdf.length)
+  })
+})
+
+describe('renderOrderTicketsPdf — multi-page order download', () => {
+  it('renders a valid PDF for a single-ticket order', async () => {
+    const { pdf, bytes } = await renderOrderTicketsPdf([baseInput()])
+    expect(pdf.subarray(0, 5).toString('ascii')).toBe(PDF_MAGIC)
+    expect(bytes).toBeGreaterThan(0)
+  })
+
+  it('a 3-ticket order produces a larger PDF than a 1-ticket order (extra pages)', async () => {
+    const one = await renderOrderTicketsPdf([baseInput({ attendeeName: 'Solo' })])
+    const three = await renderOrderTicketsPdf([
+      baseInput({ attendeeName: 'Aisha' }),
+      baseInput({ attendeeName: 'Bilal' }),
+      baseInput({ attendeeName: 'Chitra' }),
+    ])
+    expect(three.pdf.subarray(0, 5).toString('ascii')).toBe(PDF_MAGIC)
+    expect(three.bytes).toBeGreaterThan(one.bytes)
+  })
+
+  it('throws on an empty ticket list', async () => {
+    await expect(renderOrderTicketsPdf([])).rejects.toThrowError(/no tickets/i)
   })
 })
