@@ -7,7 +7,7 @@
  * ticket. Public cross-tenant read via withSuperAdmin (mirrors public-events).
  */
 
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 
 import { withSuperAdmin } from '../../db/client.js'
 import { attendees, events, orders, tenants } from '../../db/schema/index.js'
@@ -79,5 +79,63 @@ export async function fetchOrderStatus(orderId: string): Promise<PublicOrderStat
       },
       tickets: tix.map((t) => ({ attendeeName: t.attendeeName, qrCode: t.qrCode })),
     }
+  })
+}
+
+/**
+ * List a buyer's fulfilled orders by email — backs the "My tickets" page after
+ * the email-link token proves ownership of the address. Returns paid/completed
+ * orders only (the ones with issued tickets), newest first.
+ */
+export async function fetchOrdersByEmail(email: string): Promise<PublicOrderStatus[]> {
+  return withSuperAdmin(async (tx) => {
+    const rows = await tx
+      .select({ order: orders, event: events, tenant: tenants })
+      .from(orders)
+      .innerJoin(events, eq(orders.eventId, events.id))
+      .innerJoin(tenants, eq(orders.tenantId, tenants.id))
+      .where(and(eq(orders.buyerEmail, email), inArray(orders.status, ['paid', 'completed'])))
+      .orderBy(desc(orders.createdAt))
+      .limit(50)
+    if (rows.length === 0) return []
+
+    const orderIds = rows.map((r) => r.order.id)
+    const tix = await tx
+      .select({
+        orderId: attendees.orderId,
+        attendeeName: attendees.attendeeName,
+        qrCode: attendees.qrCode,
+      })
+      .from(attendees)
+      .where(and(inArray(attendees.orderId, orderIds), isNull(attendees.voidedAt)))
+    const ticketsByOrder = new Map<string, { attendeeName: string; qrCode: string }[]>()
+    for (const t of tix) {
+      const list = ticketsByOrder.get(t.orderId) ?? []
+      list.push({ attendeeName: t.attendeeName, qrCode: t.qrCode })
+      ticketsByOrder.set(t.orderId, list)
+    }
+
+    return rows.map(({ order, event, tenant }) => ({
+      orderId: order.id,
+      status: order.status,
+      buyerName: order.buyerName,
+      buyerEmail: order.buyerEmail,
+      subtotalPaisa: order.subtotalPaisa.toString(),
+      platformFeePaisa: order.platformFeePaisa.toString(),
+      epsFeePaisa: order.epsFeePaisa.toString(),
+      totalPaisa: order.totalPaisa.toString(),
+      currency: order.currency,
+      paidAt: order.paidAt?.toISOString() ?? null,
+      createdAt: order.createdAt.toISOString(),
+      event: {
+        title: event.title,
+        startsAt: event.startsAt.toISOString(),
+        slug: event.slug,
+        tenantSlug: tenant.slug,
+        tenantName: tenant.name,
+        venue: event.venue,
+      },
+      tickets: ticketsByOrder.get(order.id) ?? [],
+    }))
   })
 }

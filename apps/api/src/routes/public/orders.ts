@@ -43,7 +43,13 @@ import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { z } from 'zod'
 
-import { fetchOrderStatus } from '../../domain/public-orders/status.js'
+import { consumeMagicLink, requestMagicLink } from '../../auth/magic-link.js'
+import { resolveConsumeBase } from '../../auth/consume-url.js'
+import { hashToken } from '../../auth/tokens.js'
+import { fetchOrderStatus, fetchOrdersByEmail } from '../../domain/public-orders/status.js'
+import { sendEmail } from '../../infra/ses/client.js'
+import { renderTicketAccess } from '../../infra/ses/templates/ticket-access.js'
+import { allowedOrigins } from '../../middleware/cors.js'
 import { buildOrderTicketsPdf } from '../../services/tickets/download-order-tickets.js'
 import { logger } from '../../lib/logger.js'
 import { idempotencyMiddleware } from '../../middleware/idempotency.js'
@@ -251,4 +257,55 @@ publicOrdersRoutes.get('/:id/tickets.pdf', zValidator('param', orderIdParam), as
     logger.error({ err, orderId: id }, 'public.order.tickets_pdf.failed')
     return c.json({ error: { code: 'INTERNAL_ERROR', message: 'failed to build tickets' } }, 500)
   }
+})
+
+// ─── "My tickets" buyer self-service (QA P1-1/P1-4) ────────────────────
+//
+// A guest buyer retrieves their tickets by email: POST /find emails a
+// single-use link; POST /by-token validates the link's token and lists the
+// buyer's fulfilled orders + tickets. Anti-enumeration: /find ALWAYS 202s.
+
+const findSchema = z.object({ email: z.string().email().toLowerCase().trim() })
+
+publicOrdersRoutes.post('/find', zValidator('json', findSchema), async (c) => {
+  const { email } = c.req.valid('json')
+  // Only email a link if the address actually has tickets — but respond 202
+  // either way so we never reveal whether an email has orders.
+  const orders = await fetchOrdersByEmail(email)
+  if (orders.length > 0) {
+    const { token, expiresAt } = await requestMagicLink({
+      email,
+      purpose: 'ticket_access',
+      userId: null,
+      ip: c.req.header('x-forwarded-for') ?? null,
+    })
+    const fallback = process.env['EVENTPULSE_WEB_BASE_URL'] ?? 'https://eventpulse.com.bd'
+    const base = resolveConsumeBase(c.req.header('origin'), allowedOrigins(), fallback)
+    const url = `${base}/my-tickets?token=${encodeURIComponent(token)}`
+    const rendered = renderTicketAccess({ url, expiresAt })
+    try {
+      await sendEmail({
+        to: email,
+        subject: rendered.subject,
+        text: rendered.text,
+        html: rendered.html,
+        tags: { template_id: rendered.templateId, purpose: 'ticket_access' },
+      })
+    } catch (err) {
+      logger.error({ err, email_sha: hashToken(email).slice(0, 16) }, 'ticket_access.send_failed')
+    }
+  }
+  return c.json({ data: { delivered: true } }, 202)
+})
+
+const byTokenSchema = z.object({ token: z.string().min(20) })
+
+publicOrdersRoutes.post('/by-token', zValidator('json', byTokenSchema), async (c) => {
+  const { token } = c.req.valid('json')
+  const result = await consumeMagicLink(token, c.req.header('x-forwarded-for') ?? null)
+  if (!result || result.purpose !== 'ticket_access') {
+    return c.json({ error: { code: 'AUTH_REQUIRED', message: 'invalid or expired link' } }, 401)
+  }
+  const orders = await fetchOrdersByEmail(result.email)
+  return c.json({ data: orders })
 })

@@ -201,7 +201,7 @@ export const magicLinks = pgTable(
   (t) => [
     check(
       'magic_links_purpose_chk',
-      sql`${t.purpose} IN ('signup','signin','email_change','email_verify','password_reset')`,
+      sql`${t.purpose} IN ('signup','signin','email_change','email_verify','password_reset','ticket_access')`,
     ),
     index('idx_magic_links_email').on(t.email, t.expiresAt),
   ],
