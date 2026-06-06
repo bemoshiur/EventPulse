@@ -34,6 +34,7 @@ import { myHostingRoutes } from './routes/my/hosting.js'
 import { meRoutes } from './routes/tenant/me.js'
 import { tenantReportsRoutes } from './routes/tenant/reports.js'
 import { tenantOrderRefundRoutes, tenantRefundRoutes } from './routes/tenant/refunds.js'
+import { tenantPayoutAccountRoutes } from './routes/tenant/payout-accounts.js'
 import { tenantTicketTiersRoutes } from './routes/tenant/ticket-tiers.js'
 
 /**
@@ -157,6 +158,7 @@ export function createApp() {
   app.route('/api/v1/my/hosting', myHostingRoutes)
   app.route('/api/v1/tenant/me', meRoutes)
   app.route('/api/v1/tenant/account-type', accountTypeRoutes)
+  app.route('/api/v1/tenant/payout-accounts', tenantPayoutAccountRoutes)
   app.route('/api/v1/tenant/kyc', kycRoutes)
   // Drafts router is mounted at /api/v1/tenant/kyc/drafts (not nested
   // under kycRoutes) so the requireTenantType middleware applies to it

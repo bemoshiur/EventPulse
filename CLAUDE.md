@@ -328,10 +328,9 @@ Stick to a 4-px grid. Card padding `p-6` (24px) by default, `p-8` (32px) for ele
 
 Sign-up friction kills SaaS adoption. The first run is designed for **under 90 seconds from landing to logged-in dashboard**, with KYC deferred until the first event is published.
 
-- Single screen sign-up with three buttons (Continue with Google · Continue with Apple · Continue with email), plus a "Sign in instead" link
-- Email path uses **magic link by default**, password as optional secondary auth method (set later in settings)
-- No mandatory fields beyond email at first step
+- **SUPERSEDED 2026-06-06:** single-screen **email + password** sign-up (name + email + password) → confirm email → sign in. No OAuth buttons (removed 2026-06-04); no magic link (removed 2026-06-06). See §5.2.
 - Account type (Organisation / Individual) chosen on first dashboard load via a friendly modal, not at sign-up
+- **KYC deferred to disbursement** (2026-06-06): free + paid events publish without KYC; KYC is required only when a tenant sets up a payout account / requests disbursement. See §13 + `.claude/memory/decisions.md` "KYC gate at disbursement, not paid-tier".
 - KYC gated only when the tenant tries to publish their first paid event
 - Empty-state dashboards always show one clear next action ("Create your first event") with a worked example available behind a "Show me how" toggle
 
@@ -820,17 +819,15 @@ test('order cannot be read by another tenant', async () => {
 
 Tokens: 15-minute access + 7-day refresh, rotated on refresh.
 
-### 5.2 Sign-Up and Sign-In — Four Methods, One Funnel
+### 5.2 Sign-Up and Sign-In — Password + Email Verification
 
-All four methods feed into the same `users` row. Linking is automatic when the verified email matches an existing account.
+> **⚠️ SUPERSEDED (2026-06-06).** This section originally specified four methods (password, magic link, Google, Apple). Shipped reality: **password-only with mandatory email verification.** OAuth (Google/Apple) was removed 2026-06-04; **magic-link LOGIN was removed 2026-06-06** (the `magic_links` table is retained as the token store for email verification + password reset). The current flow: sign up with email+password → confirm via emailed link → log in with email+password; plus forgot/reset password. See `.claude/memory/decisions.md` "Onboarding → password-only + email verification; magic-link LOGIN removed" (2026-06-06). `apps/api/src/routes/auth.ts`. The four-method text below is preserved as historical record.
 
-**Email + password.** Argon2id hashed. Rate-limited 5 attempts / 15 min / (email + IP). Optional TOTP MFA.
+**Email + password (the live method).** Argon2id hashed. Signup creates an UNVERIFIED user (`email_verified_at = null`) and opens NO session; a confirmation email is sent. `/verify-email/consume` confirms the address and opens the session. `/password/login` returns `403 EMAIL_NOT_VERIFIED` until confirmed. `/password/forgot` + `/password/reset` (reset re-verifies + revokes all sessions). Rate-limited per the table below. Optional TOTP MFA (future).
 
-**Email magic link.** Default for new sign-ups. One-time token, 15-minute TTL, single-use, bound to the requesting IP's `/24` for low friction without sacrificing safety. Implemented with a SHA-256-hashed 256-bit random token stored in `magic_links` keyed on `token_hash` (raw token never persisted); consume-once enforced by `consumed_at` + atomic `UPDATE … WHERE consumed_at IS NULL`. `apps/api/src/auth/magic-link.ts`.
+**Email magic link (REMOVED 2026-06-06).** Was the original default. The `magic_links` table now backs only `email_verify` + `password_reset` tokens (purpose widened in migration 0021); there is no magic-link login path. Bilingual SES templates: `auth_verify_email`, `auth_password_reset`.
 
-**Google OAuth 2.0.** OIDC flow via `arctic` (a small, framework-agnostic OAuth helper library; works fine without Lucia). Scopes: `openid email profile`. Stores Google `sub` in `oauth_identities`. Required env: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`.
-
-**Apple Sign-In.** OIDC flow via `arctic` with Apple's specific JWT-based client_secret minted from the team's private key. Apple's name field is only sent on first auth — we capture it. Required env: `APPLE_OAUTH_CLIENT_ID` (Services ID), `APPLE_OAUTH_TEAM_ID`, `APPLE_OAUTH_KEY_ID`, `APPLE_OAUTH_PRIVATE_KEY` (PEM, multi-line via Secrets Manager).
+**Google OAuth 2.0 / Apple Sign-In (REMOVED 2026-06-04).** `oauth_identities` table + helpers retained for historical rows only; no runtime path writes them.
 
 **Account linking rules:**
 - A user can have multiple OAuth identities + a password on the same account
