@@ -18,11 +18,11 @@
     "db:seed:changelog-v1": "tsx src/db/seeds/seed-changelog-v1.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1053.0",
-    "@aws-sdk/client-secrets-manager": "^3.1054.0",
-    "@aws-sdk/client-sesv2": "^3.1053.0",
-    "@aws-sdk/client-ssm": "^3.1053.0",
-    "@aws-sdk/s3-request-presigner": "^3.1053.0",
+    "@aws-sdk/client-s3": "^3.1063.0",
+    "@aws-sdk/client-secrets-manager": "^3.1063.0",
+    "@aws-sdk/client-sesv2": "^3.1063.0",
+    "@aws-sdk/client-ssm": "^3.1063.0",
+    "@aws-sdk/s3-request-presigner": "^3.1063.0",
     "@eventpulse/shared-types": "workspace:*",
     "@eventpulse/shared-utils": "workspace:*",
     "@hono/node-server": "^1.13.7",
