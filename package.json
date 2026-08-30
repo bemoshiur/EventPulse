@@ -21,11 +21,11 @@
     "prepare": "husky"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
+    "@types/node": "^22.20.1",
     "husky": "^9.1.7",
-    "prettier": "^3.3.3",
-    "prettier-plugin-tailwindcss": "^0.8.0",
-    "turbo": "^2.9.14",
+    "prettier": "^3.9.6",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "turbo": "^2.10.12",
     "typescript": "^5.6.3"
   }
 }
